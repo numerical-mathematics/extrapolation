@@ -20,6 +20,9 @@ def ex_one_step (f, yn, h, p):
 
   return (T[p,p], T[p-1,p-1])
 
+# solve the first order ODE y' = f(y) by extrapolation based on Euler's method
+# on the interval [t0, tf] with the intial value y(t0) = y0 and time step size
+# h and order p
 def ex_euler_serial (f, y0, t0, tf, h, p):
   ts = np.arange(t0, tf, h)
   ys = np.zeros(len(ts), dtype=complex)
