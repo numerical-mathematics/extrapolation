@@ -24,7 +24,7 @@ def ex_one_step (f, yn, h, p):
 # on the interval [t0, tf] with the intial value y(t0) = y0 and time step size
 # h and order p
 def ex_euler_serial (f, y0, t0, tf, h, p):
-  ts = np.arange(t0, tf, h)
+  ts = np.linspace(t0, tf, int(round((tf - t0) / h)))
   ys = np.zeros(len(ts), dtype=complex)
   ys_hat = np.zeros(len(ts), dtype=complex)
   ys[0] = y0
@@ -50,9 +50,8 @@ exact = lambda t: y0*np.exp(lam*t)
 
 hs = np.asarray([2**(-k) for k in range(1, 10)])
 err = np.zeros((p_max, len(hs)))
-ps = np.arange(p_max)
 
-for p in ps:
+for p in range(p_max):
   for i in range(len(hs)):
     _, ys, _ = ex_euler_serial(f, y0, t0, tf, hs[i], p+1)
     err[p, i] = abs(ys[-1] - exact(tf))
