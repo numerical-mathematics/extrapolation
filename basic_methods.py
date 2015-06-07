@@ -1,56 +1,62 @@
 # basic implementation of explicit extrapolation with Euler's and midpoint methods
-# a convergence test on the example u' = lam*u is preformed at the end of this file
+# a convergence test on the example y' = lam*y is preformed at the end of this file
 
 import numpy as np
 import pylab as pl
 import math 
 
-# solve the first order ODE u' = f(u) on the interval [t0, tf] with 
-# the intial value u(t0) = u0 and time step size dt
-def euler_method (f, u0, t0, tf, dt):
-  ts = np.arange(t0, tf, dt)
-  us = np.zeros(len(ts), dtype=complex)
-  us[0] = u0
+# solve the first order ODE y' = f(y) on the interval [t0, tf] with 
+# the initial value y(t0) = y0 and time step size h
+def euler_method (f, y0, t0, tf, h):
+  ts = np.linspace(t0, tf, int(round((tf - t0) / h)))
+  ys = np.zeros(len(ts), dtype=complex)
+  ys[0] = y0
   for i in range(len(ts) - 1):
-    us[i+1] = us[i] + dt*f(us[i])
-  return (ts, us)
+    ys[i+1] = ys[i] + h*f(ys[i])
+  return (ts, ys)
 
-# solve the first order ODE u' = f(u) on the interval [t0, tf] with 
-# the intial value u(t0) = u0 and u(t0 + dt) = u1 and time step size dt
-def midpoint_method (f, u0, u1, t0, tf, dt):
-  ts = np.arange(t0, tf, dt)
-  us = np.zeros(len(ts), dtype=complex)
-  us[0] = u0
-  us[1] = u1
+# solve the first order ODE y' = f(y) on the interval [t0, tf] with 
+# the intial value y(t0) = y0  and time step size h
+def midpoint_method (f, y0, t0, tf, h):
+  ts = np.linspace(t0, tf, int(round((tf - t0) / h)))
+  ys = np.zeros(len(ts), dtype=complex)
+  ys[0] = y0
+  ys[1] = ys[0] + h*f(ys[0]) # use Euler to get second intial value
   for i in range(len(ts) - 2):
-    us[i+2] = us[i] + 2*dt*f(us[i+1])
-  return (ts, us)
+    ys[i+2] = ys[i] + 2*h*f(ys[i+1])
+  return (ts, ys)
 
+# preforms a convergence test solving the IVP y' = f(y) and y(0) = y0 with
+# the [method] provided, where the function exact is the solution the IVP.
+# The function plots the ||error|| vs time step size, and a reference line
+# of the given order to compare. The graph is titled with graph_title
+def convergence_test(f, exact, t0, tf, y0, method, order, graph_title):
+  hs = np.asarray([2**(-k) for k in range(3, 15)])
+  err = np.zeros(len(hs))
+
+  for i in range(len(hs)):
+    ts, ys = method(f, y0, t0, tf, hs[i])
+    err[i] = abs(ys[-1] - exact(tf))
+
+  pl.hold('true')
+  method_err,  = pl.loglog(hs, err, 's-')
+  order_line,  = pl.loglog(hs, (hs**order)*(err[5]/hs[5]))
+  pl.legend([method_err, order_line], ['Method Error', 'order ' + str(order)], loc=2)
+  pl.title(graph_title)
+  pl.ylabel('||error||')
+  pl.xlabel('time step size')
+
+  pl.show()
 
 # Convergence Test 
-# example: u' = f(u) = lam*u on [0, 10] --> exact solution is u = u0*e**(lam*t)
+# example: y' = f(y) = lam*y on [0, 10] --> exact solution is y = y0*e**(lam*t)
+# change parameters lam and y0 to see different cases
+lam = -2
+f = lambda y: lam*y
+y0 = -1
+exact = lambda t: y0*np.exp(lam*t)
 
-# change pramters lam and u0 to see different cases
-lam = -1
-u0 = 1
-
-f = lambda u: lam*u
-exact = lambda t: u0*np.exp(lam*t)
-
-dts = np.asarray([2**(-k) for k in range(1, 10)])
-err_euler = np.zeros(len(dts))
-err_midpoint = np.zeros(len(dts))
-
-for i in range(len(dts)):
-  ts, us = euler_method(f, u0, 0, 10, dts[i])
-  err_euler[i] = abs(us[-1].real - exact(10).real)
-  ts, us = midpoint_method(f, u0, us[1], 0, 10, dts[i])
-  err_midpoint[i] = abs(us[-1].real - exact(10).real)
-
-pl.hold('true')
-err_euler_line,  = pl.loglog(dts, err_euler, 's-') 
-err_order_1,  = pl.loglog(dts, dts*(err_euler[5]/dts[5]))
-err_midpoint_line,  = pl.loglog(dts, err_midpoint, 's-') 
-err_order_2,  = pl.loglog(dts, (dts**2)*(err_midpoint[5]/dts[5]))
-pl.legend([err_euler_line, err_midpoint_line], ['Euler Method', 'Midpoint Method'], loc=2)
-pl.show()
+t0 = 1
+tf = 10
+convergence_test(f, exact, t0, tf, exact(t0), euler_method, 1, "euler_method")
+convergence_test(f, exact, t0, tf, exact(t0), midpoint_method, 2, "midpoint_method")
