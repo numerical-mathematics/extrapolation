@@ -4,14 +4,14 @@ import numpy as np
 import pylab as pl
 import math 
 
-def ex_one_step (f, yn, h, p):
+def ex_one_step (f, yn, tn, h, p):
   Y = np.zeros((p+1,p+1), dtype=complex)
   T = np.zeros((p+1,p+1), dtype=complex)
   
   for k in range(1,p+1):
     Y[k,0] = yn
     for j in range(1,k+1):
-      Y[k,j] = Y[k,j-1] + (h/k)*f(Y[k,j-1])
+      Y[k,j] = Y[k,j-1] + (h/k)*f(Y[k,j-1], tn + j*(h/k))
     T[k,1] = Y[k,k]
 
   for k in range(2, p+1):
@@ -32,7 +32,7 @@ def ex_euler_serial (f, y0, t0, tf, h, p):
   ys[0] = y0
 
   for i in range(len(ts) - 1):
-    ys[i+1], ys_hat[i+1] = ex_one_step(f, ys[i], h, p)
+    ys[i+1], ys_hat[i+1] = ex_one_step(f, ys[i], ts[i], h, p)
 
   return (ts, ys, ys_hat)
 
@@ -64,7 +64,7 @@ def convergence_test(f, exact, t0, tf, y0, method, order, graph_title):
 #### test 1 ####
 lam = -1j
 y0 = 1
-f = lambda y: lam*y
+f = lambda y,t: lam*y
 exact = lambda t: y0*np.exp(lam*t)
 
 t0 = 0
@@ -75,3 +75,40 @@ convergence_test(f, exact, t0, tf, exact(t0), ex_euler_serial, 3, "ex_euler_seri
 convergence_test(f, exact, t0, tf, exact(t0), ex_euler_serial, 4, "ex_euler_serial")
 convergence_test(f, exact, t0, tf, exact(t0), ex_euler_serial, 5, "ex_euler_serial")
 convergence_test(f, exact, t0, tf, exact(t0), ex_euler_serial, 6, "ex_euler_serial")
+
+
+# #### test 2 ####
+f = lambda y,t: 4.*y*float(np.sin(t))**3*np.cos(t)
+y0 = 1
+exact = lambda t: y0*np.exp((np.sin(t))**4)
+t0 = 0
+tf = 10
+convergence_test(f, exact, t0, tf, exact(t0), ex_euler_serial, 1, "ex_euler_serial")
+convergence_test(f, exact, t0, tf, exact(t0), ex_euler_serial, 2, "ex_euler_serial")
+convergence_test(f, exact, t0, tf, exact(t0), ex_euler_serial, 3, "ex_euler_serial")
+convergence_test(f, exact, t0, tf, exact(t0), ex_euler_serial, 4, "ex_euler_serial")
+convergence_test(f, exact, t0, tf, exact(t0), ex_euler_serial, 5, "ex_euler_serial")
+
+# #### test 3 ####
+f = lambda y,t: 4.*t*np.sqrt(y)
+y0 = 1
+exact = lambda t: (1.+t**2)**2
+t0 = 0
+tf = 10
+convergence_test(f, exact, t0, tf, exact(t0), ex_euler_serial, 1, "ex_euler_serial")
+convergence_test(f, exact, t0, tf, exact(t0), ex_euler_serial, 2, "ex_euler_serial")
+convergence_test(f, exact, t0, tf, exact(t0), ex_euler_serial, 3, "ex_euler_serial")
+convergence_test(f, exact, t0, tf, exact(t0), ex_euler_serial, 4, "ex_euler_serial")
+convergence_test(f, exact, t0, tf, exact(t0), ex_euler_serial, 5, "ex_euler_serial")
+
+#### test 4 ####
+f = lambda y,t:  y/t*np.log(y)
+y0 = np.exp(1.)
+exact = lambda t: np.exp(2.*t)
+t0 = 0.5
+tf = 10
+convergence_test(f, exact, t0, tf, exact(t0), ex_euler_serial, 1, "ex_euler_serial")
+convergence_test(f, exact, t0, tf, exact(t0), ex_euler_serial, 2, "ex_euler_serial")
+convergence_test(f, exact, t0, tf, exact(t0), ex_euler_serial, 3, "ex_euler_serial")
+convergence_test(f, exact, t0, tf, exact(t0), ex_euler_serial, 4, "ex_euler_serial")
+convergence_test(f, exact, t0, tf, exact(t0), ex_euler_serial, 5, "ex_euler_serial")
