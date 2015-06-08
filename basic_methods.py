@@ -57,8 +57,8 @@ def convergence_test(f, exact, t0, tf, y0, method, order, graph_title):
 # Convergence Tests 
 
 #### test 1 ####
-lam = -2
-f = lambda y,t: lam*abs(y)
+lam = -1j
+f = lambda y,t: lam*y
 y0 = 1
 exact = lambda t: y0*np.exp(lam*t)
 t0 = 0
