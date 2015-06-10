@@ -39,7 +39,7 @@ def midpoint_method (f, y0, t0, tf, h):
 # the [method] provided, where the function exact is the solution the IVP.
 # The function plots the ||error|| vs time step size, and a reference line
 # of the given order to compare. The graph is titled with graph_title
-def convergence_test(f, exact, t0, tf, y0, method, order, graph_title):
+def test_convergence(f, exact, t0, tf, y0, method, order, graph_title):
     hs = np.asarray([2**(-k) for k in range(1, 16)])
     err = np.zeros(len(hs))
 
@@ -66,8 +66,8 @@ if debugging:
     exact = lambda t: y0*np.exp(lam*t)
     t0 = 1
     tf = 5
-    convergence_test(f, exact, t0, tf, exact(t0), euler_method, 1, "euler_method")
-    convergence_test(f, exact, t0, tf, exact(t0), midpoint_method, 2, "midpoint_method")
+    test_convergence(f, exact, t0, tf, exact(t0), euler_method, 1, "TEST 1: euler_method")
+    test_convergence(f, exact, t0, tf, exact(t0), midpoint_method, 2, "TEST 1: midpoint_method")
 
     ### test 2 ####
     f = lambda y,t: 4.*y*float(np.sin(t))**3*np.cos(t)
@@ -75,8 +75,8 @@ if debugging:
     exact = lambda t: y0*np.exp((np.sin(t))**4)
     t0 = 0
     tf = 5
-    convergence_test(f, exact, t0, tf, exact(t0), euler_method, 1, "euler_method")
-    convergence_test(f, exact, t0, tf, exact(t0), midpoint_method, 2, "midpoint_method")
+    test_convergence(f, exact, t0, tf, exact(t0), euler_method, 1, "TEST 2: euler_method")
+    test_convergence(f, exact, t0, tf, exact(t0), midpoint_method, 2, "TEST 2: midpoint_method")
 
     #### test 3 ####
     f = lambda y,t: 4.*t*np.sqrt(y)
@@ -84,8 +84,8 @@ if debugging:
     exact = lambda t: (1.+t**2)**2
     t0 = 0
     tf = 5
-    convergence_test(f, exact, t0, tf, exact(t0), euler_method, 1, "euler_method")
-    convergence_test(f, exact, t0, tf, exact(t0), midpoint_method, 2, "midpoint_method")
+    test_convergence(f, exact, t0, tf, exact(t0), euler_method, 1, "TEST 3: euler_method")
+    test_convergence(f, exact, t0, tf, exact(t0), midpoint_method, 2, "TEST 3: midpoint_method")
 
     #### test 4 ####
     f = lambda y,t:  y/t*np.log(y)
@@ -93,5 +93,5 @@ if debugging:
     exact = lambda t: np.exp(2.*t)
     t0 = 0.5
     tf = 5
-    convergence_test(f, exact, t0, tf, exact(t0), euler_method, 1, "euler_method")
-    convergence_test(f, exact, t0, tf, exact(t0), midpoint_method, 2, "midpoint_method")
+    test_convergence(f, exact, t0, tf, exact(t0), euler_method, 1, "TEST 4: euler_method")
+    test_convergence(f, exact, t0, tf, exact(t0), midpoint_method, 2, "TEST 4: midpoint_method")
