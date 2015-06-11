@@ -95,3 +95,10 @@ if debugging:
     tf = 5
     test_convergence(f, exact, t0, tf, exact(t0), euler_method, 1, "TEST 4: euler_method")
     test_convergence(f, exact, t0, tf, exact(t0), midpoint_method, 2, "TEST 4: midpoint_method")
+
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
+
