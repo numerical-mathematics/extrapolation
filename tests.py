@@ -24,7 +24,7 @@ def tst_convergence(f, t0, tf, y0, order, exact, method, title="tst_convergence"
             - method    -- the extrapolation method function
             - title     -- the title of the graph produced (optional)
     '''
-    hs = np.asarray([2**(-k) for k in range(1, 10)])
+    hs = np.asarray([2**(-k) for k in range(10)])
     err = np.zeros(len(hs))
 
     for i in range(len(hs)):
@@ -58,7 +58,7 @@ def tst_adaptive_step(f, t0, tf, y0, order, exact, method, title="tst_adaptive_s
             - method    -- the extrapolation method function
             - title     -- the title of the graph produced (optional)
     '''
-    Atol = np.asarray([2**(-k) for k in range(1, 16)])
+    Atol = np.asarray([2**(-k) for k in range(16)])
     err = np.zeros(len(Atol))
     fe = np.zeros(len(Atol))
 
@@ -76,6 +76,14 @@ def tst_adaptive_step(f, t0, tf, y0, order, exact, method, title="tst_adaptive_s
     plt.show()
 
 
+def tst(f, t0, tf, exact, test_name):
+    for i in range(2, 6):    
+        tst_convergence(f, t0, tf, exact(t0), i, exact, exs.ex_euler_serial, title=(test_name + ": fixed step (Euler)"))
+        tst_adaptive_step(f, t0, tf, exact(t0), i, exact, exs.ex_euler_serial, title=(test_name + ": adaptive step (Euler)"))
+    for i in range(4, 12, 2):    
+        tst_convergence(f, t0, tf, exact(t0), i, exact, exs.ex_midpoint_serial, title=(test_name + ": fixed step (Midpoint)"))
+        tst_adaptive_step(f, t0, tf, exact(t0), i, exact, exs.ex_midpoint_serial, title=(test_name + ": adaptive step (Midpoint)"))
+
 def test1():
     lam = -1j
     y0 = np.array([1 + 0j])
@@ -83,15 +91,7 @@ def test1():
     exact = lambda t: y0*np.exp(lam*t)
     t0 = 0
     tf = 5
-    tst_adaptive_step(f, t0, tf, exact(t0), 2, exact, exs.ex_euler_serial, title="TEST 1: adaptive step")
-    tst_adaptive_step(f, t0, tf, exact(t0), 3, exact, exs.ex_euler_serial, title="TEST 1: adaptive step")
-    tst_adaptive_step(f, t0, tf, exact(t0), 4, exact, exs.ex_euler_serial, title="TEST 1: adaptive step")
-    tst_adaptive_step(f, t0, tf, exact(t0), 5, exact, exs.ex_euler_serial, title="TEST 1: adaptive step")
-    tst_convergence(f, t0, tf, exact(t0), 1, exact, exs.ex_euler_serial, title="TEST 1: fixed step")
-    tst_convergence(f, t0, tf, exact(t0), 2, exact, exs.ex_euler_serial, title="TEST 1: fixed step")
-    tst_convergence(f, t0, tf, exact(t0), 3, exact, exs.ex_euler_serial, title="TEST 1: fixed step")
-    tst_convergence(f, t0, tf, exact(t0), 4, exact, exs.ex_euler_serial, title="TEST 1: fixed step")
-    tst_convergence(f, t0, tf, exact(t0), 5, exact, exs.ex_euler_serial, title="TEST 1: fixed step")
+    tst(f, t0, tf, exact, "TEST 1")
 
 def test2():
     f = lambda y,t: 4.*y*float(np.sin(t))**3*np.cos(t)
@@ -99,15 +99,7 @@ def test2():
     exact = lambda t: y0*np.exp((np.sin(t))**4)
     t0 = 0
     tf = 5
-    tst_adaptive_step(f, t0, tf, exact(t0), 2, exact, exs.ex_euler_serial, title="TEST 2: adaptive step")
-    tst_adaptive_step(f, t0, tf, exact(t0), 3, exact, exs.ex_euler_serial, title="TEST 2: adaptive step")
-    tst_adaptive_step(f, t0, tf, exact(t0), 4, exact, exs.ex_euler_serial, title="TEST 2: adaptive step")
-    tst_adaptive_step(f, t0, tf, exact(t0), 5, exact, exs.ex_euler_serial, title="TEST 2: adaptive step")
-    tst_convergence(f, t0, tf, exact(t0), 1, exact, exs.ex_euler_serial, title="TEST 2: fixed step")
-    tst_convergence(f, t0, tf, exact(t0), 2, exact, exs.ex_euler_serial, title="TEST 2: fixed step")
-    tst_convergence(f, t0, tf, exact(t0), 3, exact, exs.ex_euler_serial, title="TEST 2: fixed step")
-    tst_convergence(f, t0, tf, exact(t0), 4, exact, exs.ex_euler_serial, title="TEST 2: fixed step")
-    tst_convergence(f, t0, tf, exact(t0), 5, exact, exs.ex_euler_serial, title="TEST 2: fixed step")
+    tst(f, t0, tf, exact, "TEST 2")
 
 def test3():
     f = lambda y,t: 4.*t*np.sqrt(y)
@@ -115,15 +107,7 @@ def test3():
     exact = lambda t: np.array([(1.+t**2)**2])
     t0 = 0
     tf = 5
-    tst_adaptive_step(f, t0, tf, exact(t0), 2, exact, exs.ex_euler_serial, title="TEST 3: adaptive step")
-    tst_adaptive_step(f, t0, tf, exact(t0), 3, exact, exs.ex_euler_serial, title="TEST 3: adaptive step")
-    tst_adaptive_step(f, t0, tf, exact(t0), 4, exact, exs.ex_euler_serial, title="TEST 3: adaptive step")
-    tst_adaptive_step(f, t0, tf, exact(t0), 5, exact, exs.ex_euler_serial, title="TEST 3: adaptive step")
-    tst_convergence(f, t0, tf, exact(t0), 1, exact, exs.ex_euler_serial, title="TEST 3: fixed step")
-    tst_convergence(f, t0, tf, exact(t0), 2, exact, exs.ex_euler_serial, title="TEST 3: fixed step")
-    tst_convergence(f, t0, tf, exact(t0), 3, exact, exs.ex_euler_serial, title="TEST 3: fixed step")
-    tst_convergence(f, t0, tf, exact(t0), 4, exact, exs.ex_euler_serial, title="TEST 3: fixed step")
-    tst_convergence(f, t0, tf, exact(t0), 5, exact, exs.ex_euler_serial, title="TEST 3: fixed step")
+    tst(f, t0, tf, exact, "TEST 3")
 
 def test4():
     f = lambda y,t:  y/t*np.log(y)
@@ -131,15 +115,7 @@ def test4():
     exact = lambda t: np.array([np.exp(2.*t)])
     t0 = 0.5
     tf = 5
-    tst_adaptive_step(f, t0, tf, exact(t0), 2, exact, exs.ex_euler_serial, title="TEST 4: adaptive step")
-    tst_adaptive_step(f, t0, tf, exact(t0), 3, exact, exs.ex_euler_serial, title="TEST 4: adaptive step")
-    tst_adaptive_step(f, t0, tf, exact(t0), 4, exact, exs.ex_euler_serial, title="TEST 4: adaptive step")
-    tst_adaptive_step(f, t0, tf, exact(t0), 5, exact, exs.ex_euler_serial, title="TEST 4: adaptive step")
-    tst_convergence(f, t0, tf, exact(t0), 1, exact, exs.ex_euler_serial, title="TEST 4: fixed step")
-    tst_convergence(f, t0, tf, exact(t0), 2, exact, exs.ex_euler_serial, title="TEST 4: fixed step")
-    tst_convergence(f, t0, tf, exact(t0), 3, exact, exs.ex_euler_serial, title="TEST 4: fixed step")
-    tst_convergence(f, t0, tf, exact(t0), 4, exact, exs.ex_euler_serial, title="TEST 4: fixed step")
-    tst_convergence(f, t0, tf, exact(t0), 5, exact, exs.ex_euler_serial, title="TEST 4: fixed step")
+    tst(f, t0, tf, exact, "TEST 4")
 
 
 

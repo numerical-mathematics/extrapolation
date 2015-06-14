@@ -2,29 +2,14 @@ from __future__ import division
 import numpy as np
 import math 
 
-def ex_one_step(f, tn, yn, h, p):
-    Y = np.zeros((p+1,p+1, len(yn)), dtype=(type(yn[0])))
-    T = np.zeros((p+1,p+1, len(yn)), dtype=(type(yn[0])))
-    fe = 0
-    for k in range(1,p+1):
-        Y[k,0] = yn
-        for j in range(1,k+1):
-            Y[k,j] = Y[k,j-1] + (h/k)*f(Y[k,j-1], tn + j*(h/k))
-            fe = fe + 1
-        T[k,1] = Y[k,k]
 
-    for k in range(2, p+1):
-        for j in range(k, p+1):
-            T[j,k] = T[j,k-1] + (T[j,k-1] - T[j-1,k-1])/((j/(j-k+1)) - 1)
-
-    return (T[p,p], T[p-1,p-1], fe)
-
-def adjust_step(f, tn_1, yn_1, y, y_hat, h, p, Atol, Rtol):
+def adjust_step(method, f, tn_1, yn_1, y, y_hat, h, p, Atol, Rtol):
     '''
         Checks if the step size is accepted. If not, computes a new step size
         and checks again. Repeats until step size is accepted 
 
         **Inputs**:
+            - method    -- the method on which the extrapolation is based
             - f         -- the right hand side function of the IVP.
                         Must output a non-scalar numpy.ndarray
             - tn_1, yn_1 -- y(tn_1) = yn_1 is the last accepted value of the 
@@ -43,7 +28,6 @@ def adjust_step(f, tn_1, yn_1, y, y_hat, h, p, Atol, Rtol):
             - h         -- the accepted step taken to compute y and y_hat
             - h_new     -- the proposed next step size
             - fe        -- the number of f evaluations 
-
     ''' 
 
     fe = 0
@@ -56,20 +40,21 @@ def adjust_step(f, tn_1, yn_1, y, y_hat, h, p, Atol, Rtol):
 
     while err > 1:
         h = h_new
-        y, y_hat, fe_ = ex_one_step(f, tn_1, yn_1, h, p)
+        y, y_hat, fe_ = method(f, tn_1, yn_1, h, p)
         fe = fe + fe_
         err = np.linalg.norm((y-y_hat)/tol)/(len(y)**0.5)
         h_new = h*min(facmax, max(facmin, fac*((1/err)**(1/p))))
 
     return (y, y_hat, h, h_new, fe)
 
-def ex_euler_serial(f, t0, tf, y0, p, adaptive=True, step_size=0.5, Atol=0, 
+def ex_method_serial(method, f, t0, tf, y0, p, adaptive=True, step_size=0.5, Atol=0, 
         Rtol=0, exact=(lambda t: t)):
     '''
         Solves the system of IVPs y'(t) = f(y, t) with extrapolation of order 
-        p based on Euler's method. The implementation is serial.
+        p based on method provided. The implementation is serial.
 
         **Inputs**:
+            - method    -- the method on which the extrapolation is based
             - f         -- the right hand side function of the IVP
                         Must output a non-scalar numpy.ndarray
             - [t0, tf]  -- the interval of integration
@@ -89,8 +74,8 @@ def ex_euler_serial(f, t0, tf, y0, p, adaptive=True, step_size=0.5, Atol=0,
         **Outputs**:
             - ts, ys    -- the computed solution y for the IVP. y(ts[i]) = ys[i]
             - fe        -- the number of f evaluations 
-
     '''
+
     fe = 0
     if not adaptive:
         ts, h = np.linspace(t0, tf, (tf-t0)/step_size + 1, retstep=True)
@@ -99,7 +84,7 @@ def ex_euler_serial(f, t0, tf, y0, p, adaptive=True, step_size=0.5, Atol=0,
         ys[0] = y0
 
         for i in range(len(ts) - 1):
-            ys[i+1], ys_hat[i+1], fe_ = ex_one_step(f, ts[i], ys[i], h, p)
+            ys[i+1], ys_hat[i+1], fe_ = method(f, ts[i], ys[i], h, p)
             fe = fe + fe_
     else:
         assert p > 1, "order of method must be greater than 1 if adaptive=True"
@@ -113,9 +98,10 @@ def ex_euler_serial(f, t0, tf, y0, p, adaptive=True, step_size=0.5, Atol=0,
 
         t, i = t0, 0
         while t < tf:
-            y, y_hat, fe_ = ex_one_step(f, ts[i], ys[i], h, p)
+            y, y_hat, fe_ = method(f, ts[i], ys[i], h, p)
             fe = fe + fe_
-            y, y_hat, h, h_new, fe_ = adjust_step(f, ts[i], ys[i], y, y_hat, h, p, Atol, Rtol)
+            y, y_hat, h, h_new, fe_ = adjust_step(method, f, ts[i], ys[i], 
+                y, y_hat, h, p, Atol, Rtol)
             t, i, fe = t + h, i+1, fe + fe_
             ts = np.append(ts, t)
             ys = np.vstack((ys, y))
@@ -124,6 +110,64 @@ def ex_euler_serial(f, t0, tf, y0, p, adaptive=True, step_size=0.5, Atol=0,
 
     return (ts, ys, fe)
 
+def ex_with_euler(f, tn, yn, h, p):
+    Y = np.zeros((p+1,p+1, len(yn)), dtype=(type(yn[0])))
+    T = np.zeros((p+1,p+1, len(yn)), dtype=(type(yn[0])))
+    fe = 0
+    for k in range(1,p+1):
+        Y[k,0] = yn
+        for j in range(1,k+1):
+            Y[k,j] = Y[k,j-1] + (h/k)*f(Y[k,j-1], tn + j*(h/k))
+            fe = fe + 1
+        T[k,1] = Y[k,k]
+
+    for k in range(2, p+1):
+        for j in range(k, p+1):
+            T[j,k] = T[j,k-1] + (T[j,k-1] - T[j-1,k-1])/((j/(j-k+1)) - 1)
+
+    return (T[p,p], T[p-1,p-1], fe)
+
+def ex_with_midpoint(f, tn, yn, h, p):
+    r = int(round(p/2))
+    Y = np.zeros((r+1,2*r+1, len(yn)), dtype=(type(yn[0])))
+    T = np.zeros((r+1,r+1, len(yn)), dtype=(type(yn[0])))
+    fe = 0
+    for k in range(1,r+1):
+        Y[k,0] = yn
+        Y[k,1] = Y[k,0] + h/(2*k)*f(Y[k,0], tn)
+        for j in range(2,2*k+1):
+            Y[k,j] = Y[k,j-2] + (h/k)*f(Y[k,j-1], tn + (j-1)*(h/(2*k)))
+            fe = fe + 1
+        T[k,1] = Y[k,2*k]
+
+    for k in range(2, r+1):
+        for j in range(k, r+1):
+            T[j,k] = T[j,k-1] + (T[j,k-1] - T[j-1,k-1])/((j/(j-k+1))**2 - 1)
+
+    return (T[r,r], T[r-1,r-1], fe)
+
+def ex_euler_serial(f, t0, tf, y0, p, adaptive=True, step_size=0.5, Atol=0, 
+        Rtol=0, exact=(lambda t: t)):
+    '''
+        An instantiation of ex_method_serial() function with Euler's method.
+        For more details, refer to ex_method_serial() function.
+    '''
+    ts, ys, fe = ex_method_serial(ex_with_euler, f, t0, tf, y0, p, 
+        adaptive=adaptive, step_size=step_size, Atol=Atol, Rtol=Rtol, 
+        exact=exact)
+    return (ts, ys, fe)
+
+def ex_midpoint_serial(f, t0, tf, y0, p, adaptive=True, step_size=0.5, Atol=0, 
+        Rtol=0, exact=(lambda t: t)):
+    '''
+        An instantiation of ex_method_serial() function with the midpoint method.
+        For more details, refer to ex_method_serial() function.
+    '''
+    ts, ys, fe = ex_method_serial(ex_with_midpoint, f, t0, tf, y0, p, 
+        adaptive=adaptive, step_size=step_size, Atol=Atol, Rtol=Rtol, 
+        exact=exact)
+    return (ts, ys, fe)
+    
 
 
 if __name__ == "__main__":
