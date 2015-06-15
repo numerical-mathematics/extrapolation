@@ -173,7 +173,9 @@ def midpoint_fixed_step(f, tn, yn, h, p):
 
 
 def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
-    k = k if k > 2 else 3 # minimum stage is 3 (i.e. minimum order is 6)
+    k_max = 8
+    k_min = 3
+    k = min(k_max, max(k_min, k))
     A_k = lambda k: k*(k+1)
     H_k = lambda h, k, err_k: h*0.94*(0.65/err_k)**(1/(2*k-1)) 
     W_k = lambda Ak,Hk: Ak/Hk
@@ -212,7 +214,7 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
         # convergence monitor
         # reject (h, k) and restart with new values accordingly
         k_new = k-1
-        h_new = h_k_1
+        h_new = min(h_k_1, h)
         y, h, k, h_new, k_new, fe_ = midpoint_adapt_order(f, tn, yn, h_new, 
             k_new, Atol, Rtol)
         fe = fe + fe_
@@ -244,7 +246,7 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
             # second convergence monitor 
             # reject (h, k) and restart with new values accordingly
             k_new = k-1 if w_k_1 < 0.9*w_k else k
-            h_new = h_k_1 if k_new == k-1 else h_k
+            h_new = min(h_k_1 if k_new == k-1 else h_k, h)
             y, h, k, h_new, k_new, fe_ = midpoint_adapt_order(f, tn, yn, h_new, 
                 k_new, Atol, Rtol)
             fe = fe + fe_
@@ -280,7 +282,7 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
                 # no convergence
                 # reject (h, k) and restart with new values accordingly
                 k_new = k-1 if w_k_1 < 0.9*w_k else k
-                h_new = h_k_1 if k_new == k-1 else h_k
+                h_new = min(h_k_1 if k_new == k-1 else h_k, h)
                 y, h, k, h_new, k_new, fe_ = midpoint_adapt_order(f, tn, yn, 
                     h_new, k_new, Atol, Rtol)
                 fe = fe + fe_
