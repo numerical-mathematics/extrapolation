@@ -28,7 +28,7 @@ def tst_convergence(f, t0, tf, y0, order, exact, method, title="tst_convergence"
     err = np.zeros(len(hs))
 
     for i in range(len(hs)):
-        _, ys, _ = method(f, t0, tf, y0, order, step_size=(hs[i]), adaptive=False)
+        _, ys, _ = method(f, t0, tf, y0, p=order, step_size=(hs[i]), adaptive="fixed")
         err[i] = np.linalg.norm(ys[-1] - exact(tf))
 
     plt.hold('true')
@@ -63,7 +63,7 @@ def tst_adaptive_step(f, t0, tf, y0, order, exact, method, title="tst_adaptive_s
     fe = np.zeros(len(Atol))
 
     for i in range(len(Atol)):
-        _, ys, fe[i] = method(f, t0, tf, y0, order, Atol=(Atol[i]), exact=exact)
+        _, ys, fe[i] = method(f, t0, tf, y0, p=order, Atol=(Atol[i]), exact=exact, adaptive="step")
         err[i] = np.linalg.norm(ys[-1] - exact(tf))
 
     plt.hold('true')
