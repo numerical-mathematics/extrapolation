@@ -137,8 +137,8 @@ def extrapolation_serial(method, f, t0, tf, y0, adaptive="order", p=4,
             k_acc.append(k)
             h_rej.append(h_rej_)
             k_rej.append(k_rej_)
-
             h = min(h_new, tf - t)
+            k = k_new
 
         return (ts, ys, fe, h_acc, k_acc, h_rej, k_rej)
     else:
