@@ -184,6 +184,9 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
     T = np.zeros((k+2,k+2, len(yn)), dtype=(type(yn[0])))
     fe = 0
 
+    k_rej = np.array([])
+    h_rej = np.array([])
+
     # compute the first k-1 lines extrapolation tableau
     for i in range(1,k):
         Y[i,0] = yn
@@ -215,9 +218,13 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
         # reject (h, k) and restart with new values accordingly
         k_new = k-1
         h_new = min(h_k_1, h)
-        y, h, k, h_new, k_new, fe_ = midpoint_adapt_order(f, tn, yn, h_new, 
-            k_new, Atol, Rtol)
+        k_rej = np.append(k_rej, k)
+        h_rej = np.append(h_rej, h)
+        y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = midpoint_adapt_order(f, tn, 
+            yn, h_new, k_new, Atol, Rtol)
         fe = fe + fe_
+        k_rej = np.concatenate((k_rej, k_rej_))
+        h_rej = np.concatenate((h_rej, h_rej_))
 
     else:
         # compute line k of extrapolation tableau
@@ -247,9 +254,13 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
             # reject (h, k) and restart with new values accordingly
             k_new = k-1 if w_k_1 < 0.9*w_k else k
             h_new = min(h_k_1 if k_new == k-1 else h_k, h)
-            y, h, k, h_new, k_new, fe_ = midpoint_adapt_order(f, tn, yn, h_new, 
-                k_new, Atol, Rtol)
+            k_rej = np.append(k_rej, k)
+            h_rej = np.append(h_rej, h)
+            y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = midpoint_adapt_order(f, 
+                tn, yn, h_new, k_new, Atol, Rtol)
             fe = fe + fe_
+            k_rej = np.concatenate((k_rej, k_rej_))
+            h_rej = np.concatenate((h_rej, h_rej_))
 
         else: 
             # hope for convergence in line k+1
@@ -283,11 +294,15 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
                 # reject (h, k) and restart with new values accordingly
                 k_new = k-1 if w_k_1 < 0.9*w_k else k
                 h_new = min(h_k_1 if k_new == k-1 else h_k, h)
-                y, h, k, h_new, k_new, fe_ = midpoint_adapt_order(f, tn, yn, 
-                    h_new, k_new, Atol, Rtol)
+                k_rej = np.append(k_rej, k)
+                h_rej = np.append(h_rej, h)
+                y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = midpoint_adapt_order(f, 
+                    tn, yn, h_new, k_new, Atol, Rtol)
                 fe = fe + fe_
+                k_rej = np.concatenate((k_rej, k_rej_))
+                h_rej = np.concatenate((h_rej, h_rej_))
 
-    return (y, h, k, h_new, k_new, fe)
+    return (y, h, k, h_new, k_new, h_rej, k_rej, fe)
 
 def ex_euler_serial(f, t0, tf, y0, adaptive="order", p=4, step_size=0.5, Atol=0, 
         Rtol=0, exact=(lambda t: t)):
