@@ -43,7 +43,7 @@ def adapt_step(method, f, tn_1, yn_1, y, y_hat, h, p, Atol, Rtol):
     while err > 1:
         h = h_new
         y, y_hat, fe_ = method(f, tn_1, yn_1, h, p)
-        fe = fe + fe_
+        fe += fe_
         err = error_norm(y, y_hat, Atol, Rtol)
         h_new = h*min(facmax, max(facmin, fac*((1/err)**(1/p))))
 
@@ -90,7 +90,7 @@ def extrapolation_serial(method, f, t0, tf, y0, adaptive="order", p=4,
 
         for i in range(len(ts) - 1):
             ys[i+1], ys_hat[i+1], fe_ = method(f, ts[i], ys[i], h, p)
-            fe = fe + fe_
+            fe += fe_
     
     elif adaptive == "step":
         assert p > 1, "order of method must be greater than 1 if adaptive=True"
@@ -105,13 +105,13 @@ def extrapolation_serial(method, f, t0, tf, y0, adaptive="order", p=4,
         t, i = t0, 0
         while t < tf:
             y, y_hat, fe_ = method(f, ts[i], ys[i], h, p)
-            fe = fe + fe_
+            fe += fe_
             y, y_hat, h, h_new, fe_ = adapt_step(method, f, ts[i], ys[i], 
                 y, y_hat, h, p, Atol, Rtol)
             t, i, fe = t + h, i+1, fe + fe_
             ts = np.append(ts, t)
             ys = np.vstack((ys, y))
-            ys_hat =np.vstack((ys_hat, y_hat))
+            ys_hat = np.vstack((ys_hat, y_hat))
             h = min(h_new, tf - t)
     
     elif adaptive == "order":
@@ -155,7 +155,7 @@ def euler_fixed_step(f, tn, yn, h, p):
         Y[k,0] = yn
         for j in range(1,k+1):
             Y[k,j] = Y[k,j-1] + (h/k)*f(Y[k,j-1], tn + j*(h/k))
-            fe = fe + 1
+            fe += 1
         T[k,1] = Y[k,k]
 
     for k in range(2, p+1):
@@ -174,7 +174,7 @@ def midpoint_fixed_step(f, tn, yn, h, p):
         Y[k,1] = Y[k,0] + h/(2*k)*f(Y[k,0], tn)
         for j in range(2,2*k+1):
             Y[k,j] = Y[k,j-2] + (h/k)*f(Y[k,j-1], tn + (j-1)*(h/(2*k)))
-            fe = fe + 1
+            fe += 1
         T[k,1] = Y[k,2*k]
 
     for k in range(2, r+1):
@@ -185,7 +185,7 @@ def midpoint_fixed_step(f, tn, yn, h, p):
 
 
 def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
-    k_max = 8
+    k_max = 10
     k_min = 3
     k = min(k_max, max(k_min, k))
     A_k = lambda k: k*(k+1)
@@ -205,7 +205,7 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
         Y[i,1] = Y[i,0] + h/(2*i)*f(Y[i,0], tn)
         for j in range(2,2*i+1):
             Y[i,j] = Y[i,j-2] + (h/i)*f(Y[i,j-1], tn + (j-1)*(h/(2*i)))
-            fe = fe + 1
+            fe += 1
         T[i,1] = Y[i,2*i]
 
     for i in range(2, k):
@@ -234,9 +234,9 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
         k_rej.append(k)
         y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = midpoint_adapt_order(f, tn, 
             yn, h_new, k_new, Atol, Rtol)
-        fe = fe + fe_
-        h_rej.append(h_rej_)
-        k_rej.append(k_rej_)
+        fe += fe_
+        h_rej += h_rej_
+        k_rej += k_rej_
 
     else:
         # compute line k of extrapolation tableau
@@ -244,7 +244,7 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
         Y[k,1] = Y[k,0] + h/(2*k)*f(Y[k,0], tn)
         for j in range(2,2*k+1):
             Y[k,j] = Y[k,j-2] + (h/k)*f(Y[k,j-1], tn + (j-1)*(h/(2*k)))
-            fe = fe + 1
+            fe += 1
         T[k,1] = Y[k,2*k]
 
         for i in range(2, k+1):
@@ -270,18 +270,18 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
             k_rej.append(k)
             y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = midpoint_adapt_order(f, 
                 tn, yn, h_new, k_new, Atol, Rtol)
-            fe = fe + fe_
-            h_rej.append(h_rej_)
-            k_rej.append(k_rej_)
+            fe += fe_
+            h_rej += h_rej_
+            k_rej += k_rej_
 
         else: 
             # hope for convergence in line k+1
-            # compute line k of extrapolation tableau 
+            # compute line k+1 of extrapolation tableau 
             Y[(k+1),0] = yn
             Y[(k+1),1] = Y[(k+1),0] + h/(2*(k+1))*f(Y[(k+1),0], tn)
             for j in range(2,2*(k+1)+1):
                 Y[(k+1),j] = Y[(k+1),j-2] + (h/(k+1))*f(Y[(k+1),j-1], tn + (j-1)*(h/(2*(k+1))))
-                fe = fe + 1
+                fe += 1
             T[(k+1),1] = Y[(k+1),2*(k+1)]
 
             for i in range(2, (k+1)+1):
@@ -310,9 +310,9 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
                 k_rej.append(k)
                 y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = midpoint_adapt_order(f, 
                     tn, yn, h_new, k_new, Atol, Rtol)
-                fe = fe + fe_
-                h_rej.append(h_rej_)
-                k_rej.append(k_rej_)
+                fe += fe_
+                h_rej += h_rej_
+                k_rej += k_rej_
 
     return (y, h, k, h_new, k_new, h_rej, k_rej, fe)
 
