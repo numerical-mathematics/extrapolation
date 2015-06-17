@@ -121,14 +121,26 @@ def extrapolation_serial(method, f, t0, tf, y0, adaptive="order", p=4,
         ys[0] = y0
         h = min(step_size, tf-t0)
 
+        h_acc = []
+        k_acc = []
+        h_rej = []
+        k_rej = []
+
         t, i, k = t0, 0, p
         while t < tf:
-            y, h, k, h_new, k_new, fe_ = method(f, ts[i], ys[i], h, k, Atol, Rtol)
+            y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = method(f, ts[i], ys[i], 
+                h, k, Atol, Rtol)
             t, i, fe = t + h, i+1, fe + fe_
             ts = np.append(ts, t)
             ys = np.vstack((ys, y))
+            h_acc.append(h)
+            k_acc.append(k)
+            h_rej.append(h_rej_)
+            k_rej.append(k_rej_)
+
             h = min(h_new, tf - t)
 
+        return (ts, ys, fe, h_acc, k_acc, h_rej, k_rej)
     else:
         raise Exception("\'" + str(adaptive) + 
             "\' is not a valid value for the argument \'adaptive\'")
@@ -184,8 +196,8 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
     T = np.zeros((k+2,k+2, len(yn)), dtype=(type(yn[0])))
     fe = 0
 
-    k_rej = np.array([])
     h_rej = np.array([])
+    k_rej = np.array([])
 
     # compute the first k-1 lines extrapolation tableau
     for i in range(1,k):
@@ -218,13 +230,13 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
         # reject (h, k) and restart with new values accordingly
         k_new = k-1
         h_new = min(h_k_1, h)
-        k_rej = np.append(k_rej, k)
         h_rej = np.append(h_rej, h)
+        k_rej = np.append(k_rej, k)
         y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = midpoint_adapt_order(f, tn, 
             yn, h_new, k_new, Atol, Rtol)
         fe = fe + fe_
-        k_rej = np.concatenate((k_rej, k_rej_))
         h_rej = np.concatenate((h_rej, h_rej_))
+        k_rej = np.concatenate((k_rej, k_rej_))
 
     else:
         # compute line k of extrapolation tableau
@@ -254,13 +266,13 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
             # reject (h, k) and restart with new values accordingly
             k_new = k-1 if w_k_1 < 0.9*w_k else k
             h_new = min(h_k_1 if k_new == k-1 else h_k, h)
-            k_rej = np.append(k_rej, k)
             h_rej = np.append(h_rej, h)
+            k_rej = np.append(k_rej, k)
             y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = midpoint_adapt_order(f, 
                 tn, yn, h_new, k_new, Atol, Rtol)
             fe = fe + fe_
-            k_rej = np.concatenate((k_rej, k_rej_))
             h_rej = np.concatenate((h_rej, h_rej_))
+            k_rej = np.concatenate((k_rej, k_rej_))
 
         else: 
             # hope for convergence in line k+1
@@ -294,13 +306,13 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
                 # reject (h, k) and restart with new values accordingly
                 k_new = k-1 if w_k_1 < 0.9*w_k else k
                 h_new = min(h_k_1 if k_new == k-1 else h_k, h)
-                k_rej = np.append(k_rej, k)
                 h_rej = np.append(h_rej, h)
+                k_rej = np.append(k_rej, k)
                 y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = midpoint_adapt_order(f, 
                     tn, yn, h_new, k_new, Atol, Rtol)
                 fe = fe + fe_
-                k_rej = np.concatenate((k_rej, k_rej_))
                 h_rej = np.concatenate((h_rej, h_rej_))
+                k_rej = np.concatenate((k_rej, k_rej_))
 
     return (y, h, k, h_new, k_new, h_rej, k_rej, fe)
 
@@ -318,11 +330,9 @@ def ex_euler_serial(f, t0, tf, y0, adaptive="order", p=4, step_size=0.5, Atol=0,
         # not implemented yet, so change to adaptive step for now 
         adaptive = "step"
 
-    ts, ys, fe = extrapolation_serial(method, f, t0, tf, y0, 
+    return extrapolation_serial(method, f, t0, tf, y0, 
         adaptive=adaptive, p=p, step_size=step_size, Atol=Atol, Rtol=Rtol, 
         exact=exact)
-
-    return (ts, ys, fe)
 
 def ex_midpoint_serial(f, t0, tf, y0, adaptive="order", p=4, step_size=0.5, Atol=0, 
         Rtol=0, exact=(lambda t: t)):
@@ -333,11 +343,9 @@ def ex_midpoint_serial(f, t0, tf, y0, adaptive="order", p=4, step_size=0.5, Atol
 
     method = midpoint_adapt_order if adaptive == "order" else midpoint_fixed_step
 
-    ts, ys, fe = extrapolation_serial(method, f, t0, tf, y0,
+    return extrapolation_serial(method, f, t0, tf, y0,
         adaptive=adaptive, p=p, step_size=step_size, Atol=Atol, Rtol=Rtol, 
         exact=exact)
-
-    return (ts, ys, fe)
     
 
 
