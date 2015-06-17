@@ -192,12 +192,12 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
     H_k = lambda h, k, err_k: h*0.94*(0.65/err_k)**(1/(2*k-1)) 
     W_k = lambda Ak,Hk: Ak/Hk
 
-    Y = np.zeros((k+2,2*k+2, len(yn)), dtype=(type(yn[0])))
+    Y = np.zeros((k+2,2*(k+1)+1, len(yn)), dtype=(type(yn[0])))
     T = np.zeros((k+2,k+2, len(yn)), dtype=(type(yn[0])))
     fe = 0
 
-    h_rej = np.array([])
-    k_rej = np.array([])
+    h_rej = []
+    k_rej = []
 
     # compute the first k-1 lines extrapolation tableau
     for i in range(1,k):
@@ -230,13 +230,13 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
         # reject (h, k) and restart with new values accordingly
         k_new = k-1
         h_new = min(h_k_1, h)
-        h_rej = np.append(h_rej, h)
-        k_rej = np.append(k_rej, k)
+        h_rej.append(h)
+        k_rej.append(k)
         y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = midpoint_adapt_order(f, tn, 
             yn, h_new, k_new, Atol, Rtol)
         fe = fe + fe_
-        h_rej = np.concatenate((h_rej, h_rej_))
-        k_rej = np.concatenate((k_rej, k_rej_))
+        h_rej.append(h_rej_)
+        k_rej.append(k_rej_)
 
     else:
         # compute line k of extrapolation tableau
@@ -266,13 +266,13 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
             # reject (h, k) and restart with new values accordingly
             k_new = k-1 if w_k_1 < 0.9*w_k else k
             h_new = min(h_k_1 if k_new == k-1 else h_k, h)
-            h_rej = np.append(h_rej, h)
-            k_rej = np.append(k_rej, k)
+            h_rej.append(h)
+            k_rej.append(k)
             y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = midpoint_adapt_order(f, 
                 tn, yn, h_new, k_new, Atol, Rtol)
             fe = fe + fe_
-            h_rej = np.concatenate((h_rej, h_rej_))
-            k_rej = np.concatenate((k_rej, k_rej_))
+            h_rej.append(h_rej_)
+            k_rej.append(k_rej_)
 
         else: 
             # hope for convergence in line k+1
@@ -306,13 +306,13 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
                 # reject (h, k) and restart with new values accordingly
                 k_new = k-1 if w_k_1 < 0.9*w_k else k
                 h_new = min(h_k_1 if k_new == k-1 else h_k, h)
-                h_rej = np.append(h_rej, h)
-                k_rej = np.append(k_rej, k)
+                h_rej.append(h)
+                k_rej.append(k)
                 y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = midpoint_adapt_order(f, 
                     tn, yn, h_new, k_new, Atol, Rtol)
                 fe = fe + fe_
-                h_rej = np.concatenate((h_rej, h_rej_))
-                k_rej = np.concatenate((k_rej, k_rej_))
+                h_rej.append(h_rej_)
+                k_rej.append(k_rej_)
 
     return (y, h, k, h_new, k_new, h_rej, k_rej, fe)
 
