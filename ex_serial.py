@@ -77,75 +77,47 @@ def extrapolation_serial(method, f, t0, tf, y0, adaptive="order", p=4,
                         Must output a non-scalar numpy.ndarray
 
         **Outputs**:
-            - ts, ys    -- the computed solution y for the IVP. y(ts[i]) = ys[i]
+            - y         -- the computed solution for y(tf)
             - fe        -- the number of f evaluations 
     '''
 
     fe = 0
     if adaptive == "fixed":
         ts, h = np.linspace(t0, tf, (tf-t0)/step_size + 1, retstep=True)
-        ys = np.zeros((len(ts), len(y0)), dtype=(type(y0[0])))
-        ys_hat = np.zeros((len(ts), len(y0)), dtype=(type(y0[0])))
-        ys[0] = y0
+        y = y0
 
         for i in range(len(ts) - 1):
-            ys[i+1], ys_hat[i+1], fe_ = method(f, ts[i], ys[i], h, p)
+            y, _, fe_ = method(f, ts[i], y, h, p)
             fe += fe_
     
     elif adaptive == "step":
         assert p > 1, "order of method must be greater than 1 if adaptive=True"
-        ts = np.zeros((1, len(y0)), dtype=(type(y0[0])))
-        ys = np.zeros((1, len(y0)), dtype=(type(y0[0])))
-        ys_hat = np.zeros((1, len(y0)), dtype=(type(y0[0])))
-        ts[0] = t0
-        ys[0] = y0
-        ys_hat[0] = y0
+        y, t = y0, t0
         h = min(step_size, tf-t0)
 
-        t, i = t0, 0
         while t < tf:
-            y, y_hat, fe_ = method(f, ts[i], ys[i], h, p)
+            y_, y_hat, fe_ = method(f, t, y, h, p)
             fe += fe_
-            y, y_hat, h, h_new, fe_ = adapt_step(method, f, ts[i], ys[i], 
-                y, y_hat, h, p, Atol, Rtol)
-            t, i, fe = t + h, i+1, fe + fe_
-            ts = np.append(ts, t)
-            ys = np.vstack((ys, y))
-            ys_hat = np.vstack((ys_hat, y_hat))
+            y, _, h, h_new, fe_ = adapt_step(method, f, t, y, y_, y_hat, h, p, 
+                Atol, Rtol)
+            t, fe = t + h, fe + fe_
             h = min(h_new, tf - t)
     
     elif adaptive == "order":
-        ts = np.zeros((1, len(y0)), dtype=(type(y0[0])))
-        ys = np.zeros((1, len(y0)), dtype=(type(y0[0])))
-        ts[0] = t0
-        ys[0] = y0
+        y, t, k = y0, t0, p
         h = min(step_size, tf-t0)
 
-        h_acc = []
-        k_acc = []
-        h_rej = []
-        k_rej = []
-
-        t, i, k = t0, 0, p
         while t < tf:
-            y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = method(f, ts[i], ys[i], 
-                h, k, Atol, Rtol)
-            t, i, fe = t + h, i+1, fe + fe_
-            ts = np.append(ts, t)
-            ys = np.vstack((ys, y))
-            h_acc.append(h)
-            k_acc.append(k)
-            h_rej.append(h_rej_)
-            k_rej.append(k_rej_)
+            y, h, k, h_new, k_new, _, _, fe_ = method(f, t, y, h, k, Atol, Rtol)
+            t, fe = t + h, fe + fe_
             h = min(h_new, tf - t)
             k = k_new
 
-        return (ts, ys, fe, h_acc, k_acc, h_rej, k_rej)
     else:
         raise Exception("\'" + str(adaptive) + 
             "\' is not a valid value for the argument \'adaptive\'")
 
-    return (ts, ys, fe)
+    return (y, fe)
 
 def euler_fixed_step(f, tn, yn, h, p):
     Y = np.zeros((p+1,p+1, len(yn)), dtype=(type(yn[0])))
