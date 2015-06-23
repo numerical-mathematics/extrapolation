@@ -3,8 +3,6 @@ import numpy as np
 import multiprocessing as mp
 import math
 
-MAXIMUM_STAGE_NUMBER = 10
-
 def error_norm(y1, y2, Atol, Rtol):
     tol = Atol + np.maximum(y1,y2)*Rtol
     return np.linalg.norm((y1-y2)/tol)/(len(y1)**0.5)
@@ -84,7 +82,10 @@ def extrapolation_parallel(method, f, t0, tf, y0, adaptive="order", p=4,
             - fe        -- the number of f evaluations 
     '''
 
-    processes = int((MAXIMUM_STAGE_NUMBER + 1)/2) + 1
+    try:
+        processes = mp.cpu_count()
+    except NotImplementedError:
+        processes = 4
 
     pool = mp.Pool(processes)
 
@@ -202,7 +203,7 @@ def midpoint_fixed_step(f, tn, yn, h, p, pool):
     return (T[r,r], T[r-1,r-1], fe)
 
 def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol, pool):
-    k_max = MAXIMUM_STAGE_NUMBER
+    k_max = 10
     k_min = 3
     k = min(k_max, max(k_min, k))
     A_k = lambda k: k*(k+1)
