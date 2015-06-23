@@ -2,8 +2,10 @@ from __future__ import division
 import numpy as np
 import matplotlib.pyplot as plt
 import math 
+import time
 
-import ex_serial as exs
+import ex_serial as ex_s
+import ex_parallel as ex_p
 
 def tst_convergence(f, t0, tf, y0, order, exact, method, title="tst_convergence"):
     '''
@@ -127,56 +129,108 @@ def tst_adaptive_order(f, t0, tf, y0, order, exact, method, title="tst_adaptive_
 
         plt.show()
 
+def tst_parallel_vs_serial(f, t0, tf, y0, order, exact, method, title="tst_parallel_vs_serial"):
+    Atol = np.asarray([10**(-k) for k in range(10)])
+    time_ratio = np.zeros(len(Atol))
+    for i in range(len(Atol)):
+        time_ = time.time()
+        ts, ys, fe, h_acc, k_acc, h_rej, k_rej = ex_s.ex_midpoint_serial(f,
+             t0, tf, y0, p=order, Atol=(Atol[i]), exact=exact, adaptive="order", step_size=2)
+        time_ratio[i] = time.time() - time_
+        time_ = time.time()
+        ts_, ys_, fe_, h_acc_, k_acc_, h_rej_, k_rej_ = ex_p.ex_midpoint_parallel(f,
+             t0, tf, y0, p=order, Atol=(Atol[i]), exact=exact, adaptive="order", step_size=2)
+        time_ratio[i] = time_ratio[i] / (time.time() - time_)
+        print i
+
+    plt.hold('true')
+    plt.semilogx(Atol, time_ratio, "s-")
+    plt.title(title)
+    plt.xlabel('Atol')
+    plt.ylabel('serial time / parallel time')
+    plt.show()
+
 
 def tst(f, t0, tf, exact, test_name):
-    tst_adaptive_order(f, t0, tf, exact(t0), 4, exact, exs.ex_midpoint_serial,
-        title=(test_name + ": adaptive order (Midpoint)"))
 
-    for i in range(2, 6):    
-        tst_convergence(f, t0, tf, exact(t0), i, exact, exs.ex_euler_serial,
-            title=(test_name + ": fixed step (Euler)"))
-        tst_adaptive_step(f, t0, tf, exact(t0), i, exact, exs.ex_euler_serial,
-            title=(test_name + ": adaptive step (Euler)"))
-    for i in range(4, 12, 2):    
-        tst_convergence(f, t0, tf, exact(t0), i, exact, exs.ex_midpoint_serial,
-            title=(test_name + ": fixed step (Midpoint)"))
-        tst_adaptive_step(f, t0, tf, exact(t0), i, exact, exs.ex_midpoint_serial,
-            title=(test_name + ": adaptive step (Midpoint)"))
+    tst_parallel_vs_serial(f, t0, tf, exact(t0), 4, exact, ex_s.ex_midpoint_serial,
+        title="tst_parallel_vs_serial")
 
+    # tst_adaptive_order(f, t0, tf, exact(t0), 4, exact, ex_s.ex_midpoint_serial,
+    #     title=(test_name + ": adaptive order (Midpoint)"))
 
-def test1():
+    # for i in range(2, 6):    
+    #     tst_convergence(f, t0, tf, exact(t0), i, exact, ex_s.ex_euler_serial,
+    #         title=(test_name + ": fixed step (Euler)"))
+    #     tst_adaptive_step(f, t0, tf, exact(t0), i, exact, ex_s.ex_euler_serial,
+    #         title=(test_name + ": adaptive step (Euler)"))
+    # for i in range(4, 12, 2):    
+    #     tst_convergence(f, t0, tf, exact(t0), i, exact, ex_s.ex_midpoint_serial,
+    #         title=(test_name + ": fixed step (Midpoint)"))
+    #     tst_adaptive_step(f, t0, tf, exact(t0), i, exact, ex_s.ex_midpoint_serial,
+    #         title=(test_name + ": adaptive step (Midpoint)"))
+
+################
+delay = 0.001
+
+def f_1(y,t):
     lam = -1j
     y0 = np.array([1 + 0j])
-    f = lambda y,t: lam*y
-    exact = lambda t: y0*np.exp(lam*t)
-    t0 = 0
-    tf = 10
-    tst(f, t0, tf, exact, "TEST 1")
+    time.sleep(delay)
+    return lam*y
 
-def test2():
-    f = lambda y,t: 4.*y*float(np.sin(t))**3*np.cos(t)
-    y0 = np.array([1])
-    exact = lambda t: y0*np.exp((np.sin(t))**4)
+def exact_1(t):
+    lam = -1j
+    y0 = np.array([1 + 0j])
+    return y0*np.exp(lam*t)
+
+def test1():
     t0 = 0
     tf = 10
-    tst(f, t0, tf, exact, "TEST 2")
+    tst(f_1, t0, tf, exact_1, "TEST 1")
+
+################
+
+def f_2(y,t):
+    time.sleep(delay)
+    return 4.*y*float(np.sin(t))**3*np.cos(t)
+    
+def exact_2(t):
+    y0 = np.array([1])
+    return y0*np.exp((np.sin(t))**4)
+    
+def test2():
+    t0 = 0
+    tf = 10
+    tst(f_2, t0, tf, exact_2, "TEST 2")
+
+################
+
+def f_3(y,t):
+    time.sleep(delay)
+    return 4.*t*np.sqrt(y)
+    
+def exact_3(t):
+    return np.array([(1.+t**2)**2])
 
 def test3():
-    f = lambda y,t: 4.*t*np.sqrt(y)
-    y0 = np.array([1])
-    exact = lambda t: np.array([(1.+t**2)**2])
     t0 = 0
     tf = 10
-    tst(f, t0, tf, exact, "TEST 3")
+    tst(f_3, t0, tf, exact_3, "TEST 3")
+
+################
+
+def f_4(y,t):
+    time.sleep(delay)
+    return y/t*np.log(y)
+    
+def exact_4(t):
+    return np.array([np.exp(2.*t)])
 
 def test4():
-    f = lambda y,t:  y/t*np.log(y)
-    y0 = np.array([np.exp(1.)])
-    exact = lambda t: np.array([np.exp(2.*t)])
     t0 = 0.5
     tf = 10
-    tst(f, t0, tf, exact, "TEST 4")
-
+    tst(f_4, t0, tf, exact_4, "TEST 4")
 
 
 if __name__ == "__main__":
