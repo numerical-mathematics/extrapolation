@@ -6,6 +6,7 @@ import time
 
 import ex_serial as ex_s
 import ex_parallel as ex_p
+import fnbod
 
 def tst_convergence(f, t0, tf, y0, order, exact, method, title="tst_convergence"):
     '''
@@ -231,6 +232,20 @@ def test4():
     t0 = 0.5
     tf = 10
     tst(f_4, t0, tf, exact_4, "TEST 4")
+
+###############
+
+def f_5(y,t):
+    return fnbod.fnbod(y,t)
+
+def exact_5(t):
+    n = 2400
+    return fnbod.init_fnbod(n)
+
+def test5():
+    t0 = 0
+    tf = 5
+    tst(f_5, t0, tf, exact_5, "TEST 4")
 
 
 if __name__ == "__main__":
