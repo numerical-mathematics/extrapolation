@@ -107,12 +107,21 @@ def extrapolation_serial(method, f, t0, tf, y0, adaptive="order", p=4,
         y, t, k = y0, t0, p
         h = min(step_size, tf-t0)
 
+        sum_ks, sum_hs = 0, 0
+        num_iter = 0
+
         while t < tf:
             y, h, k, h_new, k_new, _, _, fe_ = method(f, t, y, h, k, Atol, Rtol)
             t, fe = t + h, fe + fe_
+
+            sum_ks += k
+            sum_hs += h
+            num_iter += 1
+
             h = min(h_new, tf - t)
             k = k_new
 
+        return (y, fe, sum_hs/num_iter, sum_ks/num_iter)            
     else:
         raise Exception("\'" + str(adaptive) + 
             "\' is not a valid value for the argument \'adaptive\'")

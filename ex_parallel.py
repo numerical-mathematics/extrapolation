@@ -3,6 +3,12 @@ import numpy as np
 import multiprocessing as mp
 import math
 
+try:
+    NUM_WORKERS = mp.cpu_count()
+except NotImplementedError:
+    NUM_WORKERS = 4
+
+
 def error_norm(y1, y2, Atol, Rtol):
     tol = Atol + np.maximum(y1,y2)*Rtol
     return np.linalg.norm((y1-y2)/tol)/(len(y1)**0.5)
@@ -82,12 +88,7 @@ def extrapolation_parallel(method, f, t0, tf, y0, adaptive="order", p=4,
             - fe        -- the number of f evaluations 
     '''
 
-    try:
-        processes = mp.cpu_count()
-    except NotImplementedError:
-        processes = 4
-
-    pool = mp.Pool(processes)
+    pool = mp.Pool(NUM_WORKERS)
 
     fe = 0
     if adaptive == "fixed":
@@ -115,12 +116,22 @@ def extrapolation_parallel(method, f, t0, tf, y0, adaptive="order", p=4,
         y, t, k = y0, t0, p
         h = min(step_size, tf-t0)
 
+        sum_ks, sum_hs = 0, 0
+        num_iter = 0
+
         while t < tf:
-            y, h, k, h_new, k_new, _, _, fe_ = method(f, t, y, h, k, Atol, Rtol, pool)
+            y, h, k, h_new, k_new, fe_ = method(f, t, y, h, k, Atol, Rtol, pool)
             t, fe = t + h, fe + fe_
+
+            sum_ks += k
+            sum_hs += h
+            num_iter += 1
+
             h = min(h_new, tf - t)
             k = k_new
 
+        pool.close()
+        return (y, fe, sum_hs/num_iter, sum_ks/num_iter)            
     else:
         raise Exception("\'" + str(adaptive) + 
             "\' is not a valid value for the argument \'adaptive\'")
@@ -154,7 +165,8 @@ def compute_ex_table(f, tn, yn, h, k, pool):
 
     jobs = [(f, tn, yn, h, k_lst) for k_lst in ks]
 
-    results = pool.map(compute_stages, jobs, chunksize=1)
+    chunksize = int((len(jobs))/NUM_WORKERS)
+    results = pool.map(compute_stages, jobs, chunksize=chunksize)
 
     # process the returned results from the pool 
     for res in results:
@@ -178,93 +190,53 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol, pool):
     k_max = 10
     k_min = 3
     k = min(k_max, max(k_min, k))
-    A_k = lambda k: k*(k+1)
+    A_k = lambda k: k
     H_k = lambda h, k, err_k: h*0.94*(0.65/err_k)**(1/(2*k-1)) 
     W_k = lambda Ak,Hk: Ak/Hk
-    h_rej = []
-    k_rej = []
 
-    T, fe = compute_ex_table(f, tn, yn, h, k+1, pool)
+    T, fe = compute_ex_table(f, tn, yn, h, k, pool)
 
-    # compute the error and work function for the stages (k-2) to (k+1)
+    # compute the error and work function for the stages k-2 and k
     err_k_2 = error_norm(T[k-2,k-3], T[k-2,k-2], Atol, Rtol)
     err_k_1 = error_norm(T[k-1,k-2], T[k-1,k-1], Atol, Rtol)
     err_k   = error_norm(T[k,k-1],   T[k,k],     Atol, Rtol)
-    err_k1  = error_norm(T[k+1,k],   T[k+1,k+1], Atol, Rtol)
     h_k_2   = H_k(h, k-2, err_k_2)
     h_k_1   = H_k(h, k-1, err_k_1)
     h_k     = H_k(h, k,   err_k)
-    h_k1    = H_k(h, k+1, err_k1)
     w_k_2   = W_k(A_k(k-2), h_k_2)
     w_k_1   = W_k(A_k(k-1), h_k_1)
     w_k     = W_k(A_k(k),   h_k)
-    w_k1    = W_k(A_k(k+1), h_k1)
+
 
     if err_k_1 <= 1:
         # convergence in line k-1
-        y = T[k-1,k-1]
+        if err_k <= 1:
+            y = T[k,k]
+        else:
+            y = T[k-1,k-1]
+
         k_new = k if w_k_1 < 0.9*w_k_2 else k-1
         h_new = h_k_1 if k_new <= k-1 else h_k_1*A_k(k)/A_k(k-1)
 
     elif err_k <= 1:
         # convergence in line k
         y = T[k,k]
+
         k_new = k-1 if w_k_1 < 0.9*w_k else (
                 k+1 if w_k < 0.9*w_k_1 else k)
         h_new = h_k_1 if k_new == k-1 else (
                 h_k if k_new == k else h_k*A_k(k+1)/A_k(k))
-
-    elif err_k1 <= 1:
-        # convergence in line k+1
-        y = T[k+1,k+1]
-        if w_k_1 < 0.9*w_k:
-            k_new = k+1 if w_k1 < 0.9*w_k_1 else k-1
-        else:
-            k_new = k+1 if w_k1 < 0.9*w_k else k
-
-        h_new = h_k_1 if k_new == k-1 else (
-                h_k if k_new == k else h_k1)
-
-    elif err_k_1 > ((k+1)*k)**2:
-        # convergence monitor
-        # reject (h, k) and restart with new values accordingly
-        k_new = k-1
-        h_new = min(h_k_1, h)
-        h_rej.append(h)
-        k_rej.append(k)
-        y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = midpoint_adapt_order(f, tn, 
-            yn, h_new, k_new, Atol, Rtol, pool)
-        fe += fe_
-        h_rej += h_rej_
-        k_rej += k_rej_
-
-    elif err_k > (k+1)**2:
-        # second convergence monitor 
-        # reject (h, k) and restart with new values accordingly
-        k_new = k-1 if w_k_1 < 0.9*w_k else k
-        h_new = min(h_k_1 if k_new == k-1 else h_k, h)
-        h_rej.append(h)
-        k_rej.append(k)
-        y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = midpoint_adapt_order(f, 
-            tn, yn, h_new, k_new, Atol, Rtol, pool)
-        fe += fe_
-        h_rej += h_rej_
-        k_rej += k_rej_
 
     else: 
         # no convergence
         # reject (h, k) and restart with new values accordingly
         k_new = k-1 if w_k_1 < 0.9*w_k else k
         h_new = min(h_k_1 if k_new == k-1 else h_k, h)
-        h_rej.append(h)
-        k_rej.append(k)
-        y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = midpoint_adapt_order(f, 
-            tn, yn, h_new, k_new, Atol, Rtol, pool)
+        y, h, k, h_new, k_new, fe_ = midpoint_adapt_order(f, tn, yn, h_new, 
+            k_new, Atol, Rtol, pool)
         fe += fe_
-        h_rej += h_rej_
-        k_rej += k_rej_
 
-    return (y, h, k, h_new, k_new, h_rej, k_rej, fe)
+    return (y, h, k, h_new, k_new, fe)
 
 def ex_midpoint_parallel(f, t0, tf, y0, adaptive="order", p=4, step_size=0.5, Atol=0, 
         Rtol=0, exact=(lambda t: t)):

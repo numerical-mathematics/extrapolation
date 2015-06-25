@@ -86,20 +86,27 @@ def tst_adaptive(f, t0, tf, y0, order, exact, method, title="tst_adaptive"):
 
 
 def tst_parallel_vs_serial(f, t0, tf, y0, title="tst_parallel_vs_serial"):
-    Atol = np.asarray([10**(-k) for k in range(10)])
+    Atol = np.asarray([10**(-k) for k in range(1, 10)])
     time_ratio = np.zeros(len(Atol))
+    fe_diff = np.zeros(len(Atol))
+    h_avg_diff = np.zeros(len(Atol))
+    k_avg_diff = np.zeros(len(Atol))
     for i in range(len(Atol)):
         print "Atol = " + str(Atol[i])
         time_ = time.time()
-        y_, fe_ = ex_p.ex_midpoint_parallel(f, t0, tf, y0, Atol=(Atol[i]), adaptive="order")
+        y_, fe_, h_avg_, k_avg_ = ex_p.ex_midpoint_parallel(f, t0, tf, y0, Atol=(Atol[i]), adaptive="order")
         parallel_time = time.time() - time_
-        print "parallel = " + str(parallel_time) + " seconds"
+        print "parallel = " + str(parallel_time) + " \tfe = " + str(fe_) + " \th_avg = " + str(h_avg_) + " \tk_avg = " + str(k_avg_)
         time_ = time.time()
-        y, fe = ex_s.ex_midpoint_serial(f, t0, tf, y0, Atol=(Atol[i]), adaptive="order")
+        y, fe, h_avg, k_avg = ex_s.ex_midpoint_serial(f, t0, tf, y0, Atol=(Atol[i]), adaptive="order")
         serial_time = time.time() - time_
-        print "serial   = " + str(serial_time) + " seconds"
+        print "serial   = " + str(serial_time) + " \tfe = " + str(fe) + " \th_avg = " + str(h_avg) + " \tk_avg = " + str(k_avg)
         time_ratio[i] = serial_time / parallel_time
-        print "ratio    = " + str(time_ratio[i]) + ("   [Speedup]" if time_ratio[i] > 1 else "")
+        fe_diff[i] = fe_ - fe
+        h_avg_diff[i] = h_avg_ - h_avg
+        k_avg_diff[i] = k_avg_ - k_avg
+        print "ratio    = " + str(time_ratio[i]) + " \tdiff  = " + str(fe_diff[i]) + " \tdiff  = " + str(h_avg_diff[i]) + " \tdiff  = " + str(k_avg_diff[i])
+        if time_ratio[i] > 1: print "[[Speedup]]"
         print
 
     plt.hold('true')
@@ -108,6 +115,14 @@ def tst_parallel_vs_serial(f, t0, tf, y0, title="tst_parallel_vs_serial"):
     plt.title(title)
     plt.xlabel('Atol')
     plt.ylabel('serial time / parallel time')
+    plt.show()
+
+    plt.hold('true')
+    plt.semilogx(Atol, fe_diff, "s-")
+    plt.semilogx(Atol, [0]*len(Atol))
+    plt.title(title)
+    plt.xlabel('Atol')
+    plt.ylabel('fe_parallel - fe_serial')
     plt.show()
 
 
@@ -196,23 +211,40 @@ def f_5(y,t):
     return fnbod.fnbod(y,t)
 
 def test5():
-    n = 1800
+    bodys = 400
+    n = 6*bodys
+    print "n = " + str(n)
     t0 = 0
-    tf = 5
+    tf = 0.5
     y0 = fnbod.init_fnbod(n)
-    tst_parallel_vs_serial(f_5, t0, tf, y0, title="tst_parallel_vs_serial")
+    tst_parallel_vs_serial(f_5, t0, tf, y0, title="tst_parallel_vs_serial w/ N = " + str(n))
 
 test5()
 
 def cprofile_tst():
-    n = 1800
-    Atol = 10**(-3)
+    bodys = 200
+    n = 6*bodys
+    Atol = 10**(-6)
     print "n = " + str(n)
     print "Atol = " + str(Atol)
     t0 = 0
-    tf = 5
+    tf = 3
     y0 = fnbod.init_fnbod(n)
-    ex_s.ex_midpoint_serial(f_5, t0, tf, y0, Atol=Atol, adaptive="order")
+    # print "serial"
+    # _, _, h_avg, k_avg = ex_s.ex_midpoint_serial(f_5, t0, tf, y0, Atol=Atol, adaptive="order")
+    print "parallel"
+    _, _, h_avg, k_avg = ex_p.ex_midpoint_parallel(f_5, t0, tf, y0, Atol=Atol, adaptive="order")
+
+    print "h_avg = " + str(h_avg) + "\tk_avg = " + str(k_avg)
+
+# t0 = 0
+# tf = 10
+# Atol = 10**(-9)
+# print ex_p.ex_midpoint_parallel(f_2, t0, tf, exact_2(t0), Atol=Atol, adaptive="order")
+# print ex_p.ex_midpoint_parallel(f_2, t0, tf, exact_2(t0), Atol=Atol, adaptive="order")
+# print ex_p.ex_midpoint_parallel(f_3, t0, tf, exact_3(t0), Atol=Atol, adaptive="order")
+# print ex_p.ex_midpoint_parallel(f_4, t0, tf, exact_4(t0), Atol=Atol, adaptive="order")
+# print ex_p.ex_midpoint_parallel(f_5, t0, tf, exact_5(t0), Atol=Atol, adaptive="order")
 
 
 if __name__ == "__main__":
