@@ -158,15 +158,16 @@ def compute_ex_table(f, tn, yn, h, k, pool):
     T = np.zeros((k+1,k+1, len(yn)), dtype=(type(yn[0])))
     fe = 0
 
-    if k % 2 == 1:
-        ks = [[k]] + [[i, k - i] for i in range(1, int(k/2)+1)]
-    else:
-        ks = [[k]] + [[i, k - i] for i in range(1, int(k/2))] + [[k/2]]
+    # if k % 2 == 1:
+    #     ks = [[k]] + [[i, k - i] for i in range(1, int(k/2)+1)]
+    # else:
+    #     ks = [[k]] + [[i, k - i] for i in range(1, int(k/2))] + [[k/2]]
 
-    jobs = [(f, tn, yn, h, k_lst) for k_lst in ks]
+    # jobs = [(f, tn, yn, h, k_lst) for k_lst in ks]
 
-    chunksize = int((len(jobs))/NUM_WORKERS)
-    results = pool.map(compute_stages, jobs, chunksize=chunksize)
+    jobs = [(f, tn, yn, h, [k_]) for k_ in range(k, 0, -1)]
+
+    results = pool.map(compute_stages, jobs, chunksize=1)
 
     # process the returned results from the pool 
     for res in results:
@@ -190,7 +191,7 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol, pool):
     k_max = 10
     k_min = 3
     k = min(k_max, max(k_min, k))
-    A_k = lambda k: k
+    A_k = lambda k: max(2*k,(k*(k+1)/NUM_WORKERS))
     H_k = lambda h, k, err_k: h*0.94*(0.65/err_k)**(1/(2*k-1)) 
     W_k = lambda Ak,Hk: Ak/Hk
 
