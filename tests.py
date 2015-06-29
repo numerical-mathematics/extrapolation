@@ -86,7 +86,7 @@ def tst_adaptive(f, t0, tf, y0, order, exact, method, title="tst_adaptive"):
 
 
 def tst_parallel_vs_serial(f, t0, tf, y0, title="tst_parallel_vs_serial"):
-    Atol = np.asarray([10**(-k) for k in range(1, 10)])
+    Atol = np.asarray([10**(-k) for k in range(3, 13)])
     time_ratio = np.zeros(len(Atol))
     fe_diff = np.zeros(len(Atol))
     h_avg_diff = np.zeros(len(Atol))
@@ -105,7 +105,7 @@ def tst_parallel_vs_serial(f, t0, tf, y0, title="tst_parallel_vs_serial"):
         fe_diff[i] = fe_ - fe
         h_avg_diff[i] = h_avg_ - h_avg
         k_avg_diff[i] = k_avg_ - k_avg
-        print "ratio    = " + str(time_ratio[i]) + " \tdiff  = " + str(fe_diff[i]) + " \tdiff  = " + str(h_avg_diff[i]) + " \tdiff  = " + str(k_avg_diff[i])
+        print "ratio    = " + str(time_ratio[i]) + " \tdiff  = " + str(fe_diff[i]) + " \tdiff  = " + str(h_avg_diff[i]) + " \tdiff  = " + str(k_avg_diff[i]) + " \tdiff_y  = " + str(np.linalg.norm(y-y_))
         if time_ratio[i] > 1: print "[[Speedup]]"
         print
 
@@ -215,7 +215,7 @@ def test5():
     n = 6*bodys
     print "n = " + str(n)
     t0 = 0
-    tf = 0.5
+    tf = 0.08
     y0 = fnbod.init_fnbod(n)
     tst_parallel_vs_serial(f_5, t0, tf, y0, title="tst_parallel_vs_serial w/ N = " + str(n))
 

@@ -154,18 +154,33 @@ def compute_stages((f, tn, yn, h, k_lst)):
 
     return res
 
+def balance_load(k):
+    if k <= NUM_WORKERS:
+        return [[i] for i in range(k, 0, -1)]
+    k_lst = [[] for i in range(NUM_WORKERS)]
+    index = range(NUM_WORKERS)
+    i = k
+    while 1:
+        if i >= NUM_WORKERS:
+            for j in index:
+                k_lst[j] += [i]
+                i -= 1
+        else:
+            for j in index:
+                if i == 0:
+                    break
+                k_lst[j] += [i]
+                i -= 1
+            break
+        index = index[::-1]
+
+    return k_lst
+
 def compute_ex_table(f, tn, yn, h, k, pool):
     T = np.zeros((k+1,k+1, len(yn)), dtype=(type(yn[0])))
     fe = 0
 
-    # if k % 2 == 1:
-    #     ks = [[k]] + [[i, k - i] for i in range(1, int(k/2)+1)]
-    # else:
-    #     ks = [[k]] + [[i, k - i] for i in range(1, int(k/2))] + [[k/2]]
-
-    # jobs = [(f, tn, yn, h, k_lst) for k_lst in ks]
-
-    jobs = [(f, tn, yn, h, [k_]) for k_ in range(k, 0, -1)]
+    jobs = [(f, tn, yn, h, k_) for k_ in balance_load(k)]
 
     results = pool.map(compute_stages, jobs, chunksize=1)
 
