@@ -85,12 +85,17 @@ def tst_adaptive(f, t0, tf, y0, order, exact, method, title="tst_adaptive"):
     plt.show()
 
 
+def rel_error_norm(y, y_ref):
+    return np.linalg.norm((y-y_ref)/y_ref)/(len(y)**0.5)
+
 def tst_parallel_vs_serial(f, t0, tf, y0, title="tst_parallel_vs_serial"):
-    Atol = np.asarray([10**(-k) for k in range(3, 13)])
+    Atol = np.asarray([10**(-k) for k in range(3, 14)])
     time_ratio = np.zeros(len(Atol))
     fe_diff = np.zeros(len(Atol))
     h_avg_diff = np.zeros(len(Atol))
     k_avg_diff = np.zeros(len(Atol))
+    err = np.zeros(len(Atol))
+    y_ref = np.loadtxt("reference.txt")
     for i in range(len(Atol)):
         print "Atol = " + str(Atol[i])
         time_ = time.time()
@@ -107,23 +112,25 @@ def tst_parallel_vs_serial(f, t0, tf, y0, title="tst_parallel_vs_serial"):
         k_avg_diff[i] = k_avg_ - k_avg
         print "ratio    = " + str(time_ratio[i]) + " \tdiff  = " + str(fe_diff[i]) + " \tdiff  = " + str(h_avg_diff[i]) + " \tdiff  = " + str(k_avg_diff[i]) + " \tdiff_y  = " + str(np.linalg.norm(y-y_))
         if time_ratio[i] > 1: print "[[Speedup]]"
-        print
+        err[i] = rel_error_norm(y_, y_ref)
+	print "relative error = " + str(err[i])
+	print
 
-    plt.hold('true')
-    plt.semilogx(Atol, time_ratio, "s-")
-    plt.semilogx(Atol, [1]*len(Atol))
-    plt.title(title)
-    plt.xlabel('Atol')
-    plt.ylabel('serial time / parallel time')
-    plt.show()
+#    plt.hold('true')
+#    plt.semilogx(Atol, time_ratio, "s-")
+#    plt.semilogx(Atol, [1]*len(Atol))
+#    plt.title(title)
+#    plt.xlabel('Atol')
+#    plt.ylabel('serial time / parallel time')
+#    plt.show()
 
-    plt.hold('true')
-    plt.semilogx(Atol, fe_diff, "s-")
-    plt.semilogx(Atol, [0]*len(Atol))
-    plt.title(title)
-    plt.xlabel('Atol')
-    plt.ylabel('fe_parallel - fe_serial')
-    plt.show()
+#    plt.hold('true')
+#    plt.semilogx(Atol, fe_diff, "s-")
+#    plt.semilogx(Atol, [0]*len(Atol))
+#    plt.title(title)
+#    plt.xlabel('Atol')
+#    plt.ylabel('fe_parallel - fe_serial')
+#    plt.show()
 
 
 def tst(f, t0, tf, exact, test_name):
