@@ -37,24 +37,28 @@ def adapt_step(method, f, tn_1, yn_1, y, y_hat, h, p, Atol, Rtol, pool):
                         accepted step size
             - h         -- the accepted step taken to compute y and y_hat
             - h_new     -- the proposed next step size
-            - fe        -- the number of f evaluations 
+            - (fe_serial, fe_total) -- the number of f serial evaluations, and
+                                    the total number of f evaluations
     ''' 
 
-    fe = 0
     facmax = 5
     facmin = 0.2
     fac = 0.8
     err = error_norm(y, y_hat, Atol, Rtol)
     h_new = h*min(facmax, max(facmin, fac*((1/err)**(1/p))))
 
+    fe_serial = 0
+    fe_total = 0
+
     while err > 1:
         h = h_new
-        y, y_hat, fe_ = method(f, tn_1, yn_1, h, p, pool)
-        fe += fe_
+        y, y_hat, (fe_serial_, fe_total_) = method(f, tn_1, yn_1, h, p, pool)
+        fe_serial += fe_serial_
+        fe_total += fe_total_
         err = error_norm(y, y_hat, Atol, Rtol)
         h_new = h*min(facmax, max(facmin, fac*((1/err)**(1/p))))
 
-    return (y, y_hat, h, h_new, fe)
+    return (y, y_hat, h, h_new, (fe_serial, fe_total))
 
 def extrapolation_parallel(method, f, t0, tf, y0, adaptive="order", p=4, 
         step_size=0.5, Atol=0, Rtol=0, exact=(lambda t: t)):
@@ -84,20 +88,23 @@ def extrapolation_parallel(method, f, t0, tf, y0, adaptive="order", p=4,
                         Must output a non-scalar numpy.ndarray
 
         **Outputs**:
-            - y         -- the computed solution for y(tf)
-            - fe        -- the number of f evaluations 
+            - y                     -- the computed solution for y(tf)
+            - (fe_serial, fe_total) -- the number of f serial evaluations, and
+                                    the total number of f evaluations
     '''
 
     pool = mp.Pool(NUM_WORKERS)
 
-    fe = 0
+    fe_serial = 0
+    fe_total = 0
     if adaptive == "fixed":
         ts, h = np.linspace(t0, tf, (tf-t0)/step_size + 1, retstep=True)
         y = y0
 
         for i in range(len(ts) - 1):
-            y, _, fe_ = method(f, ts[i], y, h, p, pool)
-            fe += fe_
+            y, _, (fe_serial_, fe_total_) = method(f, ts[i], y, h, p, pool)
+            fe_serial += fe_serial_
+            fe_total += fe_total_
     
     elif adaptive == "step":
         assert p > 1, "order of method must be greater than 1 if adaptive=True"
@@ -105,11 +112,14 @@ def extrapolation_parallel(method, f, t0, tf, y0, adaptive="order", p=4,
         h = min(step_size, tf-t0)
 
         while t < tf:
-            y_, y_hat, fe_ = method(f, t, y, h, p, pool)
-            fe += fe_
-            y, _, h, h_new, fe_ = adapt_step(method, f, t, y, y_, y_hat, h, p, 
-                Atol, Rtol, pool)
-            t, fe = t + h, fe + fe_
+            y_, y_hat, (fe_serial_, fe_total_) = method(f, t, y, h, p, pool)
+            fe_serial += fe_serial_
+            fe_total += fe_total_
+            y, _, h, h_new, (fe_serial_, fe_total_) = adapt_step(method, f, t, 
+                y, y_, y_hat, h, p, Atol, Rtol, pool)
+            t += h
+            fe_serial += fe_serial_
+            fe_total += fe_total_
             h = min(h_new, tf - t)
     
     elif adaptive == "order":
@@ -120,8 +130,11 @@ def extrapolation_parallel(method, f, t0, tf, y0, adaptive="order", p=4,
         num_iter = 0
 
         while t < tf:
-            y, h, k, h_new, k_new, fe_ = method(f, t, y, h, k, Atol, Rtol, pool)
-            t, fe = t + h, fe + fe_
+            y, h, k, h_new, k_new, (fe_serial_, fe_total_) = method(f, t, y, h, 
+                k, Atol, Rtol, pool)
+            t += h
+            fe_serial += fe_serial_
+            fe_total += fe_total_
 
             sum_ks += k
             sum_hs += h
@@ -131,63 +144,62 @@ def extrapolation_parallel(method, f, t0, tf, y0, adaptive="order", p=4,
             k = k_new
 
         pool.close()
-        return (y, fe, sum_hs/num_iter, sum_ks/num_iter)            
+        return (y, (fe_serial, fe_total), sum_hs/num_iter, sum_ks/num_iter)            
     else:
         raise Exception("\'" + str(adaptive) + 
             "\' is not a valid value for the argument \'adaptive\'")
 
     pool.close()
-    return (y, fe)
+    return (y, (fe_serial, fe_total))
 
 def compute_stages((f, tn, yn, h, k_lst)):
     res = []
     for k in k_lst:
         k = int(k)
         Y = np.zeros((2*k+1, len(yn)), dtype=(type(yn[0])))
-        fe = 0
         Y[0] = yn
         Y[1] = Y[0] + h/(2*k)*f(Y[0], tn)
         for j in range(2,2*k+1):
             Y[j] = Y[j-2] + (h/k)*f(Y[j-1], tn + (j-1)*(h/(2*k)))
-            fe += 1
-        res += [(k, Y[2*k], fe)]
+        res += [(k, Y[2*k])]
 
     return res
 
 def balance_load(k):
     if k <= NUM_WORKERS:
-        return [[i] for i in range(k, 0, -1)]
-    k_lst = [[] for i in range(NUM_WORKERS)]
-    index = range(NUM_WORKERS)
-    i = k
-    while 1:
-        if i >= NUM_WORKERS:
-            for j in index:
-                k_lst[j] += [i]
-                i -= 1
-        else:
-            for j in index:
-                if i == 0:
-                    break
-                k_lst[j] += [i]
-                i -= 1
-            break
-        index = index[::-1]
+        k_lst = [[i] for i in range(k, 0, -1)]
+    else:
+        k_lst = [[] for i in range(NUM_WORKERS)]
+        index = range(NUM_WORKERS)
+        i = k
+        while 1:
+            if i >= NUM_WORKERS:
+                for j in index:
+                    k_lst[j] += [i]
+                    i -= 1
+            else:
+                for j in index:
+                    if i == 0:
+                        break
+                    k_lst[j] += [i]
+                    i -= 1
+                break
+            index = index[::-1]
 
-    return k_lst
+    fe_total = k*(k+1)
+    fe_serial = 2*sum(k_lst[0])
+    return (k_lst, fe_serial, fe_total)
 
 def compute_ex_table(f, tn, yn, h, k, pool):
     T = np.zeros((k+1,k+1, len(yn)), dtype=(type(yn[0])))
-    fe = 0
-
-    jobs = [(f, tn, yn, h, k_) for k_ in balance_load(k)]
+    k_lst, fe_serial, fe_total = balance_load(k)
+    jobs = [(f, tn, yn, h, k_) for k_ in k_lst]
 
     results = pool.map(compute_stages, jobs, chunksize=1)
 
     # process the returned results from the pool 
     for res in results:
-        for (k_, Tk_, fe_) in res:
-            fe += fe_
+        for (k_, Tk_) in res:
             T[k_, 1] = Tk_
 
     # compute extrapolation table 
@@ -195,12 +207,12 @@ def compute_ex_table(f, tn, yn, h, k, pool):
         for j in range(i, k+1):
             T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((j/(j-i+1))**2 - 1)
 
-    return (T, fe)
+    return (T, fe_serial, fe_total)
 
 def midpoint_fixed_step(f, tn, yn, h, p, pool):
     r = int(round(p/2))
-    T, fe = compute_ex_table(f, tn, yn, h, r, pool)
-    return (T[r,r], T[r-1,r-1], fe)
+    T, fe_serial, fe_total = compute_ex_table(f, tn, yn, h, r, pool)
+    return (T[r,r], T[r-1,r-1], (fe_serial, fe_total))
 
 def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol, pool):
     k_max = 10
@@ -210,7 +222,7 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol, pool):
     H_k = lambda h, k, err_k: h*0.94*(0.65/err_k)**(1/(2*k-1)) 
     W_k = lambda Ak,Hk: Ak/Hk
 
-    T, fe = compute_ex_table(f, tn, yn, h, k, pool)
+    T, fe_serial, fe_total = compute_ex_table(f, tn, yn, h, k, pool)
 
     # compute the error and work function for the stages k-2 and k
     err_k_2 = error_norm(T[k-2,k-3], T[k-2,k-2], Atol, Rtol)
@@ -248,11 +260,12 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol, pool):
         # reject (h, k) and restart with new values accordingly
         k_new = k-1 if w_k_1 < 0.9*w_k else k
         h_new = min(h_k_1 if k_new == k-1 else h_k, h)
-        y, h, k, h_new, k_new, fe_ = midpoint_adapt_order(f, tn, yn, h_new, 
+        y, h, k, h_new, k_new, (fe_serial_, fe_total_) = midpoint_adapt_order(f, tn, yn, h_new, 
             k_new, Atol, Rtol, pool)
-        fe += fe_
+        fe_serial += fe_serial_
+        fe_total += fe_total_
 
-    return (y, h, k, h_new, k_new, fe)
+    return (y, h, k, h_new, k_new, (fe_serial, fe_total))
 
 def ex_midpoint_parallel(f, t0, tf, y0, adaptive="order", p=4, step_size=0.5, Atol=0, 
         Rtol=0, exact=(lambda t: t)):
