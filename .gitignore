@@ -55,3 +55,6 @@ docs/_build/
 
 # PyBuilder
 target/
+
+# executable from ODEX code
+a.out
