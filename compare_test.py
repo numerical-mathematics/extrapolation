@@ -65,7 +65,8 @@ for i in range(len(Atol)):
     py_runtime[i] = time.time() - start_time
     py_yerr[i] = relative_error(y, y_ref)
     print 'Runtime: ', py_runtime[i], ' s   Error: ', py_yerr[i], '   fe_seq: ', py_fe_seq[i], '   fe_tot: ', py_fe_tot[i]
-
+    print ''
+    
     # run DOP853
     replace_in_file('odex/dr_dop853.f','odex/driver.f','relative_tolerance',str(Atol[i]))
     subprocess.call('gfortran -O3 odex/driver.f',shell=True)
@@ -73,12 +74,12 @@ for i in range(len(Atol)):
     start_time = time.time()
     proc = subprocess.Popen(['time', './a.out'],shell=False,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     out, err = proc.communicate()
-    print out
     dop_runtime[i] = time.time() - start_time
     dop_yerr[i] = float(out.split()[2])
     dop_fe_seq[i], _ = get_fe(out)
     dop_fe_tot[i], _ = get_fe(out)
     print 'Runtime: ', dop_runtime[i], ' s   Error: ', dop_yerr[i], '   fe_seq: ', dop_fe_seq[i], '   fe_tot: ', dop_fe_tot[i]
+    print ''
 
     # run ODEX-P
     replace_in_file('odex/dr_odex.f','odex/driver.f','relative_tolerance',str(Atol[i]))
@@ -88,12 +89,12 @@ for i in range(len(Atol)):
     start_time = time.time()
     proc = subprocess.Popen(['time', './a.out'],shell=False,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env = {'OMP_NUM_THREADS': str(num_threads)})
     out, err = proc.communicate()
-    print out
     odex_runtime[i] = time.time() - start_time
     odex_yerr[i] = float(out.split()[2])
     odex_fe_tot[i], step = get_fe(out)    
     odex_fe_seq[i] = step*extrap_order
     print 'Runtime: ', odex_runtime[i], ' s   Error: ', odex_yerr[i], '   fe_seq: ', odex_fe_seq[i], '   fe_tot: ', odex_fe_tot[i]
+    print ''
 
     print ''
 
