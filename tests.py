@@ -1,11 +1,12 @@
 from __future__ import division
 import numpy as np
-import matplotlib.pyplot as plt
 import math 
 import time
 import cProfile
 
-# matplotlib.use('agg')
+import matplotlib
+matplotlib.use('agg')
+import matplotlib.pyplot as plt
 
 import ex_serial as ex_s
 import ex_parallel as ex_p
@@ -93,7 +94,7 @@ def rel_error_norm(y, y_ref):
 def tst_parallel_vs_serial(f, t0, tf, y0, title="tst_parallel_vs_serial"):
     Atol = np.asarray([10**(-k) for k in range(3, 14)])
     time_ratio = np.zeros(len(Atol))
-    fe_serial = np.zeros(len(Atol))
+    fe_seq = np.zeros(len(Atol))
     fe_total = np.zeros(len(Atol))
     fe_diff = np.zeros(len(Atol))
     h_avg_diff = np.zeros(len(Atol))
@@ -104,20 +105,20 @@ def tst_parallel_vs_serial(f, t0, tf, y0, title="tst_parallel_vs_serial"):
     for i in range(len(Atol)):
         print "Atol = " + str(Atol[i])
         time_ = time.time()
-        y_, (fe_serial[i], fe_total[i]), h_avg_, k_avg_ = ex_p.ex_midpoint_parallel(f, t0, tf, y0, Atol=(Atol[i]), adaptive="order")
+        y_, (fe_seq[i], fe_total[i]), h_avg_, k_avg_ = ex_p.ex_midpoint_parallel(f, t0, tf, y0, Atol=(Atol[i]), adaptive="order")
         parallel_time = time.time() - time_
         err_p[i] = rel_error_norm(y_, y_ref)
-        print "parallel = " + '%g' % (parallel_time) + "\terr  = " + '%e' % err_p[i] + "\th_avg = " + '%e' % h_avg_ + "\tk_avg = " + '%e' % k_avg_ + "\tfe_s1 = " + str(fe_serial[i]) + "\tfe_t1 = " + str(fe_total[i]) + "\tfe_t1/fe_s1 = " + '%g' % (fe_total[i]/fe_serial[i])
+        print "parallel = " + '%g' % (parallel_time) + "\terr  = " + '%e' % err_p[i] + "\th_avg = " + '%e' % h_avg_ + "\tk_avg = " + '%e' % k_avg_ + "\tfe_s1 = " + str(fe_seq[i]) + "\tfe_t1 = " + str(fe_total[i]) + "\tfe_t1/fe_s1 = " + '%g' % (fe_total[i]/fe_seq[i])
         time_ = time.time()
         y, fe, h_avg, k_avg = ex_s.ex_midpoint_serial(f, t0, tf, y0, Atol=(Atol[i]), adaptive="order")
         serial_time = time.time() - time_
         err_s[i] = rel_error_norm(y, y_ref)
-        print "serial   = " + '%g' % (serial_time)   + "\terr  = " + '%e' % err_s[i] + "\th_avg = " + '%e' % h_avg + "\tk_avg = " + '%e' % k_avg + "\tfe_s2 = " + str(fe) + "\tfe_t2 = " + str(fe) + "\tfe_s2/fe_s1 = " + '%g' % (fe/fe_serial[i])
+        print "serial   = " + '%g' % (serial_time)   + "\terr  = " + '%e' % err_s[i] + "\th_avg = " + '%e' % h_avg + "\tk_avg = " + '%e' % k_avg + "\tfe_s2 = " + str(fe) + "\tfe_t2 = " + str(fe) + "\tfe_s2/fe_s1 = " + '%g' % (fe/fe_seq[i])
         time_ratio[i] = serial_time / parallel_time
-        fe_diff[i] = fe_serial[i] - fe
+        fe_diff[i] = fe_seq[i] - fe
         h_avg_diff[i] = h_avg_ - h_avg
         k_avg_diff[i] = k_avg_ - k_avg
-        print "ratio    = " + '%g' % (time_ratio[i]) + "\tdiff = " + '%e' %(err_p[i] - err_s[i]) + "\tdiff  = " + '%e' %(h_avg_diff[i]) + "\tdiff  = " + '%e' %(k_avg_diff[i]) + "\tdiff  = " + str(fe_diff[i]) + "\tdiff  = " + str(fe_total[i] - fe) + "\ttime_ratio/(fe_s2/fe_s1) = " + '%g' % (time_ratio[i]/(fe/fe_serial[i]))
+        print "ratio    = " + '%g' % (time_ratio[i]) + "\tdiff = " + '%e' %(err_p[i] - err_s[i]) + "\tdiff  = " + '%e' %(h_avg_diff[i]) + "\tdiff  = " + '%e' %(k_avg_diff[i]) + "\tdiff  = " + str(fe_diff[i]) + "\tdiff  = " + str(fe_total[i] - fe) + "\ttime_ratio/(fe_s2/fe_s1) = " + '%g' % (time_ratio[i]/(fe/fe_seq[i]))
         print
 
 #    plt.hold('true')
@@ -133,7 +134,7 @@ def tst_parallel_vs_serial(f, t0, tf, y0, title="tst_parallel_vs_serial"):
 #    plt.semilogx(Atol, [0]*len(Atol))
 #    plt.title(title)
 #    plt.xlabel('Atol')
-#    plt.ylabel('fe_parallel - fe_serial')
+#    plt.ylabel('fe_parallel - fe_seq')
 #    plt.show()
 
 
