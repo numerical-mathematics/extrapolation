@@ -194,7 +194,7 @@ def balance_load(k, seq=(lambda t: t)):
     for i in range(len(k_lst)):
         fe_tot += 2*sum(k_lst[i])
     
-    fe_seq = sum(k_lst[0])
+    fe_seq = 2*sum(k_lst[0])
 
     return (k_lst, fe_seq, fe_tot)
 
