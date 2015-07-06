@@ -1,19 +1,17 @@
 C * * * * * * * * * * * * * * * * * * * * * * * * *
-C --- DRIVER FOR ODEX ON N-body problem
+C --- DRIVER FOR DOPRI5 ON N-body problem
 C * * * * * * * * * * * * * * * * * * * * * * * * *
-compile odex
-cfeh dr_odex odex
-        include 'odex_load_balanced.f'
+cfeh dr_dop853 dop853
+        include 'dop853.f'
         IMPLICIT DOUBLE PRECISION (A-H,O-Z)
-        PARAMETER (NDGL=2400,KM=9,NRDENS=0,
-     &     LWORK=NDGL*(KM+5)+5*KM+20+(2*KM*(KM+2)+5)*NRDENS,
-     &     LIWORK=2*KM+21+NRDENS)
+        PARAMETER (NDGL=2400,NRD=0)
+        PARAMETER (LWORK=11*NDGL+8*NRD+21,LIWORK=NRD+21)
         DIMENSION Y(NDGL),WORK(LWORK),IWORK(LIWORK)
         EXTERNAL FNBOD,SOLOUT
 C --- DIMENSION OF THE SYSTEM
         N=2400
-        RPAR=1.D-1
-C --- OUTPUT ROUTINE AND DENSE OUTPUT IS USED DURING INTEGRATION
+        RPAR=1.0D-3
+C --- OUTPUT ROUTINE (AND DENSE OUTPUT) IS USED DURING INTEGRATION
         IOUT=0
 C --- INITIAL VALUES
         X=0.0D0
@@ -39,19 +37,18 @@ C          mass(i) = (0.3D0 +0.1D0*(cos(i*rf1)+1D0))/mbdy
 C --- ENDPOINT OF INTEGRATION
         XEND=8.d-2
 C --- REQUIRED (RELATIVE) TOLERANCE
-        TOL=1e-13
+        TOL=0.001
         ITOL=0
         RTOL=TOL
         ATOL=TOL
 C --- DEFAULT VALUES FOR PARAMETERS
         DO 10 I=1,10
         IWORK(I)=0
-  10    WORK(I)=0.D0  
-        H=0.01D0   
-C --- IF DENSE OUTPUT IS REQUIRED
-        IWORK(8)=NRDENS
-C --- CALL OF THE SUBROUTINE ODEX
-        CALL ODEX(N,FNBOD,X,Y,XEND,H,
+  10    WORK(I)=0.D0   
+        IWORK(5)=0
+        IWORK(4)=1000
+C --- CALL OF THE SUBROUTINE DOPRI8   
+        CALL DOP853(N,FNBOD,X,Y,XEND,
      &                  RTOL,ATOL,ITOL,
      &                  SOLOUT,IOUT,
      &                  WORK,LWORK,IWORK,LIWORK,RPAR,IPAR,IDID)
@@ -61,12 +58,10 @@ C --- PRINT relative error
         do i=1,N
             READ(12,*) YREF
             FERR = FERR + ((Y(i)-YREF)/YREF)**2
-C            write(*,*) Y(i), YREF, ((Y(i)-YREF)/YREF)
         end do
         FERR = dsqrt(FERR/N)
         WRITE (6,97) FERR
  97     FORMAT(1X,'Error = ',E24.16)
-
 
 C --- PRINT FINAL SOLUTION
         WRITE (6,99) X,Y(1),Y(2)
@@ -76,26 +71,31 @@ C --- PRINT STATISTICS
  90     FORMAT('       tol=',D8.2)
         WRITE (6,91) (IWORK(J),J=17,20)
  91     FORMAT(' fcn=',I5,' step=',I4,' accpt=',I4,' rejct=',I3)
+
+C        OPEN(UNIT=12, FILE="solution.txt", ACTION="write",
+C     &       STATUS="replace")
+C        do i=1,N
+C            WRITE (12,98) Y(i)
+C        end do
+C 98     FORMAT(1X,E24.16)
+
         STOP
         END
 C
-C
-        SUBROUTINE SOLOUT (NR,XOLD,X,Y,N,CON,NCON,ICOMP,ND,
-     &                     RPAR,IPAR,IRTRN)
+        SUBROUTINE SOLOUT (NR,XOLD,X,Y,N,CON,ICOMP,ND,
+     &                                          RPAR,IPAR,IRTRN,XOUT)
 C --- PRINTS SOLUTION AT EQUIDISTANT OUTPUT-POINTS
-C --- BY USING "CONTD5", THE CONTINUOUS COLLOCATION SOLUTION
-        IMPLICIT DOUBLE PRECISION (A-H,O-Z)
-        DIMENSION Y(N),CON(NCON),ICOMP(ND)
-        COMMON /INTERN/XOUT  
+C --- BY USING "CONTD8", THE CONTINUOUS COLLOCATION SOLUTION
+        IMPLICIT REAL*8 (A-H,O-Z)
+        DIMENSION Y(N),CON(8*ND),ICOMP(ND)
         IF (NR.EQ.1) THEN
            WRITE (6,99) X,Y(1),Y(2),NR-1
-           XOUT=X+0.1D0
+           XOUT=0.1D0
         ELSE
  10        CONTINUE
            IF (X.GE.XOUT) THEN
-              SOL1=CONTEX(1,XOUT,CON,NCON,ICOMP,ND)
-              SOL2=CONTEX(2,XOUT,CON,NCON,ICOMP,ND)
-              WRITE (6,99) XOUT,SOL1,SOL2,NR-1
+              WRITE (6,99) XOUT,CONTD8(1,XOUT,CON,ICOMP,ND),
+     &                     CONTD8(2,XOUT,CON,ICOMP,ND),NR-1
               XOUT=XOUT+0.1D0
               GOTO 10
            END IF
@@ -109,8 +109,8 @@ C --- RIGHT-HAND SIDE OF N-body problem
         IMPLICIT DOUBLE PRECISION (A-H,O-Z)
         DIMENSION Y(N),F(N)
         mbdy = 400
-        eps  = 1.D-4
-        dmass =  1.D0
+        eps  = 1.d-4
+        dmass =  1.d0
         do i=1,mbdy
            ip = 6*(i-1)
            F(ip+1) = Y(ip+4)
@@ -133,4 +133,5 @@ C --- RIGHT-HAND SIDE OF N-body problem
           F(ip+6) = f3
         end do
         RETURN
-        END 
+        END
+

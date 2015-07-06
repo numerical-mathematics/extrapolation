@@ -230,7 +230,7 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol, pool, seq=(lambda t: t)):
         sum_ = 0
         for i in range(k):
             sum_ += seq(i+1)
-        2*max(seq(k), sum_/NUM_WORKERS)
+        return 2*max(seq(k), sum_/NUM_WORKERS)
 
     H_k = lambda h, k, err_k: h*0.94*(0.65/err_k)**(1/(2*k-1)) 
     W_k = lambda Ak, Hk: Ak/Hk
