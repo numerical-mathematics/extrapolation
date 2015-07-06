@@ -191,7 +191,7 @@ def balance_load(k, seq=(lambda t: t)):
             index = index[::-1]
 
     fe_tot = 0 
-    for i in range(NUM_WORKERS):
+    for i in range(len(k_lst)):
         fe_tot += 2*sum(k_lst[i])
     
     fe_seq = sum(k_lst[0])
