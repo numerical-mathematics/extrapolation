@@ -251,8 +251,9 @@ def compute_ex_table(f, tn, yn, h, k, pool, seq=(lambda t: 2*t), dense=False):
 
     # process the returned results from the pool 
     if dense:
-        y_half = k*[None]
-        f_yj = k*[None]
+        y_half = (k+1)*[None]
+        f_yj = (k+1)*[None]
+        hs = (k+1)*[None]
         for res in results:
             for (k_, nj_, Tk_, y_half_, f_yj_) in res:
                 T[k_, 1] = Tk_
@@ -278,10 +279,51 @@ def compute_ex_table(f, tn, yn, h, k, pool, seq=(lambda t: 2*t), dense=False):
     else:
         return (T, fe_seq, fe_tot)
 
+
+def finite_diff(j, f_yj, hj):
+    max_order = 2*j
+    nj = len(f_yj) - 1
+    coeff = [1,1]
+    dj = (max_order+1)*[None]
+    dj[1] = 1 
+    dj[2] = (f_yj[nj/2+1] - f_yj[nj/2+1])/(2*hj)
+    for order in range(2,max_order):
+        coeff = [1] + [coeff[j] + coeff[j+1] for j in range(len(coeff)-1)] + [1]
+        index = [nj/2 + order - 2*i for i in range(order+1)]
+
+        sum_ = 0
+        for i in range(order+1):
+            sum_ += ((-1)**i)*coeff[i]*f_yj[index[i]]
+        dj[order+1] = sum_ / (2*hj)**order 
+
+    return dj
+
+def compute_ds(y_half, f_yj, hs, k):
+    dj_kappa = np.zeros((2*k+1, k+1, len(y_half[0])), dtype=(type(y_half[0][0])))
+    ds = np.zeros((2*k+1, len(y_half[0])), dtype=(type(y_half[0][0])))
+    
+    for j in range(1,k+1):
+        dj_kappa[0,j] = y_half[j]
+        nj = len(f_yj[j])-1
+        dj_ = finite_diff(j,f_yj[j], hs[j])
+        for kappa in range(1,2*j+1):    
+            dj_kappa[kappa,j] = dj_[kappa]
+
+    skip = 0
+    T = np.zeros((k+1, k+1, len(y_half[0])), dtype=(type(y_half[0][0])))
+    for kappa in range(2*k+1):
+        T[:,0] = dj_kappa[kappa]
+        for i in range(2, k+1):
+            for j in range(i+int(skip/2), k+1):
+                T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j)/(seq(j-i+1)))**2 - 1)
+        skip +=1
+        ds[kappa] = T[k,k] 
+
+    return ds 
+
 def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k):
     u = 2*k-5
-    ds = (u+1)*[None]
-# TODO: compute ds from y_half and f_yj and hs
+    ds = compute_ds(y_half, f_yj, hs, k)
     a = (u+5)*[None]
     for i in range(u+1):
         a[i] = (H**i)*ds[i]/math.factorial(i)
