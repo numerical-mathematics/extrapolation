@@ -13,7 +13,7 @@ def error_norm(y1, y2, Atol, Rtol):
     tol = Atol + np.maximum(y1,y2)*Rtol
     return np.linalg.norm((y1-y2)/tol)/(len(y1)**0.5)
 
-def adapt_step(method, f, tn_1, yn_1, y, y_hat, h, p, Atol, Rtol, pool, seq=(lambda t: t), dense=False):
+def adapt_step(method, f, tn_1, yn_1, y, y_hat, h, p, Atol, Rtol, pool, seq=(lambda t: 2*t), dense=False):
     '''
         Checks if the step size is accepted. If not, computes a new step size
         and checks again. Repeats until step size is accepted 
@@ -32,7 +32,7 @@ def adapt_step(method, f, tn_1, yn_1, y, y_hat, h, p, Atol, Rtol, pool, seq=(lam
             - Atol, Rtol -- the absolute and relative tolerance of the local 
                          error.
             - seq       -- the step-number sequence. optional; defaults to the 
-                        harmonic sequence given by (lambda t: t)
+                        harmonic sequence given by (lambda t: 2*t)
 
         **Outputs**:
             - y, y_hat  -- the computed solution of orders p and (p-1) at the
@@ -63,7 +63,7 @@ def adapt_step(method, f, tn_1, yn_1, y, y_hat, h, p, Atol, Rtol, pool, seq=(lam
     return (y, y_hat, h, h_new, (fe_seq, fe_tot))
 
 def extrapolation_parallel(method, f, t0, tf, y0, adaptive="order", p=4,
-        seq=(lambda t: t), dense=False, step_size=0.5, Atol=0, Rtol=0,
+        seq=(lambda t: 2*t), dense=False, step_size=0.5, Atol=0, Rtol=0,
         exact=(lambda t: t)):
     '''
         Solves the system of IVPs y'(t) = f(y, t) with extrapolation of order 
@@ -83,7 +83,7 @@ def extrapolation_parallel(method, f, t0, tf, y0, adaptive="order", p=4,
             - p         -- the order of extrapolation if adaptive is not "order",
                         and the starting order otherwise. optional; defaults to 4
             - seq       -- the step-number sequence. optional; defaults to the 
-                        harmonic sequence given by (lambda t: t)
+                        harmonic sequence given by (lambda t: 2*t)
             - dense     -- when set, the dense output routine runs. 
                         optional; defaults to False
             - step_size -- the fixed step size when adaptive="fixed", and the
@@ -226,18 +226,18 @@ def compute_stages_dense((f, tn, yn, h, k_nj_lst)):
     res = []
     for (k, nj) in k_nj_lst:
         nj = int(nj)
-        Y = np.zeros((2*nj+1, len(yn)), dtype=(type(yn[0])))
+        Y = np.zeros((nj+1, len(yn)), dtype=(type(yn[0])))
         Y[0] = yn
         f_y0 = f(Y[0], tn)
-        Y[1] = Y[0] + h/(2*nj)*f_y0
-        for j in range(2,2*nj+1):
-            if j == nj + 1:
+        Y[1] = Y[0] + h/nj*f_y0
+        for j in range(2,nj+1):
+            if j == nj/2 + 1:
                 y_half = Y[j-1]
-                f_y_half = f(Y[j-1], tn + (j-1)*(h/(2*nj)))
-                Y[j] = Y[j-2] + (h/nj)*f_y_half
+                f_y_half = f(Y[j-1], tn + (j-1)*(h/nj))
+                Y[j] = Y[j-2] + (2*h/nj)*f_y_half
             else:
-                Y[j] = Y[j-2] + (h/nj)*f(Y[j-1], tn + (j-1)*(h/(2*nj)))
-        res += [(k, nj, Y[2*nj], y_half, f_y_half, f_y0)]
+                Y[j] = Y[j-2] + (2*h/nj)*f(Y[j-1], tn + (j-1)*(h/nj))
+        res += [(k, nj, Y[nj], y_half, f_y_half, f_y0)]
 
     return res
 
@@ -246,16 +246,16 @@ def compute_stages((f, tn, yn, h, k_nj_lst)):
     res = []
     for (k, nj) in k_nj_lst:
         nj = int(nj)
-        Y = np.zeros((2*nj+1, len(yn)), dtype=(type(yn[0])))
+        Y = np.zeros((nj+1, len(yn)), dtype=(type(yn[0])))
         Y[0] = yn
-        Y[1] = Y[0] + h/(2*nj)*f(Y[0], tn)
-        for j in range(2,2*nj+1):
-            Y[j] = Y[j-2] + (h/nj)*f(Y[j-1], tn + (j-1)*(h/(2*nj)))
-        res += [(k, nj, Y[2*nj])]
+        Y[1] = Y[0] + h/nj*f(Y[0], tn)
+        for j in range(2,nj+1):
+            Y[j] = Y[j-2] + (2*h/nj)*f(Y[j-1], tn + (j-1)*(h/nj))
+        res += [(k, nj, Y[nj])]
 
     return res
 
-def balance_load(k, seq=(lambda t: t)):
+def balance_load(k, seq=(lambda t: 2*t)):
     if k <= NUM_WORKERS:
         k_nj_lst = [[(i,seq(i))] for i in range(k, 0, -1)]
     else:
@@ -278,13 +278,13 @@ def balance_load(k, seq=(lambda t: t)):
 
     fe_tot = 0 
     for i in range(len(k_nj_lst)):
-        fe_tot += 2*sum([pair[1] for pair in k_nj_lst[i]])
+        fe_tot += sum([pair[1] for pair in k_nj_lst[i]])
     
-    fe_seq = 2*sum([pair[1] for pair in k_nj_lst[0]])
+    fe_seq = sum([pair[1] for pair in k_nj_lst[0]])
 
     return (k_nj_lst, fe_seq, fe_tot)
 
-def compute_ex_table(f, tn, yn, h, k, pool, seq=(lambda t: t), dense=False):
+def compute_ex_table(f, tn, yn, h, k, pool, seq=(lambda t: 2*t), dense=False):
     T = np.zeros((k+1,k+1, len(yn)), dtype=(type(yn[0])))
     k_nj_lst, fe_seq, fe_tot = balance_load(k, seq=seq)
     jobs = [(f, tn, yn, h, k_nj) for k_nj in k_nj_lst]
@@ -303,7 +303,7 @@ def compute_ex_table(f, tn, yn, h, k, pool, seq=(lambda t: t), dense=False):
                 T[k_, 1] = Tk_
                 y_half[k_] = y_half_
                 f_y_half[k_] = f_y_half_
-                hs[k_] = h/(2*nj_)
+                hs[k_] = h/nj_
     else:
         for res in results:
             for (k_, nj_, Tk_) in res:
@@ -323,7 +323,7 @@ def compute_ex_table(f, tn, yn, h, k, pool, seq=(lambda t: t), dense=False):
     else:
         return (T, fe_seq, fe_tot)
 
-def midpoint_fixed_step(f, tn, yn, h, p, pool, seq=(lambda t: t), dense=False):
+def midpoint_fixed_step(f, tn, yn, h, p, pool, seq=(lambda t: 2*t), dense=False):
     r = int(round(p/2))
     if dense:
         T, fe_seq, fe_tot, y0, Tkk, f_y0, f_Tkk, y_half, f_y_half, hs = compute_ex_table(f, tn, yn, h, r, pool, seq=seq, dense=dense)
@@ -333,7 +333,7 @@ def midpoint_fixed_step(f, tn, yn, h, p, pool, seq=(lambda t: t), dense=False):
         T, fe_seq, fe_tot = compute_ex_table(f, tn, yn, h, r, pool, seq=seq, dense=dense)
         return (T[r,r], T[r-1,r-1], (fe_seq, fe_tot))
 
-def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol, pool, seq=(lambda t: t), dense=False):
+def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol, pool, seq=(lambda t: 2*t), dense=False):
     k_max = 10
     k_min = 3
     k = min(k_max, max(k_min, k))
@@ -341,7 +341,7 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol, pool, seq=(lambda t: t), d
         sum_ = 0
         for i in range(k):
             sum_ += seq(i+1)
-        return 2*max(seq(k), sum_/NUM_WORKERS)
+        return max(seq(k), sum_/NUM_WORKERS)
 
     H_k = lambda h, k, err_k: h*0.94*(0.65/err_k)**(1/(2*k-1)) 
     W_k = lambda Ak, Hk: Ak/Hk
@@ -416,9 +416,9 @@ def ex_midpoint_parallel(f, t0, tf, y0, adaptive="order", p=4, dense=False,
         For more details, refer to extrapolation_serial() function.
     '''
     if dense:
-        seq = lambda t: 2*t - 1 
+        seq = lambda t: 4*t - 2     # {2,6,10,14,...} sequence for dense output
     else:
-        seq = lambda t: t
+        seq = lambda t: 2*t         # harmonic sequence for midpoint method
 
     method = midpoint_adapt_order if adaptive == "order" else midpoint_fixed_step
 
