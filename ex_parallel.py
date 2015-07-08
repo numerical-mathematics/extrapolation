@@ -222,72 +222,72 @@ def interpolate(y0, Tkk, f_y0, f_Tkk, y_half, f_y_half, hs, H, k):
 
     return poly
 
-def compute_stages_dense((f, tn, yn, h, k_lst)):
+def compute_stages_dense((f, tn, yn, h, k_nj_lst)):
     res = []
-    for (index, k) in k_lst:
-        k = int(k)
-        Y = np.zeros((2*k+1, len(yn)), dtype=(type(yn[0])))
+    for (k, nj) in k_nj_lst:
+        nj = int(nj)
+        Y = np.zeros((2*nj+1, len(yn)), dtype=(type(yn[0])))
         Y[0] = yn
         f_y0 = f(Y[0], tn)
-        Y[1] = Y[0] + h/(2*k)*f_y0
-        for j in range(2,2*k+1):
-            if j == k + 1:
+        Y[1] = Y[0] + h/(2*nj)*f_y0
+        for j in range(2,2*nj+1):
+            if j == nj + 1:
                 y_half = Y[j-1]
-                f_y_half = f(Y[j-1], tn + (j-1)*(h/(2*k)))
-                Y[j] = Y[j-2] + (h/k)*f_y_half
+                f_y_half = f(Y[j-1], tn + (j-1)*(h/(2*nj)))
+                Y[j] = Y[j-2] + (h/nj)*f_y_half
             else:
-                Y[j] = Y[j-2] + (h/k)*f(Y[j-1], tn + (j-1)*(h/(2*k)))
-        res += [(index, k, Y[2*k], y_half, f_y_half, f_y0)]
+                Y[j] = Y[j-2] + (h/nj)*f(Y[j-1], tn + (j-1)*(h/(2*nj)))
+        res += [(k, nj, Y[2*nj], y_half, f_y_half, f_y0)]
 
     return res
 
 
-def compute_stages((f, tn, yn, h, k_lst)):
+def compute_stages((f, tn, yn, h, k_nj_lst)):
     res = []
-    for (index, k) in k_lst:
-        k = int(k)
-        Y = np.zeros((2*k+1, len(yn)), dtype=(type(yn[0])))
+    for (k, nj) in k_nj_lst:
+        nj = int(nj)
+        Y = np.zeros((2*nj+1, len(yn)), dtype=(type(yn[0])))
         Y[0] = yn
-        Y[1] = Y[0] + h/(2*k)*f(Y[0], tn)
-        for j in range(2,2*k+1):
-            Y[j] = Y[j-2] + (h/k)*f(Y[j-1], tn + (j-1)*(h/(2*k)))
-        res += [(index, k, Y[2*k])]
+        Y[1] = Y[0] + h/(2*nj)*f(Y[0], tn)
+        for j in range(2,2*nj+1):
+            Y[j] = Y[j-2] + (h/nj)*f(Y[j-1], tn + (j-1)*(h/(2*nj)))
+        res += [(k, nj, Y[2*nj])]
 
     return res
 
 def balance_load(k, seq=(lambda t: t)):
     if k <= NUM_WORKERS:
-        k_lst = [[(i,seq(i))] for i in range(k, 0, -1)]
+        k_nj_lst = [[(i,seq(i))] for i in range(k, 0, -1)]
     else:
-        k_lst = [[] for i in range(NUM_WORKERS)]
+        k_nj_lst = [[] for i in range(NUM_WORKERS)]
         index = range(NUM_WORKERS)
         i = k
         while 1:
             if i >= NUM_WORKERS:
                 for j in index:
-                    k_lst[j] += [(i, seq(i))]
+                    k_nj_lst[j] += [(i, seq(i))]
                     i -= 1
             else:
                 for j in index:
                     if i == 0:
                         break
-                    k_lst[j] += [(i, seq(i))]
+                    k_nj_lst[j] += [(i, seq(i))]
                     i -= 1
                 break
             index = index[::-1]
 
     fe_tot = 0 
-    for i in range(len(k_lst)):
-        fe_tot += 2*sum([pair[1] for pair in k_lst[i]])
+    for i in range(len(k_nj_lst)):
+        fe_tot += 2*sum([pair[1] for pair in k_nj_lst[i]])
     
-    fe_seq = 2*sum([pair[1] for pair in k_lst[0]])
+    fe_seq = 2*sum([pair[1] for pair in k_nj_lst[0]])
 
-    return (k_lst, fe_seq, fe_tot)
+    return (k_nj_lst, fe_seq, fe_tot)
 
 def compute_ex_table(f, tn, yn, h, k, pool, seq=(lambda t: t), dense=False):
     T = np.zeros((k+1,k+1, len(yn)), dtype=(type(yn[0])))
-    k_lst, fe_seq, fe_tot = balance_load(k, seq=seq)
-    jobs = [(f, tn, yn, h, k_) for k_ in k_lst]
+    k_nj_lst, fe_seq, fe_tot = balance_load(k, seq=seq)
+    jobs = [(f, tn, yn, h, k_nj) for k_nj in k_nj_lst]
 
     if dense:
         results = pool.map(compute_stages_dense, jobs, chunksize=1)
@@ -299,15 +299,15 @@ def compute_ex_table(f, tn, yn, h, k, pool, seq=(lambda t: t), dense=False):
         y_half = k*[None]
         f_y_half = k*[None]
         for res in results:
-            for (index, k_, Tk_, y_half_, f_y_half_, hs_, f_y0) in res:
-                T[index, 1] = Tk_
-                y_half[index] = y_half_
-                f_y_half[index] = f_y_half_
-                hs[index] = h/k_
+            for (k_, nj_, Tk_, y_half_, f_y_half_, hs_, f_y0) in res:
+                T[k_, 1] = Tk_
+                y_half[k_] = y_half_
+                f_y_half[k_] = f_y_half_
+                hs[k_] = h/(2*nj_)
     else:
         for res in results:
-            for (index, k_, Tk_) in res:
-                T[index, 1] = Tk_
+            for (k_, nj_, Tk_) in res:
+                T[k_, 1] = Tk_
 
     # compute extrapolation table 
     for i in range(2, k+1):
@@ -416,7 +416,7 @@ def ex_midpoint_parallel(f, t0, tf, y0, adaptive="order", p=4, dense=False,
         For more details, refer to extrapolation_serial() function.
     '''
     if dense:
-        seq = lambda t: 4*t - 2 
+        seq = lambda t: 2*t - 1 
     else:
         seq = lambda t: t
 
