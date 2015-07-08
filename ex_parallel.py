@@ -177,70 +177,25 @@ def extrapolation_parallel(method, f, t0, tf, y0, adaptive="order", p=4,
     pool.close()
     return (y, (fe_seq, fe_tot))
 
-def interpolate(y0, Tkk, f_y0, f_Tkk, y_half, f_y_half, hs, H, k):
-    u = 2*k-5
-    ds = (u+1)*[None]
-# TODO: compute ds from y_half and f_y_half and hs
-    a = (u+5)*[None]
-    for i in range(u+1):
-        a[i] = (H**i)*ds[i]/math.factorial(i)
-
-    A_inv = (2**(u-2))*np.matrix(
-                [[(-2*(3 + u))*(-1)**u,     -(-1)**(u),     2*(3 + u),      -1], 
-                 [(4*(4 + u))*(-1)**u,      2*(-1)**u,      4*(4 + u),      -2], 
-                 [(8*(1 + u))*(-1)**u,      4*(-1)**u,      -8*(1 + u),     4], 
-                 [(-16*(2 + u))*(-1)**u,    -8*(-1)**u,     -16*(2 + u),    8]]
-                ) 
-
-    b1 = y0
-    for i in range(u+1):
-        b1 -= a[i]/(-2**i)
-
-    b2 = H*f_y0
-    for i in range(1, u+1):
-        b2 -= i*a[i]/(-2**(i-1))
-
-    b3 = Tkk
-    for i in range(u+1):
-        b3 -= a[i]/(2**i)
-
-    b4 = H*f_Tkk
-    for i in range(1, u+1):
-        b4 -= i*a[i]/(2**(i-1))
-
-    b = np.array([b1,b2,b3,b4])
-
-    x = A_inv*b
-
-    a[u+1] = x[0]
-    a[u+2] = x[1]
-    a[u+3] = x[2]
-    a[u+4] = x[3]
-
-    # polynomial of degree u+4 centered about 1/2 
-    poly = np.poly1d(a[::-1])
-
-    return poly
-
 def compute_stages_dense((f, tn, yn, h, k_nj_lst)):
     res = []
     for (k, nj) in k_nj_lst:
         nj = int(nj)
         Y = np.zeros((nj+1, len(yn)), dtype=(type(yn[0])))
+        f_yj = np.zeros((nj+1, len(yn)), dtype=(type(yn[0])))
         Y[0] = yn
-        f_y0 = f(Y[0], tn)
-        Y[1] = Y[0] + h/nj*f_y0
+        f_yj[0] = f(Y[0], tn)
+        Y[1] = Y[0] + h/nj*f_yj[0]
         for j in range(2,nj+1):
             if j == nj/2 + 1:
                 y_half = Y[j-1]
-                f_y_half = f(Y[j-1], tn + (j-1)*(h/nj))
-                Y[j] = Y[j-2] + (2*h/nj)*f_y_half
-            else:
-                Y[j] = Y[j-2] + (2*h/nj)*f(Y[j-1], tn + (j-1)*(h/nj))
-        res += [(k, nj, Y[nj], y_half, f_y_half, f_y0)]
+            f_yj[j-1] = f(Y[j-1], tn + (j-1)*(h/nj))
+            Y[j] = Y[j-2] + (2*h/nj)*f_yj[j-1]
+
+        f_yj[nj] = f(Y[nj], tn + h)
+        res += [(k, nj, Y[nj], y_half, f_yj)]
 
     return res
-
 
 def compute_stages((f, tn, yn, h, k_nj_lst)):
     res = []
@@ -297,12 +252,12 @@ def compute_ex_table(f, tn, yn, h, k, pool, seq=(lambda t: 2*t), dense=False):
     # process the returned results from the pool 
     if dense:
         y_half = k*[None]
-        f_y_half = k*[None]
+        f_yj = k*[None]
         for res in results:
-            for (k_, nj_, Tk_, y_half_, f_y_half_, hs_, f_y0) in res:
+            for (k_, nj_, Tk_, y_half_, f_yj_) in res:
                 T[k_, 1] = Tk_
                 y_half[k_] = y_half_
-                f_y_half[k_] = f_y_half_
+                f_yj[k_] = f_yj_
                 hs[k_] = h/nj_
     else:
         for res in results:
@@ -319,15 +274,60 @@ def compute_ex_table(f, tn, yn, h, k, pool, seq=(lambda t: 2*t), dense=False):
         f_Tkk = f(Tkk, tn+h)
         fe_seq +=1
         fe_tot +=1
-        return (T, fe_seq, fe_tot, yn, Tkk, f_y0, f_Tkk, y_half, f_y_half, hs)
+        return (T, fe_seq, fe_tot, yn, Tkk, f_Tkk, y_half, f_yj, hs)
     else:
         return (T, fe_seq, fe_tot)
+
+def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k):
+    u = 2*k-5
+    ds = (u+1)*[None]
+# TODO: compute ds from y_half and f_yj and hs
+    a = (u+5)*[None]
+    for i in range(u+1):
+        a[i] = (H**i)*ds[i]/math.factorial(i)
+
+    A_inv = (2**(u-2))*np.matrix(
+                [[(-2*(3 + u))*(-1)**u,     -(-1)**(u),     2*(3 + u),      -1], 
+                 [(4*(4 + u))*(-1)**u,      2*(-1)**u,      4*(4 + u),      -2], 
+                 [(8*(1 + u))*(-1)**u,      4*(-1)**u,      -8*(1 + u),     4], 
+                 [(-16*(2 + u))*(-1)**u,    -8*(-1)**u,     -16*(2 + u),    8]]
+                ) 
+
+    b1 = y0
+    for i in range(u+1):
+        b1 -= a[i]/(-2**i)
+
+    b2 = H*f_y0
+    for i in range(1, u+1):
+        b2 -= i*a[i]/(-2**(i-1))
+
+    b3 = Tkk
+    for i in range(u+1):
+        b3 -= a[i]/(2**i)
+
+    b4 = H*f_Tkk
+    for i in range(1, u+1):
+        b4 -= i*a[i]/(2**(i-1))
+
+    b = np.array([b1,b2,b3,b4])
+
+    x = A_inv*b
+
+    a[u+1] = x[0]
+    a[u+2] = x[1]
+    a[u+3] = x[2]
+    a[u+4] = x[3]
+
+    # polynomial of degree u+4 centered about 1/2 
+    poly = np.poly1d(a[::-1])
+
+    return poly
 
 def midpoint_fixed_step(f, tn, yn, h, p, pool, seq=(lambda t: 2*t), dense=False):
     r = int(round(p/2))
     if dense:
-        T, fe_seq, fe_tot, y0, Tkk, f_y0, f_Tkk, y_half, f_y_half, hs = compute_ex_table(f, tn, yn, h, r, pool, seq=seq, dense=dense)
-        poly = interpolate(y0, Tkk, f_y0, f_Tkk, y_half, f_y_half, hs, h, r)
+        T, fe_seq, fe_tot, y0, Tkk, f_Tkk, y_half, f_yj, hs = compute_ex_table(f, tn, yn, h, r, pool, seq=seq, dense=dense)
+        poly = interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, r)
         return (T[r,r], T[r-1,r-1], (fe_seq, fe_tot), poly)
     else:
         T, fe_seq, fe_tot = compute_ex_table(f, tn, yn, h, r, pool, seq=seq, dense=dense)
@@ -347,7 +347,7 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol, pool, seq=(lambda t: 2*t),
     W_k = lambda Ak, Hk: Ak/Hk
 
     if dense:
-        T, fe_seq, fe_tot, y0, Tkk, f_y0, f_Tkk, y_half, f_y_half, hs = compute_ex_table(f, tn, yn, h, k, pool, seq=seq, dense=dense)
+        T, fe_seq, fe_tot, y0, Tkk, f_Tkk, y_half, f_yj, hs = compute_ex_table(f, tn, yn, h, k, pool, seq=seq, dense=dense)
     else:
         T, fe_seq, fe_tot = compute_ex_table(f, tn, yn, h, k, pool, seq=seq, dense=dense)
 
@@ -374,7 +374,7 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol, pool, seq=(lambda t: 2*t),
         h_new = h_k_1 if k_new <= k-1 else h_k_1*A_k(k)/A_k(k-1)
 
         if dense:
-            poly = interpolate(y0, Tkk, f_y0, f_Tkk, y_half, f_y_half, hs, h, k)
+            poly = interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k)
 
     elif err_k <= 1:
         # convergence in line k
@@ -386,7 +386,7 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol, pool, seq=(lambda t: 2*t),
                 h_k if k_new == k else h_k*A_k(k+1)/A_k(k))
 
         if dense:
-            poly = interpolate(y0, Tkk, f_y0, f_Tkk, y_half, f_y_half, hs, h, k)
+            poly = interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k)
 
     else: 
         # no convergence
