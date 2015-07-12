@@ -54,13 +54,19 @@ def adapt_step(method, f, tn_1, yn_1, y, y_hat, h, p, Atol, Rtol, pool, seq=(lam
 
     while err > 1:
         h = h_new
-        y, y_hat, (fe_seq_, fe_tot_) = method(f, tn_1, yn_1, h, p, pool, seq=seq)
+        if dense:
+            y, y_hat, (fe_seq_, fe_tot_), poly = method(f, tn_1, yn_1, h, p, pool, seq=seq, dense=dense)
+        else:
+            y, y_hat, (fe_seq_, fe_tot_) = method(f, tn_1, yn_1, h, p, pool, seq=seq, dense=dense)
         fe_seq += fe_seq_
         fe_tot += fe_tot_
         err = error_norm(y, y_hat, Atol, Rtol)
         h_new = h*min(facmax, max(facmin, fac*((1/err)**(1/p))))
 
-    return (y, y_hat, h, h_new, (fe_seq, fe_tot))
+    if dense:
+        return (y, y_hat, h, h_new, (fe_seq, fe_tot), poly)
+    else:
+        return (y, y_hat, h, h_new, (fe_seq, fe_tot))
 
 def extrapolation_parallel(method, f, t0, tf, y0, adaptive="order", p=4,
         seq=(lambda t: 2*t), dense=False, step_size=0.5, Atol=0, Rtol=0,
@@ -73,7 +79,12 @@ def extrapolation_parallel(method, f, t0, tf, y0, adaptive="order", p=4,
             - method    -- the method on which the extrapolation is based
             - f         -- the right hand side function of the IVP
                         Must output a non-scalar numpy.ndarray
-            - [t0, tf]  -- the interval of integration
+            - t0        -- the time of the initial value
+            - tf        -- if dense==True, tf is a list of times for which the 
+                        solution is computed at. In this case, the values in tf
+                        must be in an increasing order and all are strictly 
+                        greater than t0. if dense==False, then tf is a single 
+                        float number for which the solution is computed at.
             - y0        -- the value of y(t0). Must be a non-scalar numpy.ndarray
             - adaptive  -- can be either of three values:
                             "fixed" = use fixed step size and order.
@@ -95,7 +106,7 @@ def extrapolation_parallel(method, f, t0, tf, y0, adaptive="order", p=4,
                         Must output a non-scalar numpy.ndarray
 
         **Outputs**:
-            - y                     -- the computed solution for y(tf)
+            - y [or ys]        -- the computed solution for y(tf)
             - (fe_seq, fe_tot) -- the number of sequential f evaluations, and
                                     the total number of f evaluations
     '''
@@ -106,7 +117,7 @@ def extrapolation_parallel(method, f, t0, tf, y0, adaptive="order", p=4,
     fe_tot = 0
     if adaptive == "fixed":
         ts, h = np.linspace(t0, tf, (tf-t0)/step_size + 1, retstep=True)
-        y = y0
+        y = 1*y0
 
         for i in range(len(ts) - 1):
             if dense:
@@ -117,12 +128,18 @@ def extrapolation_parallel(method, f, t0, tf, y0, adaptive="order", p=4,
             fe_tot += fe_tot_
     
     elif adaptive == "step":
-        assert p > 1, "order of method must be greater than 1 if adaptive=True"
-        y, t = y0, t0
-        h = min(step_size, tf-t0)
+        assert p > 1, "order of method must be greater than 1 if adaptive=step"
+        if dense:
+            t_max = tf[-1]
+            t_index = 0
+            ys = len(tf)*[None]
+        else:
+            t_max = tf
 
-        while t < tf:
-            
+        y, t = 1*y0, t0
+        h = min(step_size, t_max-t0)
+
+        while t < t_max:
             if dense:
                 y_, y_hat, (fe_seq_, fe_tot_), poly = method(f, t, y, h, p, pool, seq=seq, dense=dense)
             else:
@@ -134,6 +151,9 @@ def extrapolation_parallel(method, f, t0, tf, y0, adaptive="order", p=4,
             if dense:
                 y, _, h, h_new, (fe_seq_, fe_tot_), poly = adapt_step(method, f, t, 
                     y, y_, y_hat, h, p, Atol, Rtol, pool, seq=seq, dense=dense)
+                while t_index < len(tf) and tf[t_index] <= t + h:
+                    ys[t_index] = poly((tf[t_index] - t)/h)
+                    t_index += 1
             else:
                 y, _, h, h_new, (fe_seq_, fe_tot_) = adapt_step(method, f, t, 
                     y, y_, y_hat, h, p, Atol, Rtol, pool, seq=seq, dense=dense)
@@ -141,19 +161,29 @@ def extrapolation_parallel(method, f, t0, tf, y0, adaptive="order", p=4,
             t += h
             fe_seq += fe_seq_
             fe_tot += fe_tot_
-            h = min(h_new, tf - t)
+            h = min(h_new, t_max - t)
     
     elif adaptive == "order":
-        y, t, k = y0, t0, p
-        h = min(step_size, tf-t0)
+        if dense:
+            t_max = tf[-1]
+            t_index = 0
+            ys = len(tf)*[None]
+        else:
+            t_max = tf
+
+        y, t, k = 1*y0, t0, p
+        h = min(step_size, t_max-t0)
 
         sum_ks, sum_hs = 0, 0
         num_iter = 0
 
-        while t < tf:
+        while t < t_max:
             if dense:
                 y, h, k, h_new, k_new, (fe_seq_, fe_tot_), poly = method(f, t, y, h, 
                     k, Atol, Rtol, pool, seq=seq, dense=dense)
+                while t_index < len(tf) and tf[t_index] <= t + h:
+                    ys[t_index] = poly((tf[t_index] - t)/h)
+                    t_index += 1
             else:
                 y, h, k, h_new, k_new, (fe_seq_, fe_tot_) = method(f, t, y, h, 
                     k, Atol, Rtol, pool, seq=seq, dense=dense)
@@ -165,17 +195,24 @@ def extrapolation_parallel(method, f, t0, tf, y0, adaptive="order", p=4,
             sum_hs += h
             num_iter += 1
 
-            h = min(h_new, tf - t)
+            h = min(h_new, t_max - t)
             k = k_new
 
         pool.close()
-        return (y, (fe_seq, fe_tot), sum_hs/num_iter, sum_ks/num_iter)            
+        if dense:
+            return (ys, (fe_seq, fe_tot), sum_hs/num_iter, sum_ks/num_iter)
+        else:
+            return (y, (fe_seq, fe_tot), sum_hs/num_iter, sum_ks/num_iter)
     else:
         raise Exception("\'" + str(adaptive) + 
             "\' is not a valid value for the argument \'adaptive\'")
 
     pool.close()
-    return (y, (fe_seq, fe_tot))
+
+    if dense:
+        return (ys, (fe_seq, fe_tot))
+    else:
+        return (y, (fe_seq, fe_tot))
 
 def compute_stages_dense((f, tn, yn, h, k_nj_lst)):
     res = []
@@ -285,8 +322,8 @@ def finite_diff(j, f_yj, hj):
     nj = len(f_yj) - 1
     coeff = [1,1]
     dj = (max_order+1)*[None]
-    dj[1] = 1 
-    dj[2] = (f_yj[nj/2+1] - f_yj[nj/2+1])/(2*hj)
+    dj[1] = 1*f_yj[nj/2]
+    dj[2] = (f_yj[nj/2+1] - f_yj[nj/2-1])/(2*hj)
     for order in range(2,max_order):
         coeff = [1] + [coeff[j] + coeff[j+1] for j in range(len(coeff)-1)] + [1]
         index = [nj/2 + order - 2*i for i in range(order+1)]
@@ -298,52 +335,54 @@ def finite_diff(j, f_yj, hj):
 
     return dj
 
-def compute_ds(y_half, f_yj, hs, k):
-    dj_kappa = np.zeros((2*k+1, k+1, len(y_half[0])), dtype=(type(y_half[0][0])))
-    ds = np.zeros((2*k+1, len(y_half[0])), dtype=(type(y_half[0][0])))
+def compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
+    dj_kappa = np.zeros((2*k+1, k+1), dtype=(type(y_half[1])))
+    ds = np.zeros((2*k+1), dtype=(type(y_half[1])))
     
     for j in range(1,k+1):
-        dj_kappa[0,j] = y_half[j]
+        dj_kappa[0,j] = 1*y_half[j]
         nj = len(f_yj[j])-1
         dj_ = finite_diff(j,f_yj[j], hs[j])
         for kappa in range(1,2*j+1):    
-            dj_kappa[kappa,j] = dj_[kappa]
+            dj_kappa[kappa,j] = 1*dj_[kappa]
 
     skip = 0
-    T = np.zeros((k+1, k+1, len(y_half[0])), dtype=(type(y_half[0][0])))
     for kappa in range(2*k+1):
-        T[:,0] = dj_kappa[kappa]
-        for i in range(2, k+1):
-            for j in range(i+int(skip/2), k+1):
+        T = np.zeros((k+1-int(skip/2), k+1 - int(skip/2)), dtype=(type(y_half[1])))
+        T[:,1] = 1*dj_kappa[kappa, int(skip/2):]
+
+        for i in range(2, k+1-int(skip/2)):
+            for j in range(i, k+1-int(skip/2)):
                 T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j)/(seq(j-i+1)))**2 - 1)
-        skip +=1
-        ds[kappa] = T[k,k] 
+        ds[kappa] = 1*T[k-int(skip/2),k-int(skip/2)] 
+        if not(kappa == 0):
+            skip +=1
 
     return ds 
 
-def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k):
+def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k,seq=(lambda t: 4*t-2)):
     u = 2*k-5
-    ds = compute_ds(y_half, f_yj, hs, k)
+    ds = compute_ds(y_half, f_yj, hs, k, seq=seq)
     a = (u+5)*[None]
     for i in range(u+1):
         a[i] = (H**i)*ds[i]/math.factorial(i)
 
     A_inv = (2**(u-2))*np.matrix(
-                [[(-2*(3 + u))*(-1)**u,     -(-1)**(u),     2*(3 + u),      -1], 
-                 [(4*(4 + u))*(-1)**u,      2*(-1)**u,      4*(4 + u),      -2], 
-                 [(8*(1 + u))*(-1)**u,      4*(-1)**u,      -8*(1 + u),     4], 
-                 [(-16*(2 + u))*(-1)**u,    -8*(-1)**u,     -16*(2 + u),    8]]
+                [[(-2*(3 + u))*(-1)**u,     -(-1)**u,        2*(3 + u),     -1], 
+                 [(4*(4 + u))*(-1)**u,       2*(-1)**u,      4*(4 + u),     -2], 
+                 [(8*(1 + u))*(-1)**u,       4*(-1)**u,     -8*(1 + u),      4], 
+                 [(-16*(2 + u))*(-1)**u,    -8*(-1)**u,     -16*(2 + u),     8]]
                 ) 
 
-    b1 = y0
+    b1 = 1*y0
     for i in range(u+1):
-        b1 -= a[i]/(-2**i)
+        b1 -= a[i]/(-2)**i
 
-    b2 = H*f_y0
+    b2 = H*f_yj[1][0]
     for i in range(1, u+1):
-        b2 -= i*a[i]/(-2**(i-1))
+        b2 -= i*a[i]/(-2)**(i-1)
 
-    b3 = Tkk
+    b3 = 1*Tkk
     for i in range(u+1):
         b3 -= a[i]/(2**i)
 
@@ -354,14 +393,18 @@ def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k):
     b = np.array([b1,b2,b3,b4])
 
     x = A_inv*b
-
+    x = np.array(x)
     a[u+1] = x[0]
     a[u+2] = x[1]
     a[u+3] = x[2]
     a[u+4] = x[3]
 
-    # polynomial of degree u+4 centered about 1/2 
-    poly = np.poly1d(a[::-1])
+    # polynomial of degree u+4 defined on [0,1] and centered about 1/2 
+    def poly (t):
+        res = 1*a[0] 
+        for i in range(1, len(a)):
+            res += a[i]*((t-0.5)**i)
+        return res
 
     return poly
 
@@ -369,7 +412,7 @@ def midpoint_fixed_step(f, tn, yn, h, p, pool, seq=(lambda t: 2*t), dense=False)
     r = int(round(p/2))
     if dense:
         T, fe_seq, fe_tot, y0, Tkk, f_Tkk, y_half, f_yj, hs = compute_ex_table(f, tn, yn, h, r, pool, seq=seq, dense=dense)
-        poly = interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, r)
+        poly = interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, r, seq=seq)
         return (T[r,r], T[r-1,r-1], (fe_seq, fe_tot), poly)
     else:
         T, fe_seq, fe_tot = compute_ex_table(f, tn, yn, h, r, pool, seq=seq, dense=dense)
@@ -416,7 +459,7 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol, pool, seq=(lambda t: 2*t),
         h_new = h_k_1 if k_new <= k-1 else h_k_1*A_k(k)/A_k(k-1)
 
         if dense:
-            poly = interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k)
+            poly = interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k, seq=seq)
 
     elif err_k <= 1:
         # convergence in line k
@@ -428,7 +471,7 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol, pool, seq=(lambda t: 2*t),
                 h_k if k_new == k else h_k*A_k(k+1)/A_k(k))
 
         if dense:
-            poly = interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k)
+            poly = interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k, seq=seq)
 
     else: 
         # no convergence

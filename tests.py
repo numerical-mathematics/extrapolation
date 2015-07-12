@@ -4,8 +4,8 @@ import math
 import time
 import cProfile
 
-import matplotlib
-matplotlib.use('agg')
+# import matplotlib
+# matplotlib.use('agg')
 import matplotlib.pyplot as plt
 
 import ex_serial as ex_s
@@ -231,7 +231,7 @@ def test5():
     y0 = fnbod.init_fnbod(n)
     tst_parallel_vs_serial(f_5, t0, tf, y0, title="tst_parallel_vs_serial w/ N = " + str(n))
 
-test5()
+# test5()
 
 def cprofile_tst():
     bodys = 200
@@ -258,6 +258,83 @@ def cprofile_tst():
 # print ex_p.ex_midpoint_parallel(f_4, t0, tf, exact_4(t0), Atol=Atol, adaptive="order")
 # print ex_p.ex_midpoint_parallel(f_5, t0, tf, exact_5(t0), Atol=Atol, adaptive="order")
 
+
+import multiprocessing as mp
+import random
+
+def f_6(y,t):
+    return -np.array([math.sin(t)])
+
+def exact_6(t):
+    return np.array([math.cos(t)])
+
+def test_interpolation():
+    f = f_6
+    exact = lambda t: np.array([math.cos(t)])
+    t0 = random.random()*math.pi
+    h = t0+2*math.pi
+    # t0 = 0
+    # h = t0+2*math.pi
+    pool = mp.Pool(mp.cpu_count())    
+    seq = lambda t: 4*t -2
+    dense = True
+    ts = np.linspace(t0,t0+h,500)
+    ts_poly = [(t - t0)/h for t in ts]
+    ys_exact = np.array([exact(t) for t in ts])
+    max_k = 10
+    min_k = 3
+    err = np.zeros(max_k + 1)
+    for k in range(min_k,max_k):
+        _, _, _, y0, Tkk, f_Tkk, y_half, f_yj, hs = ex_p.compute_ex_table(f, t0, exact(t0), h, k, pool, seq=seq, dense=dense)
+        poly = ex_p.interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k)
+        ys_poly = np.array([poly(t) for t in ts_poly])
+        
+        plt.hold(True)
+        line_exact, = plt.plot(ts, ys_exact)
+        line_poly, = plt.plot(ts, ys_poly)
+        plt.legend([line_exact, line_poly], ["exact", "poly w/ k=" + str(k)], loc=4)
+        plt.show()
+        
+        err[k] = rel_error_norm(ys_poly, ys_exact)
+        line_error, = plt.semilogy(ts, abs(ys_exact - ys_poly))
+        plt.legend([line_error], ["error w/ k=" + str(k)], loc=4)
+        plt.show()
+
+    plt.semilogy(range(min_k,max_k+1), err[min_k:], "s-")
+    plt.show()
+
+# test_interpolation()
+
+def test_dense():
+    f = f_1
+    exact = exact_1
+    Atol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
+    t0 = 0
+    # t0 = random.random()*math.pi
+    t_max = t0 + 2*math.pi
+    y0 = exact(t0)
+    tf = np.linspace(t0,t_max,100)
+    ys_exact = np.array([exact(t) for t in tf])
+    err = np.zeros(len(Atol))
+    
+    for i in range(len(Atol)):
+        print "Atol = ", Atol[i]
+        ys, _, _, _ = ex_p.ex_midpoint_parallel(f, t0, tf, y0, Atol=Atol[i], adaptive="order", dense=True)
+        plt.hold(True)
+        ys = np.array(ys)
+        line_exact, = plt.plot(tf, ys_exact, "s-")
+        line_sol, = plt.plot(tf, ys, "s-")
+        plt.legend([line_exact, line_sol], ["exact", "sol w/ Atol =" + str(Atol[i])], loc=4)
+        plt.show()
+        err[i] = rel_error_norm(ys, ys_exact)
+        line_error, = plt.semilogy(tf, abs(ys_exact - ys), "s-")
+        plt.legend([line_error], ["error"], loc=4)
+        plt.show()
+
+    plt.loglog(Atol, err, "s-")
+    plt.show()
+
+test_dense()
 
 if __name__ == "__main__":
     import doctest
