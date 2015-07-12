@@ -286,8 +286,8 @@ def test_interpolation():
     err = np.zeros(max_k + 1)
     for k in range(min_k,max_k):
         _, _, _, y0, Tkk, f_Tkk, y_half, f_yj, hs = ex_p.compute_ex_table(f, t0, exact(t0), h, k, pool, seq=seq, dense=dense)
-        poly = ex_p.interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k)
-        ys_poly = np.array([poly(t) for t in ts_poly])
+        poly = ex_p.interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k, 0, 0)
+        ys_poly = np.array([poly(t)[0] for t in ts_poly])
         
         plt.hold(True)
         line_exact, = plt.plot(ts, ys_exact)
@@ -306,11 +306,11 @@ def test_interpolation():
 # test_interpolation()
 
 def test_dense():
-    f = f_1
-    exact = exact_1
+    f = f_6
+    exact = exact_6
     Atol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
-    t0 = 0
-    # t0 = random.random()*math.pi
+    # t0 = 0
+    t0 = random.random()*math.pi
     t_max = t0 + 2*math.pi
     y0 = exact(t0)
     tf = np.linspace(t0,t_max,100)
