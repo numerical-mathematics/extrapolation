@@ -12,7 +12,7 @@ import subprocess
 import ex_parallel as ex_p
 import fnbod
 
-Atol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
+atol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
 t0 = 0
 tf = 0.08
 y0 = fnbod.init_fnbod(2400)
@@ -21,20 +21,23 @@ y_ref = np.loadtxt("reference.txt")
 extrap_order = 12
 num_threads = 4
 
-py_runtime = np.zeros(len(Atol))
-py_fe_seq = np.zeros(len(Atol))
-py_fe_tot = np.zeros(len(Atol))
-py_yerr = np.zeros(len(Atol))
+py_runtime = np.zeros(len(atol))
+py_fe_seq = np.zeros(len(atol))
+py_fe_tot = np.zeros(len(atol))
+py_yerr = np.zeros(len(atol))
+py_nstp = np.zeros(len(atol))
 
-dop_runtime = np.zeros(len(Atol))
-dop_fe_seq = np.zeros(len(Atol))
-dop_fe_tot = np.zeros(len(Atol))
-dop_yerr = np.zeros(len(Atol))
+dop_runtime = np.zeros(len(atol))
+dop_fe_seq = np.zeros(len(atol))
+dop_fe_tot = np.zeros(len(atol))
+dop_yerr = np.zeros(len(atol))
+dop_nstp = np.zeros(len(atol))
 
-odex_runtime = np.zeros(len(Atol))
-odex_fe_seq = np.zeros(len(Atol))
-odex_fe_tot = np.zeros(len(Atol))
-odex_yerr = np.zeros(len(Atol))
+odex_runtime = np.zeros(len(atol))
+odex_fe_seq = np.zeros(len(atol))
+odex_fe_tot = np.zeros(len(atol))
+odex_yerr = np.zeros(len(atol))
+odex_nstp = np.zeros(len(atol))
 
 def replace_in_file(infile, outfile, oldstring, newstring):
     f_in = open(infile,'r')
@@ -55,20 +58,21 @@ def relative_error(y, y_ref):
 def f(y,t):
     return fnbod.fnbod(y,t)
 
-for i in range(len(Atol)):
-    print 'Tolerance: ', Atol[i]
+for i in range(len(atol)):
+    print 'Tolerance: ', atol[i]
 
     # run Python extrapolation code 
     print 'running Python Extrap'
     start_time = time.time()
-    y, (py_fe_seq[i], py_fe_tot[i]), _, _ = ex_p.ex_midpoint_parallel(f, t0, tf, y0, Atol=(Atol[i]), adaptive="order")
+    y, infodict = ex_p.ex_midpoint_parallel(f, y0, [t0, tf], atol=(atol[i]), adaptive="order", full_output=True)
     py_runtime[i] = time.time() - start_time
-    py_yerr[i] = relative_error(y, y_ref)
-    print 'Runtime: ', py_runtime[i], ' s   Error: ', py_yerr[i], '   fe_seq: ', py_fe_seq[i], '   fe_tot: ', py_fe_tot[i]
+    py_fe_seq[i], py_fe_tot[i], py_nstp[i] = infodict['fe_seq'], infodict['fe_tot'], infodict['nstp']
+    py_yerr[i] = relative_error(y[-1], y_ref)
+    print 'Runtime: ', py_runtime[i], ' s   Error: ', py_yerr[i], '   fe_seq: ', py_fe_seq[i], '   fe_tot: ', py_fe_tot[i], '   nstp: ', py_nstp[i]
     print ''
     
     # run DOP853
-    replace_in_file('odex/dr_dop853.f','odex/driver.f','relative_tolerance',str(Atol[i]))
+    replace_in_file('odex/dr_dop853.f','odex/driver.f','relative_tolerance',str(atol[i]))
     subprocess.call('gfortran -O3 odex/driver.f',shell=True)
     print 'running DOP853'
     start_time = time.time()
@@ -76,13 +80,14 @@ for i in range(len(Atol)):
     out, err = proc.communicate()
     dop_runtime[i] = time.time() - start_time
     dop_yerr[i] = float(out.split()[2])
-    dop_fe_seq[i], _ = get_fe(out)
-    dop_fe_tot[i], _ = get_fe(out)
-    print 'Runtime: ', dop_runtime[i], ' s   Error: ', dop_yerr[i], '   fe_seq: ', dop_fe_seq[i], '   fe_tot: ', dop_fe_tot[i]
+    dop_fe_seq[i], step = get_fe(out)
+    dop_fe_tot[i] = dop_fe_seq[i]
+    dop_nstp[i] = step
+    print 'Runtime: ', dop_runtime[i], ' s   Error: ', dop_yerr[i], '   fe_seq: ', dop_fe_seq[i], '   fe_tot: ', dop_fe_tot[i], '   nstp: ', dop_nstp[i]
     print ''
 
     # run ODEX-P
-    replace_in_file('odex/dr_odex.f','odex/driver.f','relative_tolerance',str(Atol[i]))
+    replace_in_file('odex/dr_odex.f','odex/driver.f','relative_tolerance',str(atol[i]))
     replace_in_file('odex/odex_template.f','odex/odex_load_balanced.f','half_method_order',str(extrap_order/2))
     subprocess.call('gfortran -O3 -fopenmp odex/driver.f',shell=True)
     print 'running ODEX with p =', extrap_order
@@ -93,17 +98,18 @@ for i in range(len(Atol)):
     odex_yerr[i] = float(out.split()[2])
     odex_fe_tot[i], step = get_fe(out)    
     odex_fe_seq[i] = step*extrap_order
-    print 'Runtime: ', odex_runtime[i], ' s   Error: ', odex_yerr[i], '   fe_seq: ', odex_fe_seq[i], '   fe_tot: ', odex_fe_tot[i]
+    odex_nstp[i] = step
+    print 'Runtime: ', odex_runtime[i], ' s   Error: ', odex_yerr[i], '   fe_seq: ', odex_fe_seq[i], '   fe_tot: ', odex_fe_tot[i], '   nstp: ', odex_nstp[i]
     print ''
 
     print ''
 
 print "Final data: Python Extrap"
-print py_runtime, py_fe_seq, py_fe_tot, py_yerr
+print py_runtime, py_fe_seq, py_fe_tot, py_yerr, py_nstp
 print "Final data: DOP853"
-print dop_runtime, dop_fe_seq, dop_fe_tot, dop_yerr
+print dop_runtime, dop_fe_seq, dop_fe_tot, dop_yerr, dop_nstp
 print "Final data: ODEX-P"
-print odex_runtime, odex_fe_seq, odex_fe_tot, odex_yerr
+print odex_runtime, odex_fe_seq, odex_fe_tot, odex_yerr, odex_nstp
 
 # plot performance graphs
 import matplotlib
@@ -135,4 +141,13 @@ plt.legend([py_line, dop_line, odex_line], ["Python Extrap", "DOP853", "ODEX-P(1
 plt.xlabel('Error')
 plt.ylabel('Total derivative evaluations')  
 plt.savefig('images/err_vs_fe_tot.png')
+plt.close()
+
+py_line,   = plt.loglog(atol, py_nstp, "s-")
+dop_line, = plt.loglog(atol, dop_nstp, "s-")
+odex_line, = plt.loglog(atol, odex_nstp, "s-")
+plt.legend([py_line, dop_line, odex_line], ["Python Extrap", "DOP853", "ODEX-P(12)"], loc=1)
+plt.xlabel('tol')
+plt.ylabel('Total number of steps')  
+plt.savefig('images/tol_vs_nstp.png')
 plt.close()

@@ -2,11 +2,11 @@ from __future__ import division
 import numpy as np
 import math 
 
-def error_norm(y1, y2, Atol, Rtol):
-    tol = Atol + np.maximum(y1,y2)*Rtol
+def error_norm(y1, y2, atol, rtol):
+    tol = atol + np.maximum(y1,y2)*rtol
     return np.linalg.norm((y1-y2)/tol)/(len(y1)**0.5)
 
-def adapt_step(method, f, tn_1, yn_1, y, y_hat, h, p, Atol, Rtol):
+def adapt_step(method, f, tn_1, yn_1, y, y_hat, h, p, atol, rtol):
     '''
         Checks if the step size is accepted. If not, computes a new step size
         and checks again. Repeats until step size is accepted 
@@ -22,7 +22,7 @@ def adapt_step(method, f, tn_1, yn_1, y, y_hat, h, p, Atol, Rtol):
             - h         -- the step size taken and to be tested
             - p         -- the order of the higher extrapolation method
                         Assumed to be greater than 1.
-            - Atol, Rtol -- the absolute and relative tolerance of the local 
+            - atol, rtol -- the absolute and relative tolerance of the local 
                          error.
 
         **Outputs**:
@@ -37,20 +37,20 @@ def adapt_step(method, f, tn_1, yn_1, y, y_hat, h, p, Atol, Rtol):
     facmax = 5
     facmin = 0.2
     fac = 0.8
-    err = error_norm(y, y_hat, Atol, Rtol)
+    err = error_norm(y, y_hat, atol, rtol)
     h_new = h*min(facmax, max(facmin, fac*((1/err)**(1/p))))
 
     while err > 1:
         h = h_new
         y, y_hat, fe_ = method(f, tn_1, yn_1, h, p)
         fe += fe_
-        err = error_norm(y, y_hat, Atol, Rtol)
+        err = error_norm(y, y_hat, atol, rtol)
         h_new = h*min(facmax, max(facmin, fac*((1/err)**(1/p))))
 
     return (y, y_hat, h, h_new, fe)
 
 def extrapolation_serial(method, f, t0, tf, y0, adaptive="order", p=4, 
-        step_size=0.5, Atol=0, Rtol=0, exact=(lambda t: t)):
+        step_size=0.5, atol=0, rtol=0, exact=(lambda t: t)):
     '''
         Solves the system of IVPs y'(t) = f(y, t) with extrapolation of order 
         p based on method provided. The implementation is serial.
@@ -70,7 +70,7 @@ def extrapolation_serial(method, f, t0, tf, y0, adaptive="order", p=4,
                         and the starting order otherwise. optional; defaults to 4
             - step_size -- the fixed step size when adaptive="fixed", and the
                         starting step size otherwise. optional; defaults to 0.5
-            - Atol, Rtol -- the absolute and relative tolerance of the local 
+            - atol, rtol -- the absolute and relative tolerance of the local 
                          error. optional; both default to 0
             - exact     -- the exact solution to the IVP. Only used for 
                         debugging. optional; defaults to (lambda t: t).
@@ -99,7 +99,7 @@ def extrapolation_serial(method, f, t0, tf, y0, adaptive="order", p=4,
             y_, y_hat, fe_ = method(f, t, y, h, p)
             fe += fe_
             y, _, h, h_new, fe_ = adapt_step(method, f, t, y, y_, y_hat, h, p, 
-                Atol, Rtol)
+                atol, rtol)
             t, fe = t + h, fe + fe_
             h = min(h_new, tf - t)
     
@@ -111,7 +111,7 @@ def extrapolation_serial(method, f, t0, tf, y0, adaptive="order", p=4,
         num_iter = 0
 
         while t < tf:
-            y, h, k, h_new, k_new, _, _, fe_ = method(f, t, y, h, k, Atol, Rtol)
+            y, h, k, h_new, k_new, _, _, fe_ = method(f, t, y, h, k, atol, rtol)
             t, fe = t + h, fe + fe_
 
             sum_ks += k
@@ -165,7 +165,7 @@ def midpoint_fixed_step(f, tn, yn, h, p):
     return (T[r,r], T[r-1,r-1], fe)
 
 
-def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
+def midpoint_adapt_order(f, tn, yn, h, k, atol, rtol):
     k_max = 10
     k_min = 3
     k = min(k_max, max(k_min, k))
@@ -193,8 +193,8 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
         for j in range(i, k):
             T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((j/(j-i+1))**2 - 1)
 
-    err_k_2 = error_norm(T[k-2,k-3], T[k-2,k-2], Atol, Rtol)
-    err_k_1 = error_norm(T[k-1,k-2], T[k-1,k-1], Atol, Rtol)
+    err_k_2 = error_norm(T[k-2,k-3], T[k-2,k-2], atol, rtol)
+    err_k_1 = error_norm(T[k-1,k-2], T[k-1,k-1], atol, rtol)
     h_k_2 = H_k(h, k-2, err_k_2)
     h_k_1 = H_k(h, k-1, err_k_1)
     w_k_2 = W_k(A_k(k-2), h_k_2)
@@ -214,7 +214,7 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
         h_rej.append(h)
         k_rej.append(k)
         y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = midpoint_adapt_order(f, tn, 
-            yn, h_new, k_new, Atol, Rtol)
+            yn, h_new, k_new, atol, rtol)
         fe += fe_
         h_rej += h_rej_
         k_rej += k_rej_
@@ -231,7 +231,7 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
         for i in range(2, k+1):
             T[k,i] = T[k,i-1] + (T[k,i-1] - T[k-1,i-1])/((k/(k-i+1))**2 - 1)
 
-        err_k = error_norm(T[k,k-1], T[k,k], Atol, Rtol)
+        err_k = error_norm(T[k,k-1], T[k,k], atol, rtol)
         h_k = H_k(h, k, err_k)
         w_k = W_k(A_k(k), h_k)
         
@@ -250,7 +250,7 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
             h_rej.append(h)
             k_rej.append(k)
             y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = midpoint_adapt_order(f, 
-                tn, yn, h_new, k_new, Atol, Rtol)
+                tn, yn, h_new, k_new, atol, rtol)
             fe += fe_
             h_rej += h_rej_
             k_rej += k_rej_
@@ -268,7 +268,7 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
             for i in range(2, (k+1)+1):
                 T[(k+1),i] = T[(k+1),i-1] + (T[(k+1),i-1] - T[(k+1)-1,i-1])/(((k+1)/((k+1)-i+1))**2 - 1)
 
-            err_k1 = error_norm(T[(k+1),(k+1)-1], T[(k+1),(k+1)], Atol, Rtol)
+            err_k1 = error_norm(T[(k+1),(k+1)-1], T[(k+1),(k+1)], atol, rtol)
             h_k1 = H_k(h, (k+1), err_k1)
             w_k1 = W_k(A_k((k+1)), h_k1)
 
@@ -290,15 +290,15 @@ def midpoint_adapt_order(f, tn, yn, h, k, Atol, Rtol):
                 h_rej.append(h)
                 k_rej.append(k)
                 y, h, k, h_new, k_new, h_rej_, k_rej_, fe_ = midpoint_adapt_order(f, 
-                    tn, yn, h_new, k_new, Atol, Rtol)
+                    tn, yn, h_new, k_new, atol, rtol)
                 fe += fe_
                 h_rej += h_rej_
                 k_rej += k_rej_
 
     return (y, h, k, h_new, k_new, h_rej, k_rej, fe)
 
-def ex_euler_serial(f, t0, tf, y0, adaptive="order", p=4, step_size=0.5, Atol=0, 
-        Rtol=0, exact=(lambda t: t)):
+def ex_euler_serial(f, t0, tf, y0, adaptive="order", p=4, step_size=0.5, atol=0, 
+        rtol=0, exact=(lambda t: t)):
     '''
         An instantiation of extrapolation_serial() function with Euler's method.
         For more details, refer to extrapolation_serial() function.
@@ -312,11 +312,11 @@ def ex_euler_serial(f, t0, tf, y0, adaptive="order", p=4, step_size=0.5, Atol=0,
         adaptive = "step"
 
     return extrapolation_serial(method, f, t0, tf, y0, 
-        adaptive=adaptive, p=p, step_size=step_size, Atol=Atol, Rtol=Rtol, 
+        adaptive=adaptive, p=p, step_size=step_size, atol=atol, rtol=rtol, 
         exact=exact)
 
-def ex_midpoint_serial(f, t0, tf, y0, adaptive="order", p=4, step_size=0.5, Atol=0, 
-        Rtol=0, exact=(lambda t: t)):
+def ex_midpoint_serial(f, t0, tf, y0, adaptive="order", p=4, step_size=0.5, atol=0, 
+        rtol=0, exact=(lambda t: t)):
     '''
         An instantiation of extrapolation_serial() function with the midpoint method.
         For more details, refer to extrapolation_serial() function.
@@ -325,7 +325,7 @@ def ex_midpoint_serial(f, t0, tf, y0, adaptive="order", p=4, step_size=0.5, Atol
     method = midpoint_adapt_order if adaptive == "order" else midpoint_fixed_step
 
     return extrapolation_serial(method, f, t0, tf, y0,
-        adaptive=adaptive, p=p, step_size=step_size, Atol=Atol, Rtol=Rtol, 
+        adaptive=adaptive, p=p, step_size=step_size, atol=atol, rtol=rtol, 
         exact=exact)
     
 
