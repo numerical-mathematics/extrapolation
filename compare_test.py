@@ -13,8 +13,7 @@ from scipy.integrate import ode
 import ex_parallel as ex_p
 import fnbod
 
-# atol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
-atol = [1.e-13]
+atol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
 t0 = 0
 tf = 0.08
 y0 = fnbod.init_fnbod(2400)
