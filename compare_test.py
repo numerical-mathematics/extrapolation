@@ -127,7 +127,7 @@ for i in range(len(atol)):
     r = ode(f2).set_integrator('dopri5', atol=atol[i], rtol=0, verbosity=10, nsteps= 10e5)
     r.set_initial_value(y0, t0)
     r.integrate(r.t+(tf-t0))
-    assert r.t == tf, "Max number of step need to increase"
+    assert r.t == tf, "Integration did not converge. Try increasing the max number of steps"
     dopri5_runtime[i] = time.time() - start_time
     dopri5_yerr[i] = relative_error(r.y, y_ref)
     print 'Runtime: ', dopri5_runtime[i], ' s   Error: ', dopri5_yerr[i], '   fe_seq: ', dopri5_fe_seq[i], '   fe_tot: ', dopri5_fe_tot[i], '   nstp: ', dopri5_nstp[i]
@@ -139,7 +139,7 @@ for i in range(len(atol)):
     r = ode(f2, jac=None).set_integrator('dop853', atol=atol[i], rtol=0, verbosity=10, nsteps= 10e5)
     r.set_initial_value(y0, t0)
     r.integrate(r.t+(tf-t0))
-    assert r.t == tf, "Max number of step need to increase"
+    assert r.t == tf, "Integration did not converge. Try increasing the max number of steps"
     dop853_runtime[i] = time.time() - start_time
     dop853_yerr[i] = relative_error(r.y, y_ref)
     print 'Runtime: ', dop853_runtime[i], ' s   Error: ', dop853_yerr[i], '   fe_seq: ', dop853_fe_seq[i], '   fe_tot: ', dop853_fe_tot[i], '   nstp: ', dop853_nstp[i]
