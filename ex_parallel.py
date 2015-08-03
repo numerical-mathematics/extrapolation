@@ -13,7 +13,8 @@ def error_norm(y1, y2, atol, rtol):
     tol = atol + np.maximum(y1,y2)*rtol
     return np.linalg.norm((y1-y2)/tol)/(len(y1)**0.5)
 
-def adapt_step(method, func, tn_1, yn_1, args, y, y_hat, h, p, atol, rtol, pool, seq=(lambda t: 2*t), dense=False):
+def adapt_step(method, func, tn_1, yn_1, args, y, y_hat, h, p, atol, rtol, pool,
+        seq=(lambda t: 2*t), dense=False):
     '''
         Checks if the step size is accepted. If not, computes a new step size
         and checks again. Repeats until step size is accepted 
@@ -56,9 +57,11 @@ def adapt_step(method, func, tn_1, yn_1, args, y, y_hat, h, p, atol, rtol, pool,
     while err > 1:
         h = h_new
         if dense:
-            y, y_hat, (fe_seq_, fe_tot_), poly = method(func, tn_1, yn_1, args, h, p, pool, seq=seq, dense=dense)
+            y, y_hat, (fe_seq_, fe_tot_), poly = method(func, tn_1, yn_1, args,
+                h, p, pool, seq=seq, dense=dense)
         else:
-            y, y_hat, (fe_seq_, fe_tot_) = method(func, tn_1, yn_1, args, h, p, pool, seq=seq, dense=dense)
+            y, y_hat, (fe_seq_, fe_tot_) = method(func, tn_1, yn_1, args, h, p, 
+                pool, seq=seq, dense=dense)
         fe_seq += fe_seq_
         fe_tot += fe_tot_
         err = error_norm(y, y_hat, atol, rtol)
@@ -69,8 +72,9 @@ def adapt_step(method, func, tn_1, yn_1, args, y, y_hat, h, p, atol, rtol, pool,
     else:
         return (y, y_hat, h, h_new, (fe_seq, fe_tot))
 
-def extrapolation_parallel (method, func, y0, t, args=(), full_output=False, rtol=0, 
-        atol=1.0e-8, h0=0.5, adaptive="order", p=4, seq=(lambda t: 2*t)):
+def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
+        rtol=1.0e-8, atol=1.0e-8, h0=0.5, adaptive="order", p=4,
+        seq=(lambda t: 2*t)):
     '''
     Solves the system of IVPs dy/dt = func(y, t0, ...) with parallel extrapolation. 
     
@@ -103,7 +107,8 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False, rto
             'fe_tot'    cumulative number of total derivative evaluations
             'nstp'      cumulative number of successful time steps
             'h_avg'     average step size if adaptive == "order" (None otherwise)
-            'k_avg'     average extrapolation order if adaptive == "order" (None otherwise)
+            'k_avg'     average extrapolation order if adaptive == "order" 
+                        ... (None otherwise)
 
     **Other Parameters**
         - rtol, atol : float, optional
@@ -113,8 +118,7 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False, rto
             inequality of the form l2-norm of (e / (ewt * len(e))) <= 1, 
             where ewt is a vector of positive error weights computed as 
             ewt = atol + max(y1, y2) * rtol. rtol and atol can be either vectors
-            the same length as y0 or scalars. Defaults to rtol = 0 and 
-            atol = 1.0e-8.
+            the same length as y0 or scalars. Both default to 1.0e-8.
         - h0 : float, optional
             The step size to be attempted on the first step. Defaults to 0.5
 
@@ -152,9 +156,11 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False, rto
 
         for i in range(len(ts) - 1):
             if dense:
-                y, _, (fe_seq_, fe_tot_), poly = method(func, ts[i], y, args, h, p, pool, seq=seq, dense=dense)
+                y, _, (fe_seq_, fe_tot_), poly = method(func, ts[i], y, args, h,
+                    p, pool, seq=seq, dense=dense)
             else:
-                y, _, (fe_seq_, fe_tot_) = method(func, ts[i], y, args, h, p, pool, seq=seq, dense=dense)
+                y, _, (fe_seq_, fe_tot_) = method(func, ts[i], y, args, h, p,
+                    pool, seq=seq, dense=dense)
             fe_seq += fe_seq_
             fe_tot += fe_tot_
             nstp += 1
@@ -171,9 +177,11 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False, rto
 
         while t_curr < t_max:
             if dense:
-                y_, y_hat, (fe_seq_, fe_tot_), poly = method(func, t_curr, y, args, h, p, pool, seq=seq, dense=dense)
+                y_, y_hat, (fe_seq_, fe_tot_), poly = method(func, t_curr, y,
+                    args, h, p, pool, seq=seq, dense=dense)
             else:
-                y_, y_hat, (fe_seq_, fe_tot_) = method(func, t_curr, y, args, h, p, pool, seq=seq, dense=dense)
+                y_, y_hat, (fe_seq_, fe_tot_) = method(func, t_curr, y, args,
+                    h, p, pool, seq=seq, dense=dense)
             
             fe_seq += fe_seq_
             fe_tot += fe_tot_
@@ -181,8 +189,9 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False, rto
             if dense:
                 reject_inter = True
                 while reject_inter:
-                    y_temp, _, h, h_new, (fe_seq_, fe_tot_), poly = adapt_step(method, func, t_curr, 
-                        y, args, y_, y_hat, h, p, atol, rtol, pool, seq=seq, dense=dense)
+                    y_temp, _, h, h_new, (fe_seq_, fe_tot_), poly = adapt_step(
+                        method, func, t_curr, y, args, y_, y_hat, h, p, atol, 
+                        rtol, pool, seq=seq, dense=dense)
                     reject_inter = False
                     while t_index < len(t) and t[t_index] <= t_curr + h:
                         y_poly, errint, h_int = poly((t[t_index] - t_curr)/h)
@@ -201,8 +210,9 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False, rto
                     if not reject_inter:
                         y = 1*y_temp
             else:
-                y, _, h, h_new, (fe_seq_, fe_tot_) = adapt_step(method, func, t_curr, 
-                    y, args, y_, y_hat, h, p, atol, rtol, pool, seq=seq, dense=dense)
+                y, _, h, h_new, (fe_seq_, fe_tot_) = adapt_step(method, func,
+                    t_curr, y, args, y_, y_hat, h, p, atol, rtol, pool, seq=seq,
+                    dense=dense)
                 
             t_curr += h
             fe_seq += fe_seq_
@@ -228,8 +238,9 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False, rto
             if dense:
                 reject_inter = True
                 while reject_inter:
-                    y_temp, h, k, h_new, k_new, (fe_seq_, fe_tot_), poly = method(func, t_curr, y, args, h, 
-                        k, atol, rtol, pool, seq=seq, dense=dense)
+                    y_temp, h, k, h_new, k_new, (fe_seq_, fe_tot_), poly = method(
+                        func, t_curr, y, args, h, k, atol, rtol, pool, seq=seq,
+                        dense=dense)
 
                     reject_inter = False
                     old_index = t_index
@@ -252,8 +263,8 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False, rto
                         y = 1*y_temp
 
             else:
-                y, h, k, h_new, k_new, (fe_seq_, fe_tot_) = method(func, t_curr, y, args, h, 
-                    k, atol, rtol, pool, seq=seq, dense=dense)
+                y, h, k, h_new, k_new, (fe_seq_, fe_tot_) = method(func, t_curr,
+                    y, args, h, k, atol, rtol, pool, seq=seq, dense=dense)
             t_curr += h
             fe_seq += fe_seq_
             fe_tot += fe_tot_
@@ -351,7 +362,8 @@ def balance_load(k, seq=(lambda t: 2*t)):
 
     return (k_nj_lst, fe_seq, fe_tot)
 
-def compute_ex_table(func, tn, yn, args, h, k, pool, seq=(lambda t: 2*t), dense=False):
+def compute_ex_table(func, tn, yn, args, h, k, pool, seq=(lambda t: 2*t),
+        dense=False):
     T = np.zeros((k+1,k+1, len(yn)), dtype=(type(yn[0])))
     k_nj_lst, fe_seq, fe_tot = balance_load(k, seq=seq)
     jobs = [(func, tn, yn, args, h, k_nj) for k_nj in k_nj_lst]
@@ -435,7 +447,8 @@ def compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
 
     return ds 
 
-def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol, seq=(lambda t: 4*t-2)):
+def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
+        seq=(lambda t: 4*t-2)):
     u = 2*k-3
     u_1 = u - 1
     ds = compute_ds(y_half, f_yj, hs, k, seq=seq)
@@ -449,17 +462,17 @@ def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol, seq=(lambda 
         a_u_1[i] = (H**i)*ds[i]/math.factorial(i)
 
     A_inv_u = (2**(u-2))*np.matrix(
-                [[(-2*(3 + u))*(-1)**u,     -(-1)**u,        2*(3 + u),     -1], 
-                 [(4*(4 + u))*(-1)**u,       2*(-1)**u,      4*(4 + u),     -2], 
-                 [(8*(1 + u))*(-1)**u,       4*(-1)**u,     -8*(1 + u),      4], 
-                 [(-16*(2 + u))*(-1)**u,    -8*(-1)**u,     -16*(2 + u),     8]]
+                [[(-2*(3 + u))*(-1)**u,   -(-1)**u,     2*(3 + u),   -1],
+                 [(4*(4 + u))*(-1)**u,     2*(-1)**u,   4*(4 + u),   -2],
+                 [(8*(1 + u))*(-1)**u,     4*(-1)**u,  -8*(1 + u),    4],
+                 [(-16*(2 + u))*(-1)**u,  -8*(-1)**u,  -16*(2 + u),   8]]
                 ) 
 
     A_inv_u_1 = (2**(u_1-2))*np.matrix(
-                [[(-2*(3 + u_1))*(-1)**u_1,     -(-1)**u_1,        2*(3 + u_1),     -1], 
-                 [(4*(4 + u_1))*(-1)**u_1,       2*(-1)**u_1,      4*(4 + u_1),     -2], 
-                 [(8*(1 + u_1))*(-1)**u_1,       4*(-1)**u_1,     -8*(1 + u_1),      4], 
-                 [(-16*(2 + u_1))*(-1)**u_1,    -8*(-1)**u_1,     -16*(2 + u_1),     8]]
+                [[(-2*(3 + u_1))*(-1)**u_1,   -(-1)**u_1,     2*(3 + u_1),  -1], 
+                 [(4*(4 + u_1))*(-1)**u_1,     2*(-1)**u_1,   4*(4 + u_1),  -2], 
+                 [(8*(1 + u_1))*(-1)**u_1,     4*(-1)**u_1,  -8*(1 + u_1),   4], 
+                 [(-16*(2 + u_1))*(-1)**u_1,  -8*(-1)**u_1,  -16*(2 + u_1),  8]]
                 ) 
 
     b1_u = 1*y0
@@ -508,10 +521,10 @@ def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol, seq=(lambda 
     a_u[u+3] = x[2]
     a_u[u+4] = x[3]
 
-    a_u_1[u_1+1] = x[0]
-    a_u_1[u_1+2] = x[1]
-    a_u_1[u_1+3] = x[2]
-    a_u_1[u_1+4] = x[3]
+    a_u_1[u_1+1] = x_1[0]
+    a_u_1[u_1+2] = x_1[1]
+    a_u_1[u_1+3] = x_1[2]
+    a_u_1[u_1+4] = x_1[3]
 
     # polynomial of degree u+4 defined on [0,1] and centered about 1/2
     # also returns the interpolation error (errint). If errint > 10, then reject
@@ -532,17 +545,22 @@ def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol, seq=(lambda 
 
     return poly
 
-def midpoint_fixed_step(func, tn, yn, args, h, p, pool, seq=(lambda t: 2*t), dense=False):
+def midpoint_fixed_step(func, tn, yn, args, h, p, pool, seq=(lambda t: 2*t),
+        dense=False):
     r = int(round(p/2))
     if dense:
-        T, fe_seq, fe_tot, y0, Tkk, f_Tkk, y_half, f_yj, hs = compute_ex_table(func, tn, yn, args, h, r, pool, seq=seq, dense=dense)
-        poly = interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, r, atol, rtol, seq=seq)
+        T, fe_seq, fe_tot, y0, Tkk, f_Tkk, y_half, f_yj, hs = compute_ex_table(
+            func, tn, yn, args, h, r, pool, seq=seq, dense=dense)
+        poly = interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, r, atol, rtol,
+            seq=seq)
         return (T[r,r], T[r-1,r-1], (fe_seq, fe_tot), poly)
     else:
-        T, fe_seq, fe_tot = compute_ex_table(func, tn, yn, args, h, r, pool, seq=seq, dense=dense)
+        T, fe_seq, fe_tot = compute_ex_table(func, tn, yn, args, h, r, pool,
+            seq=seq, dense=dense)
         return (T[r,r], T[r-1,r-1], (fe_seq, fe_tot))
 
-def midpoint_adapt_order(func, tn, yn, args, h, k, atol, rtol, pool, seq=(lambda t: 2*t), dense=False):
+def midpoint_adapt_order(func, tn, yn, args, h, k, atol, rtol, pool,
+        seq=(lambda t: 2*t), dense=False):
     k_max = 10
     k_min = 3
     k = min(k_max, max(k_min, k))
@@ -556,9 +574,11 @@ def midpoint_adapt_order(func, tn, yn, args, h, k, atol, rtol, pool, seq=(lambda
     W_k = lambda Ak, Hk: Ak/Hk
 
     if dense:
-        T, fe_seq, fe_tot, y0, Tkk, f_Tkk, y_half, f_yj, hs = compute_ex_table(func, tn, yn, args, h, k, pool, seq=seq, dense=dense)
+        T, fe_seq, fe_tot, y0, Tkk, f_Tkk, y_half, f_yj, hs = compute_ex_table(
+            func, tn, yn, args, h, k, pool, seq=seq, dense=dense)
     else:
-        T, fe_seq, fe_tot = compute_ex_table(func, tn, yn, args, h, k, pool, seq=seq, dense=dense)
+        T, fe_seq, fe_tot = compute_ex_table(func, tn, yn, args, h, k, pool,
+            seq=seq, dense=dense)
 
     # compute the error and work function for the stages k-2 and k
     err_k_2 = error_norm(T[k-2,k-3], T[k-2,k-2], atol, rtol)
@@ -583,7 +603,8 @@ def midpoint_adapt_order(func, tn, yn, args, h, k, atol, rtol, pool, seq=(lambda
         h_new = h_k_1 if k_new <= k-1 else h_k_1*A_k(k)/A_k(k-1)
 
         if dense:
-            poly = interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k, atol, rtol, seq=seq)
+            poly = interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k, atol,
+                rtol, seq=seq)
 
     elif err_k <= 1:
         # convergence in line k
@@ -595,7 +616,8 @@ def midpoint_adapt_order(func, tn, yn, args, h, k, atol, rtol, pool, seq=(lambda
                 h_k if k_new == k else h_k*A_k(k+1)/A_k(k))
 
         if dense:
-            poly = interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k, atol, rtol, seq=seq)
+            poly = interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k, atol,
+                rtol, seq=seq)
 
     else: 
         # no convergence
@@ -604,11 +626,13 @@ def midpoint_adapt_order(func, tn, yn, args, h, k, atol, rtol, pool, seq=(lambda
         h_new = min(h_k_1 if k_new == k-1 else h_k, h)
         
         if dense:
-            y, h, k, h_new, k_new, (fe_seq_, fe_tot_), poly = midpoint_adapt_order(func, tn, yn, args, h_new, 
-                k_new, atol, rtol, pool, seq=seq, dense=dense)
+            y, h, k, h_new, k_new, (fe_seq_, fe_tot_), poly = midpoint_adapt_order(
+                func, tn, yn, args, h_new, k_new, atol, rtol, pool, seq=seq,
+                dense=dense)
         else:
-            y, h, k, h_new, k_new, (fe_seq_, fe_tot_) = midpoint_adapt_order(func, tn, yn, args, h_new, 
-                k_new, atol, rtol, pool, seq=seq, dense=dense)
+            y, h, k, h_new, k_new, (fe_seq_, fe_tot_) = midpoint_adapt_order(
+                func, tn, yn, args, h_new, k_new, atol, rtol, pool, seq=seq,
+                dense=dense)
         
         fe_seq += fe_seq_
         fe_tot += fe_tot_
@@ -618,8 +642,8 @@ def midpoint_adapt_order(func, tn, yn, args, h, k, atol, rtol, pool, seq=(lambda
     else:
         return (y, h, k, h_new, k_new, (fe_seq, fe_tot))
 
-def ex_midpoint_parallel(func, y0, t, args=(), full_output=0, rtol=0, atol=1.0e-8,
-        h0=0.5, adaptive="order", p=4):
+def ex_midpoint_parallel(func, y0, t, args=(), full_output=0, rtol=1.0e-8,
+        atol=1.0e-8, h0=0.5, adaptive="order", p=4):
     '''
         An instantiation of extrapolation_parallel() function with the midpoint 
         method. For more details, refer to extrapolation_serial() function.
@@ -632,8 +656,9 @@ def ex_midpoint_parallel(func, y0, t, args=(), full_output=0, rtol=0, atol=1.0e-
 
     method = midpoint_adapt_order if adaptive == "order" else midpoint_fixed_step
 
-    return extrapolation_parallel(method, func, y0, t, args=args, full_output=full_output,
-        rtol=rtol, atol=atol, h0=h0, adaptive=adaptive, p=p, seq=seq)
+    return extrapolation_parallel(method, func, y0, t, args=args,
+        full_output=full_output, rtol=rtol, atol=atol, h0=h0, adaptive=adaptive,
+        p=p, seq=seq)
 
 
 # TODO list:
