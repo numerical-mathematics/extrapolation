@@ -1,5 +1,6 @@
 '''
-Runs a performance test comparing Python Extrap, DOP853, and ODEX-P(12). 
+Runs a performance test comparing Python Extrap, Fortran DOP853, ODEX-P(12),
+and scipy.integrate.ode for integrators DOPRI5 and DOP853 
 Result graphs are saved in the folder ./images
 '''
 
@@ -75,7 +76,7 @@ def f2(t,y):
     return fnbod.fnbod(y,t)
 
 def f_autonomous(y):
-    return fnbod,fnbod2(y)
+    return fnbod.fnbod(y, 0)
 
 for i in range(len(atol)):
     print 'Tolerance: ', atol[i]
