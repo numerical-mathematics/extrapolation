@@ -8,11 +8,13 @@ import numpy as np
 import math 
 import time
 import subprocess
+from scipy.integrate import ode
 
 import ex_parallel as ex_p
 import fnbod
 
-atol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
+# atol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
+atol = [1.e-13]
 t0 = 0
 tf = 0.08
 y0 = fnbod.init_fnbod(2400)
@@ -27,17 +29,29 @@ py_fe_tot = np.zeros(len(atol))
 py_yerr = np.zeros(len(atol))
 py_nstp = np.zeros(len(atol))
 
-dop_runtime = np.zeros(len(atol))
-dop_fe_seq = np.zeros(len(atol))
-dop_fe_tot = np.zeros(len(atol))
-dop_yerr = np.zeros(len(atol))
-dop_nstp = np.zeros(len(atol))
+f_dop853_runtime = np.zeros(len(atol))
+f_dop853_fe_seq = np.zeros(len(atol))
+f_dop853_fe_tot = np.zeros(len(atol))
+f_dop853_yerr = np.zeros(len(atol))
+f_dop853_nstp = np.zeros(len(atol))
 
 odex_runtime = np.zeros(len(atol))
 odex_fe_seq = np.zeros(len(atol))
 odex_fe_tot = np.zeros(len(atol))
 odex_yerr = np.zeros(len(atol))
 odex_nstp = np.zeros(len(atol))
+
+dopri5_runtime = np.zeros(len(atol))
+dopri5_fe_seq = np.zeros(len(atol))
+dopri5_fe_tot = np.zeros(len(atol))
+dopri5_yerr = np.zeros(len(atol))
+dopri5_nstp = np.zeros(len(atol))
+
+dop853_runtime = np.zeros(len(atol))
+dop853_fe_seq = np.zeros(len(atol))
+dop853_fe_tot = np.zeros(len(atol))
+dop853_yerr = np.zeros(len(atol))
+dop853_nstp = np.zeros(len(atol))
 
 def replace_in_file(infile, outfile, oldstring, newstring):
     f_in = open(infile,'r')
@@ -58,6 +72,12 @@ def relative_error(y, y_ref):
 def f(y,t):
     return fnbod.fnbod(y,t)
 
+def f2(t,y):
+    return fnbod.fnbod(y,t)
+
+def f_autonomous(y):
+    return fnbod,fnbod2(y)
+
 for i in range(len(atol)):
     print 'Tolerance: ', atol[i]
 
@@ -71,19 +91,19 @@ for i in range(len(atol)):
     print 'Runtime: ', py_runtime[i], ' s   Error: ', py_yerr[i], '   fe_seq: ', py_fe_seq[i], '   fe_tot: ', py_fe_tot[i], '   nstp: ', py_nstp[i]
     print ''
     
-    # run DOP853
+    # run Fortran DOP853
     replace_in_file('odex/dr_dop853.f','odex/driver.f','relative_tolerance',str(atol[i]))
     subprocess.call('gfortran -O3 odex/driver.f',shell=True)
-    print 'running DOP853'
+    print 'running Fortran DOP853'
     start_time = time.time()
     proc = subprocess.Popen(['time', './a.out'],shell=False,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     out, err = proc.communicate()
-    dop_runtime[i] = time.time() - start_time
-    dop_yerr[i] = float(out.split()[2])
-    dop_fe_seq[i], step = get_fe(out)
-    dop_fe_tot[i] = dop_fe_seq[i]
-    dop_nstp[i] = step
-    print 'Runtime: ', dop_runtime[i], ' s   Error: ', dop_yerr[i], '   fe_seq: ', dop_fe_seq[i], '   fe_tot: ', dop_fe_tot[i], '   nstp: ', dop_nstp[i]
+    f_dop853_runtime[i] = time.time() - start_time
+    f_dop853_yerr[i] = float(out.split()[2])
+    f_dop853_fe_seq[i], step = get_fe(out)
+    f_dop853_fe_tot[i] = f_dop853_fe_seq[i]
+    f_dop853_nstp[i] = step
+    print 'Runtime: ', f_dop853_runtime[i], ' s   Error: ', f_dop853_yerr[i], '   fe_seq: ', f_dop853_fe_seq[i], '   fe_tot: ', f_dop853_fe_tot[i], '   nstp: ', f_dop853_nstp[i]
     print ''
 
     # run ODEX-P
@@ -102,14 +122,42 @@ for i in range(len(atol)):
     print 'Runtime: ', odex_runtime[i], ' s   Error: ', odex_yerr[i], '   fe_seq: ', odex_fe_seq[i], '   fe_tot: ', odex_fe_tot[i], '   nstp: ', odex_nstp[i]
     print ''
 
+    # run DOPRI5
+    print 'running DOPRI5'
+    start_time = time.time()
+    r = ode(f2).set_integrator('dopri5', atol=atol[i], rtol=0, verbosity=10, nsteps= 10e5)
+    r.set_initial_value(y0, t0)
+    r.integrate(r.t+(tf-t0))
+    assert r.t == tf, "Max number of step need to increase"
+    dopri5_runtime[i] = time.time() - start_time
+    dopri5_yerr[i] = relative_error(r.y, y_ref)
+    print 'Runtime: ', dopri5_runtime[i], ' s   Error: ', dopri5_yerr[i], '   fe_seq: ', dopri5_fe_seq[i], '   fe_tot: ', dopri5_fe_tot[i], '   nstp: ', dopri5_nstp[i]
+    print ''
+
+    # run DOP853
+    print 'running DOP853'
+    start_time = time.time()
+    r = ode(f2, jac=None).set_integrator('dop853', atol=atol[i], rtol=0, verbosity=10, nsteps= 10e5)
+    r.set_initial_value(y0, t0)
+    r.integrate(r.t+(tf-t0))
+    assert r.t == tf, "Max number of step need to increase"
+    dop853_runtime[i] = time.time() - start_time
+    dop853_yerr[i] = relative_error(r.y, y_ref)
+    print 'Runtime: ', dop853_runtime[i], ' s   Error: ', dop853_yerr[i], '   fe_seq: ', dop853_fe_seq[i], '   fe_tot: ', dop853_fe_tot[i], '   nstp: ', dop853_nstp[i]
+    print ''
+
     print ''
 
 print "Final data: Python Extrap"
 print py_runtime, py_fe_seq, py_fe_tot, py_yerr, py_nstp
-print "Final data: DOP853"
-print dop_runtime, dop_fe_seq, dop_fe_tot, dop_yerr, dop_nstp
+print "Final data: Fortran DOP853"
+print f_dop853_runtime, f_dop853_fe_seq, f_dop853_fe_tot, f_dop853_yerr, f_dop853_nstp
 print "Final data: ODEX-P"
 print odex_runtime, odex_fe_seq, odex_fe_tot, odex_yerr, odex_nstp
+print "Final data: DOPRI5"
+print dopri5_runtime, dopri5_fe_seq, dopri5_fe_tot, dopri5_yerr, dopri5_nstp
+print "Final data: DOP853"
+print dop853_runtime, dop853_fe_seq, dop853_fe_tot, dop853_yerr, dop853_nstp
 
 # plot performance graphs
 import matplotlib
@@ -117,36 +165,38 @@ matplotlib.use('agg')
 import matplotlib.pyplot as plt
 plt.hold('true')
 py_line,   = plt.loglog(py_yerr, py_runtime, "s-")
-dop_line, = plt.loglog(dop_yerr, dop_runtime, "s-")
+f_dop853_line, = plt.loglog(f_dop853_yerr, f_dop853_runtime, "s-")
 odex_line, = plt.loglog(odex_yerr, odex_runtime, "s-")
-plt.legend([py_line, dop_line, odex_line], ["Python Extrap", "DOP853", "ODEX-P(12)"], loc=1)
+dopri5_line, = plt.loglog(dopri5_yerr, dopri5_runtime, "s-")
+dop853_line, = plt.loglog(dop853_yerr, dop853_runtime, "s-")
+plt.legend([py_line, f_dop853_line, odex_line, dopri5_line, dop853_line], ["Python Extrap", "Fortran DOP853", "ODEX-P(12)", "DOPRI5", "Python DOP853"], loc=1)
 plt.xlabel('Error')
 plt.ylabel('Wall clock time (seconds)')
 plt.savefig('images/err_vs_time.png')
 plt.close()
 
 py_line,   = plt.loglog(py_yerr, py_fe_seq, "s-")
-dop_line, = plt.loglog(dop_yerr, dop_fe_seq, "s-")
+f_dop853_line, = plt.loglog(f_dop853_yerr, f_dop853_fe_seq, "s-")
 odex_line, = plt.loglog(odex_yerr, odex_fe_seq, "s-")
-plt.legend([py_line, dop_line, odex_line], ["Python Extrap", "DOP853", "ODEX-P(12)"], loc=1)
+plt.legend([py_line, f_dop853_line, odex_line], ["Python Extrap", "DOP853", "ODEX-P(12)"], loc=1)
 plt.xlabel('Error')
 plt.ylabel('Sequential derivative evaluations')
 plt.savefig('images/err_vs_fe_seq.png')
 plt.close()
 
 py_line,   = plt.loglog(py_yerr, py_fe_tot, "s-")
-dop_line, = plt.loglog(dop_yerr, dop_fe_tot, "s-")
+f_dop853_line, = plt.loglog(f_dop853_yerr, f_dop853_fe_tot, "s-")
 odex_line, = plt.loglog(odex_yerr, odex_fe_tot, "s-")
-plt.legend([py_line, dop_line, odex_line], ["Python Extrap", "DOP853", "ODEX-P(12)"], loc=1)
+plt.legend([py_line, f_dop853_line, odex_line], ["Python Extrap", "DOP853", "ODEX-P(12)"], loc=1)
 plt.xlabel('Error')
 plt.ylabel('Total derivative evaluations')  
 plt.savefig('images/err_vs_fe_tot.png')
 plt.close()
 
 py_line,   = plt.loglog(atol, py_nstp, "s-")
-dop_line, = plt.loglog(atol, dop_nstp, "s-")
+f_dop853_line, = plt.loglog(atol, f_dop853_nstp, "s-")
 odex_line, = plt.loglog(atol, odex_nstp, "s-")
-plt.legend([py_line, dop_line, odex_line], ["Python Extrap", "DOP853", "ODEX-P(12)"], loc=1)
+plt.legend([py_line, f_dop853_line, odex_line], ["Python Extrap", "DOP853", "ODEX-P(12)"], loc=1)
 plt.xlabel('tol')
 plt.ylabel('Total number of steps')  
 plt.savefig('images/tol_vs_nstp.png')
