@@ -134,8 +134,8 @@ for i in range(len(atol)):
     print 'Runtime: ', dopri5_runtime[i], ' s   Error: ', dopri5_yerr[i], '   fe_seq: ', dopri5_fe_seq[i], '   fe_tot: ', dopri5_fe_tot[i], '   nstp: ', dopri5_nstp[i]
     print ''
 
-    # run DOP853
-    print 'running DOP853'
+    # run Python DOP853
+    print 'running Python DOP853'
     start_time = time.time()
     r = ode(f2, jac=None).set_integrator('dop853', atol=atol[i], rtol=0, verbosity=10, nsteps= 10e5)
     r.set_initial_value(y0, t0)
@@ -156,7 +156,7 @@ print "Final data: ODEX-P"
 print odex_runtime, odex_fe_seq, odex_fe_tot, odex_yerr, odex_nstp
 print "Final data: DOPRI5"
 print dopri5_runtime, dopri5_fe_seq, dopri5_fe_tot, dopri5_yerr, dopri5_nstp
-print "Final data: DOP853"
+print "Final data: Python DOP853"
 print dop853_runtime, dop853_fe_seq, dop853_fe_tot, dop853_yerr, dop853_nstp
 
 # plot performance graphs
@@ -178,7 +178,7 @@ plt.close()
 py_line,   = plt.loglog(py_yerr, py_fe_seq, "s-")
 f_dop853_line, = plt.loglog(f_dop853_yerr, f_dop853_fe_seq, "s-")
 odex_line, = plt.loglog(odex_yerr, odex_fe_seq, "s-")
-plt.legend([py_line, f_dop853_line, odex_line], ["Python Extrap", "DOP853", "ODEX-P(12)"], loc=1)
+plt.legend([py_line, f_dop853_line, odex_line], ["Python Extrap", "Fortran DOP853", "ODEX-P(12)"], loc=1)
 plt.xlabel('Error')
 plt.ylabel('Sequential derivative evaluations')
 plt.savefig('images/err_vs_fe_seq.png')
@@ -187,7 +187,7 @@ plt.close()
 py_line,   = plt.loglog(py_yerr, py_fe_tot, "s-")
 f_dop853_line, = plt.loglog(f_dop853_yerr, f_dop853_fe_tot, "s-")
 odex_line, = plt.loglog(odex_yerr, odex_fe_tot, "s-")
-plt.legend([py_line, f_dop853_line, odex_line], ["Python Extrap", "DOP853", "ODEX-P(12)"], loc=1)
+plt.legend([py_line, f_dop853_line, odex_line], ["Python Extrap", "Fortran DOP853", "ODEX-P(12)"], loc=1)
 plt.xlabel('Error')
 plt.ylabel('Total derivative evaluations')  
 plt.savefig('images/err_vs_fe_tot.png')
@@ -196,7 +196,7 @@ plt.close()
 py_line,   = plt.loglog(atol, py_nstp, "s-")
 f_dop853_line, = plt.loglog(atol, f_dop853_nstp, "s-")
 odex_line, = plt.loglog(atol, odex_nstp, "s-")
-plt.legend([py_line, f_dop853_line, odex_line], ["Python Extrap", "DOP853", "ODEX-P(12)"], loc=1)
+plt.legend([py_line, f_dop853_line, odex_line], ["Python Extrap", "Fortran DOP853", "ODEX-P(12)"], loc=1)
 plt.xlabel('tol')
 plt.ylabel('Total number of steps')  
 plt.savefig('images/tol_vs_nstp.png')
