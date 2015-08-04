@@ -231,7 +231,7 @@ def nbod_problem():
 def KdV_init(t0):
     N = 256
     k = np.array(range(0,int(N/2)) + [0] + range(-int(N/2)+1,0))
-    E_ = np.exp(-1j * t0 * k**3)
+    E_ = np.exp(-1j * k**3 * t0)
     x = (2*np.pi/N)*np.arange(-int(N/2),int(N/2))
     A = 25; B = 16;
     u = 3*A**2/np.cosh(0.5*(A*(x+2.)))**2 + 3*B**2/np.cosh(0.5*(B*(x+1)))**2
@@ -242,21 +242,50 @@ def KdV_func(U_hat, t):
     # U_hat := exp(-i*k^3*t)*u_hat
     N = 256
     k = np.array(range(0,int(N/2)) + [0] + range(-int(N/2)+1,0))
-    E = np.exp(1j * t * k**3)
-    E_ = np.exp(-1j * t * k**3)
+    E = np.exp(1j * k**3 * t)
+    E_ = np.exp(-1j * k**3 * t)
     g = -0.5j * E_ * k
     return g*np.fft.fft(np.real(np.fft.ifft(E*U_hat))**2)
 
 def KdV_problem():
-    t0 = 0
+    t0 = 0.
     tf = 0.003
     y0 = KdV_init(t0)
     y_ref = np.loadtxt("reference_KdV.txt").view('complex')
     compare_preformance(KdV_func, y0, t0, tf, y_ref, "KdV_problem", is_complex=True)
 
+###### Burgers' Problem ######
+def burgers_init(t0):
+    epslison = 0.1
+    N = 64
+    k = np.array(range(0,int(N/2)) + [0] + range(-int(N/2)+1,0))
+    E = np.exp(epslison * k**2 * t0)
+    x = (2*np.pi/N)*np.arange(-int(N/2),int(N/2))
+    u = np.sin(x)**2 * (x<0.)
+    U_hat = E*np.fft.fft(u)
+    return U_hat
+
+def burgers_func(U_hat, t):
+    # U_hat := exp(epslison*k^2*t)*u_hat
+    epslison = 0.1
+    N = 64
+    k = np.array(range(0,int(N/2)) + [0] + range(-int(N/2)+1,0))
+    E = np.exp(epslison * k**2 * t)
+    E_ = np.exp(-epslison * k**2 * t)
+    g = -0.5j * E * k
+    return g*np.fft.fft(np.real(np.fft.ifft(E_*U_hat))**2)
+
+def burgers_problem():
+    t0 = 0.
+    tf = 3.
+    y0 = burgers_init(t0)
+    y_ref = np.loadtxt("reference_burgers.txt").view('complex')
+    compare_preformance(burgers_func, y0, t0, tf, y_ref, "burgers_problem", is_complex=True)
+
 
 ########### RUN TESTS ###########
-nbod_problem()
-KdV_problem()
+# nbod_problem()
+# KdV_problem()
+# burgers_problem()
 
 
