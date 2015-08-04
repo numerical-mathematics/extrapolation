@@ -32,6 +32,7 @@ def relative_error(y, y_ref):
     return np.linalg.norm((y-y_ref)/y_ref)/(len(y)**0.5)
 
 def compare_preformance(func, y0, t0, tf, y_ref, problem_name, is_complex=False, nsteps=10e5, nbod_problem=False):
+    print 'RUNNING COMPARISON TEST FOR ' + problem_name
     tol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
     extrap_order = 12
     num_threads = 4
