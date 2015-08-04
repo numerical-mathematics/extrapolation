@@ -255,7 +255,7 @@ def KdV_problem():
 
 
 ########### RUN TESTS ###########
-# nbod_problem()
+nbod_problem()
 KdV_problem()
 
 
