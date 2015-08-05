@@ -58,3 +58,5 @@ target/
 
 # executable from ODEX code
 a.out
+
+old_images/
