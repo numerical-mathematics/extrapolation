@@ -304,8 +304,8 @@ def burgers_problem():
 
 ########### RUN TESTS ###########
 if __name__ == "__main__":
-    # nbod_problem()
-    # kdv_problem()
+    nbod_problem()
+    kdv_problem()
     burgers_problem()
 
 
