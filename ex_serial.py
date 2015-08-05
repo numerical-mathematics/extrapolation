@@ -4,7 +4,7 @@ import math
 
 def error_norm(y1, y2, atol, rtol):
     tol = atol + np.maximum(y1,y2)*rtol
-    return np.linalg.norm((y1-y2)/tol)/(len(y1)**0.5)
+    return np.linalg.norm(y1-y2)/np.linalg.norm(tol*len(y1))
 
 def adapt_step(method, f, tn_1, yn_1, y, y_hat, h, p, atol, rtol):
     '''

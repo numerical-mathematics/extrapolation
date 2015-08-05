@@ -89,7 +89,7 @@ def tst_adaptive(f, t0, tf, y0, order, exact, method, title="tst_adaptive"):
 
 
 def rel_error_norm(y, y_ref):
-    return np.linalg.norm((y-y_ref)/y_ref)/(len(y)**0.5)
+    return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref*len(y_ref))
 
 def tst_parallel_vs_serial(f, t0, tf, y0, title="tst_parallel_vs_serial"):
     tol = np.asarray([10**(-k) for k in range(3, 14)])
@@ -123,21 +123,23 @@ def tst_parallel_vs_serial(f, t0, tf, y0, title="tst_parallel_vs_serial"):
         print "ratio    = " + '%g' % (time_ratio[i]) + "\tdiff = " + '%e' %(err_p[i] - err_s[i]) + "\tdiff  = " + '%e' %(h_avg_diff[i]) + "\tdiff  = " + '%e' %(k_avg_diff[i]) + "\tdiff  = " + str(fe_diff[i]) + "\tdiff  = " + str(fe_tot[i] - fe) + "\ttime_ratio/(fe_s2/fe_s1) = " + '%g' % (time_ratio[i]/(fe/fe_seq[i]))
         print
 
-#    plt.hold('true')
-#    plt.semilogx(tol, time_ratio, "s-")
-#    plt.semilogx(tol, [1]*len(tol))
-#    plt.title(title)
-#    plt.xlabel('tol')
-#    plt.ylabel('serial time / parallel time')
-#    plt.show()
+if __name__ == "__main__":
+   # plt.hold('true')
+   # plt.semilogx(tol, time_ratio, "s-")
+   # plt.semilogx(tol, [1]*len(tol))
+   # plt.title(title)
+   # plt.xlabel('tol')
+   # plt.ylabel('serial time / parallel time')
+   # plt.show()
 
-#    plt.hold('true')
-#    plt.semilogx(tol, fe_diff, "s-")
-#    plt.semilogx(tol, [0]*len(tol))
-#    plt.title(title)
-#    plt.xlabel('tol')
-#    plt.ylabel('fe_parallel - fe_seq')
-#    plt.show()
+   # plt.hold('true')
+   # plt.semilogx(tol, fe_diff, "s-")
+   # plt.semilogx(tol, [0]*len(tol))
+   # plt.title(title)
+   # plt.xlabel('tol')
+   # plt.ylabel('fe_parallel - fe_seq')
+   # plt.show()
+   pass
 
 
 def tst(f, t0, tf, exact, test_name):
@@ -233,8 +235,6 @@ def test5():
     y0 = fnbod.init_fnbod(n)
     tst_parallel_vs_serial(f_5, t0, tf, y0, title="tst_parallel_vs_serial w/ N = " + str(n))
 
-# test5()
-
 def cprofile_tst():
     bodys = 200
     n = 6*bodys
@@ -251,15 +251,16 @@ def cprofile_tst():
     h_avg, k_avg = infodict['h_avg'], infodict['k_avg']
     print "h_avg = " + str(h_avg) + "\tk_avg = " + str(k_avg)
 
-# t0 = 0
-# tf = 10
-# tol = 10**(-9)
-# print ex_p.ex_midpoint_parallel(f_2, exact_2(t0), [t0, tf], atol=tol, rtol=tol, adaptive="order")
-# print ex_p.ex_midpoint_parallel(f_2, exact_2(t0), [t0, tf], atol=tol, rtol=tol, adaptive="order")
-# print ex_p.ex_midpoint_parallel(f_3, exact_3(t0), [t0, tf], atol=tol, rtol=tol, adaptive="order")
-# print ex_p.ex_midpoint_parallel(f_4, exact_4(t0), [t0, tf], atol=tol, rtol=tol, adaptive="order")
-# print ex_p.ex_midpoint_parallel(f_5, exact_5(t0), [t0, tf], atol=tol, rtol=tol, adaptive="order")
-
+if __name__ == "__main__":
+    # t0 = 0
+    # tf = 10
+    # tol = 10**(-9)
+    # print ex_p.ex_midpoint_parallel(f_2, exact_2(t0), [t0, tf], atol=tol, rtol=tol, adaptive="order")
+    # print ex_p.ex_midpoint_parallel(f_2, exact_2(t0), [t0, tf], atol=tol, rtol=tol, adaptive="order")
+    # print ex_p.ex_midpoint_parallel(f_3, exact_3(t0), [t0, tf], atol=tol, rtol=tol, adaptive="order")
+    # print ex_p.ex_midpoint_parallel(f_4, exact_4(t0), [t0, tf], atol=tol, rtol=tol, adaptive="order")
+    # print ex_p.ex_midpoint_parallel(f_5, exact_5(t0), [t0, tf], atol=tol, rtol=tol, adaptive="order")
+    pass
 
 import multiprocessing as mp
 import random
@@ -305,7 +306,6 @@ def test_interpolation():
     plt.semilogy(range(min_k,max_k+1), err[min_k:], "s-")
     plt.show()
 
-# test_interpolation()
 
 def test_dense():
     f = f_6
@@ -335,9 +335,11 @@ def test_dense():
     plt.loglog(tol, err, "s-")
     plt.show()
 
-# test_dense()
 
 if __name__ == "__main__":
     import doctest
     doctest.testmod()
-
+    test5()
+    test_interpolation()
+    test_dense()
+    pass

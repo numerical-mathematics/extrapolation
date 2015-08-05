@@ -1,36 +1,38 @@
 import numpy as np
-from compare_test import KdV_init, KdV_func, burgers_init, burgers_func
+from compare_test import kdv_init, kdv_func, kdv_solout, burgers_init, burgers_func, burgers_solout
 import time
 from scipy.integrate import ode
 
 def relative_error(y, y_ref):
-    return np.linalg.norm((y-y_ref)/y_ref)/(len(y)**0.5)
+    return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref*len(y_ref))
 
-# reference for KdV problem  
-def KdV_reference():
+# reference for kdv problem  
+def kdv_reference():
     t0 = 0
     tf = 0.003
-    y0 = KdV_init(t0)
+    y0 = kdv_init(t0)
     tol = 1.e-15
     nsteps = 10.e5
     def func2(t,y):
-        return KdV_func(y,t)
-    print 'computing reference solution to KdV problem'
+        return kdv_func(y,t)
+    print 'computing reference solution to kdv problem'
     start_time = time.time()
     r = ode(func2, jac=None).set_integrator('zvode', atol=tol, rtol=tol, method='adams', nsteps=nsteps)
     r.set_initial_value(y0, t0)
     r.integrate(r.t+(tf-t0))
     assert r.t == tf, "Integration did not converge. Try increasing the max number of steps"
-    np.savetxt("reference_KdV.txt", r.y.view('float'))
-    print 'reference solution saved in reference_KdV.txt , it took', time.time() - start_time, ' s'
+    y = kdv_solout(r.y)
+    np.savetxt("reference_kdv.txt", y)
+    print 'reference solution saved in reference_kdv.txt , it took', time.time() - start_time, ' s'
+    return y
 
 # reference for burgers problem  
 def burgers_reference():
     t0 = 0
-    tf = 3
+    tf = 0.18
     y0 = burgers_init(t0)
-    tol = 1.e-11
-    nsteps = 10.e5
+    tol = 1.e-15
+    nsteps = 10.e6
     def func2(t,y):
         return burgers_func(y,t)
     print 'computing reference solution to burgers problem'
@@ -39,8 +41,11 @@ def burgers_reference():
     r.set_initial_value(y0, t0)
     r.integrate(r.t+(tf-t0))
     assert r.t == tf, "Integration did not converge. Try increasing the max number of steps"
-    np.savetxt("reference_burgers.txt", r.y.view('float'))
+    y = burgers_solout(r.y)
+    np.savetxt("reference_burgers.txt", y)
     print 'reference solution saved in reference_burgers.txt , it took', time.time() - start_time, ' s'	
+    return y    
 
-# KdV_reference() 
-# burgers_reference() 
+if __name__ == "__main__":
+    # kdv_reference() 
+    burgers_reference() 

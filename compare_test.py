@@ -29,9 +29,9 @@ def get_fe(out):
     return (fe_total, step)
 
 def relative_error(y, y_ref):
-    return np.linalg.norm((y-y_ref)/y_ref)/(len(y)**0.5)
+    return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref*len(y_ref))
 
-def compare_preformance(func, y0, t0, tf, y_ref, problem_name, is_complex=False, nsteps=10e5, nbod_problem=False):
+def compare_preformance(func, y0, t0, tf, y_ref, problem_name, is_complex=False, nsteps=10e5, solout=(lambda t: t), nbod_problem=False):
     print 'RUNNING COMPARISON TEST FOR ' + problem_name
     tol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
     extrap_order = 12
@@ -79,6 +79,7 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, is_complex=False,
         start_time = time.time()
         y, infodict = ex_p.ex_midpoint_parallel(func, y0, [t0, tf], atol=tol[i], rtol=tol[i], adaptive="order", full_output=True)
         py_runtime[i] = time.time() - start_time
+        y[-1] = solout(y[-1])
         py_fe_seq[i], py_fe_tot[i], py_nstp[i] = infodict['fe_seq'], infodict['fe_tot'], infodict['nstp']
         py_yerr[i] = relative_error(y[-1], y_ref)
         print 'Runtime: ', py_runtime[i], ' s   Error: ', py_yerr[i], '   fe_seq: ', py_fe_seq[i], '   fe_tot: ', py_fe_tot[i], '   nstp: ', py_nstp[i]
@@ -95,7 +96,8 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, is_complex=False,
         r.integrate(r.t+(tf-t0))
         assert r.t == tf, "Integration did not converge. Try increasing the max number of steps"
         dopri5_runtime[i] = time.time() - start_time
-        dopri5_yerr[i] = relative_error(r.y, y_ref)
+        y = solout(r.y)
+        dopri5_yerr[i] = relative_error(y, y_ref)
         print 'Runtime: ', dopri5_runtime[i], ' s   Error: ', dopri5_yerr[i], '   fe_seq: ', dopri5_fe_seq[i], '   fe_tot: ', dopri5_fe_tot[i], '   nstp: ', dopri5_nstp[i]
         print ''
 
@@ -110,7 +112,8 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, is_complex=False,
         r.integrate(r.t+(tf-t0))
         assert r.t == tf, "Integration did not converge. Try increasing the max number of steps"
         dop853_runtime[i] = time.time() - start_time
-        dop853_yerr[i] = relative_error(r.y, y_ref)
+        y = solout(r.y)
+        dop853_yerr[i] = relative_error(y, y_ref)
         print 'Runtime: ', dop853_runtime[i], ' s   Error: ', dop853_yerr[i], '   fe_seq: ', dop853_fe_seq[i], '   fe_tot: ', dop853_fe_tot[i], '   nstp: ', dop853_nstp[i]
         print ''
 
@@ -227,8 +230,8 @@ def nbod_problem():
     y_ref = np.loadtxt("reference.txt")
     compare_preformance(nbod_func, y0, t0, tf, y_ref, "nbod_problem", nbod_problem=True)
 
-###### KdV Problem ######
-def KdV_init(t0):
+###### kdv Problem ######
+def kdv_init(t0):
     N = 256
     k = np.array(range(0,int(N/2)) + [0] + range(-int(N/2)+1,0))
     E_ = np.exp(-1j * k**3 * t0)
@@ -238,7 +241,7 @@ def KdV_init(t0):
     U_hat = E_*np.fft.fft(u)
     return U_hat
 
-def KdV_func(U_hat, t):
+def kdv_func(U_hat, t):
     # U_hat := exp(-i*k^3*t)*u_hat
     N = 256
     k = np.array(range(0,int(N/2)) + [0] + range(-int(N/2)+1,0))
@@ -247,12 +250,19 @@ def KdV_func(U_hat, t):
     g = -0.5j * E_ * k
     return g*np.fft.fft(np.real(np.fft.ifft(E*U_hat))**2)
 
-def KdV_problem():
+def kdv_solout(U_hat):
+    t = 0.003
+    N = 256
+    k = np.array(range(0,int(N/2)) + [0] + range(-int(N/2)+1,0))
+    E = np.exp(1j * k**3 * t)
+    return np.squeeze(np.real(np.fft.ifft(E*U_hat)))
+
+def kdv_problem():
     t0 = 0.
     tf = 0.003
-    y0 = KdV_init(t0)
-    y_ref = np.loadtxt("reference_KdV.txt").view('complex')
-    compare_preformance(KdV_func, y0, t0, tf, y_ref, "KdV_problem", is_complex=True)
+    y0 = kdv_init(t0)
+    y_ref = np.loadtxt("reference_kdv.txt")
+    compare_preformance(kdv_func, y0, t0, tf, y_ref, "kdv_problem", is_complex=True, solout=kdv_solout)
 
 ###### Burgers' Problem ######
 def burgers_init(t0):
@@ -262,6 +272,7 @@ def burgers_init(t0):
     E = np.exp(epslison * k**2 * t0)
     x = (2*np.pi/N)*np.arange(-int(N/2),int(N/2))
     u = np.sin(x)**2 * (x<0.)
+    # u = np.sin(x)**2 
     U_hat = E*np.fft.fft(u)
     return U_hat
 
@@ -275,17 +286,26 @@ def burgers_func(U_hat, t):
     g = -0.5j * E * k
     return g*np.fft.fft(np.real(np.fft.ifft(E_*U_hat))**2)
 
+def burgers_solout(U_hat):
+    t = 0.18
+    epslison = 0.1
+    N = 64
+    k = np.array(range(0,int(N/2)) + [0] + range(-int(N/2)+1,0))
+    E_ = np.exp(-epslison * k**2 * t)
+    return np.squeeze(np.real(np.fft.ifft(E_*U_hat)))
+
 def burgers_problem():
     t0 = 0.
-    tf = 3.
+    tf = 0.18
     y0 = burgers_init(t0)
-    y_ref = np.loadtxt("reference_burgers.txt").view('complex')
-    compare_preformance(burgers_func, y0, t0, tf, y_ref, "burgers_problem", is_complex=True)
+    y_ref = np.loadtxt("reference_burgers.txt")
+    compare_preformance(burgers_func, y0, t0, tf, y_ref, "burgers_problem", nsteps=10e4, is_complex=True, solout=burgers_solout)
 
 
 ########### RUN TESTS ###########
-# nbod_problem()
-# KdV_problem()
-# burgers_problem()
+if __name__ == "__main__":
+    # nbod_problem()
+    # kdv_problem()
+    burgers_problem()
 
 
