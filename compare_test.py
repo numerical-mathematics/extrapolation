@@ -29,7 +29,7 @@ def get_fe(out):
     return (fe_total, step)
 
 def relative_error(y, y_ref):
-    return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref*len(y_ref))
+    return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref)
 
 def compare_preformance(func, y0, t0, tf, y_ref, problem_name, is_complex=False, nsteps=10e5, solout=(lambda t: t), nbod_problem=False):
     print 'RUNNING COMPARISON TEST FOR ' + problem_name
@@ -287,7 +287,7 @@ def burgers_func(U_hat, t):
     return g*np.fft.fft(np.real(np.fft.ifft(E_*U_hat))**2)
 
 def burgers_solout(U_hat):
-    t = 0.18
+    t = 3.
     epslison = 0.1
     N = 64
     k = np.array(range(0,int(N/2)) + [0] + range(-int(N/2)+1,0))
@@ -296,7 +296,7 @@ def burgers_solout(U_hat):
 
 def burgers_problem():
     t0 = 0.
-    tf = 0.18
+    tf = 3.
     y0 = burgers_init(t0)
     y_ref = np.loadtxt("reference_burgers.txt")
     compare_preformance(burgers_func, y0, t0, tf, y_ref, "burgers_problem", nsteps=10e4, is_complex=True, solout=burgers_solout)
@@ -304,7 +304,7 @@ def burgers_problem():
 
 ########### RUN TESTS ###########
 if __name__ == "__main__":
-    # nbod_problem()
+    nbod_problem()
     kdv_problem()
     # burgers_problem()
 

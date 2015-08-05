@@ -169,8 +169,8 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
             nstp += 1
             cur_stp += 1
             if cur_stp > mxstep:
-                raise Exception('Max Number of Steps is Reached. Current t = ' 
-                    + t_curr)            
+                raise Exception('Reached Max Number of Steps. Current t = ' 
+                    + str(t_curr))            
         
         ys[1] = 1*y
 
@@ -228,8 +228,8 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
             nstp += 1
             cur_stp += 1
             if cur_stp > mxstep:
-                raise Exception('Max Number of Steps is Reached. Current t = ' 
-                    + t_curr)
+                raise Exception('Reached Max Number of Steps. Current t = ' 
+                    + str(t_curr))
 
             h = min(h_new, t_max - t_curr)
 
@@ -287,8 +287,8 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
             cur_stp += 1
 
             if cur_stp > mxstep:
-                raise Exception('Max Number of Steps is Reached. Current t = ' 
-                    + t_curr)
+                raise Exception('Reached Max Number of Steps. Current t = ' 
+                    + str(t_curr))
 
             h = min(h_new, t_max - t_curr)
             k = k_new
