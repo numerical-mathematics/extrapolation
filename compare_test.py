@@ -77,7 +77,7 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, is_complex=False,
         # run Python extrapolation code 
         print 'running Python Extrap'
         start_time = time.time()
-        y, infodict = ex_p.ex_midpoint_parallel(func, y0, [t0, tf], atol=tol[i], rtol=tol[i], adaptive="order", full_output=True)
+        y, infodict = ex_p.ex_midpoint_parallel(func, y0, [t0, tf], atol=tol[i], rtol=tol[i], mxstep=nsteps, adaptive="order", full_output=True)
         py_runtime[i] = time.time() - start_time
         y[-1] = solout(y[-1])
         py_fe_seq[i], py_fe_tot[i], py_nstp[i] = infodict['fe_seq'], infodict['fe_tot'], infodict['nstp']
@@ -304,8 +304,8 @@ def burgers_problem():
 
 ########### RUN TESTS ###########
 if __name__ == "__main__":
-    nbod_problem()
+    # nbod_problem()
     kdv_problem()
-    burgers_problem()
+    # burgers_problem()
 
 

@@ -73,7 +73,7 @@ def adapt_step(method, func, tn_1, yn_1, args, y, y_hat, h, p, atol, rtol, pool,
         return (y, y_hat, h, h_new, (fe_seq, fe_tot))
 
 def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
-        rtol=1.0e-8, atol=1.0e-8, h0=0.5, adaptive="order", p=4,
+        rtol=1.0e-8, atol=1.0e-8, h0=0.5, mxstep=10e4, adaptive="order", p=4,
         seq=(lambda t: 2*t)):
     '''
     Solves the system of IVPs dy/dt = func(y, t0, ...) with parallel extrapolation. 
@@ -121,7 +121,9 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
             the same length as y0 or scalars. Both default to 1.0e-8.
         - h0 : float, optional
             The step size to be attempted on the first step. Defaults to 0.5
-
+        - mxstep : int, optional
+            Maximum number of (internally defined) steps allowed for each
+            integration point in t. Defaults to 10e4
         - adaptive: string, optional
             Can take the three values:
             -- "fixed" = use fixed step size and order.
@@ -149,6 +151,7 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
     fe_seq = 0
     fe_tot = 0
     nstp = 0
+    cur_stp = 0
 
     if adaptive == "fixed":
         ts, h = np.linspace(t0, t[-1], (t[-1]-t0)/h0 + 1, retstep=True)
@@ -164,6 +167,10 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
             fe_seq += fe_seq_
             fe_tot += fe_tot_
             nstp += 1
+            cur_stp += 1
+            if cur_stp > mxstep:
+                raise Exception('Max Number of Steps is Reached. Current t = ' 
+                    + t_curr)            
         
         ys[1] = 1*y
 
@@ -198,6 +205,7 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
                         
                         if errint <= 10:
                             ys[t_index] = 1*y_poly
+                            cur_stp = 0
                             t_index += 1
                             reject_inter = False
                         else:
@@ -218,9 +226,13 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
             fe_seq += fe_seq_
             fe_tot += fe_tot_
             nstp += 1
+            cur_stp += 1
+            if cur_stp > mxstep:
+                raise Exception('Max Number of Steps is Reached. Current t = ' 
+                    + t_curr)
+
             h = min(h_new, t_max - t_curr)
 
-    
         if not dense:
             ys[-1] = 1*y
 
@@ -232,7 +244,6 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
         h = min(h0, t_max-t0)
 
         sum_ks, sum_hs = 0, 0
-        nstp += 0
 
         while t_curr < t_max:
             if dense:
@@ -249,6 +260,7 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
                         
                         if errint <= 10:
                             ys[t_index] = 1*y_poly
+                            cur_stp = 0
                             t_index += 1
                             reject_inter = False
                         else:
@@ -272,6 +284,11 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
             sum_ks += k
             sum_hs += h
             nstp += 1
+            cur_stp += 1
+
+            if cur_stp > mxstep:
+                raise Exception('Max Number of Steps is Reached. Current t = ' 
+                    + t_curr)
 
             h = min(h_new, t_max - t_curr)
             k = k_new
@@ -643,7 +660,7 @@ def midpoint_adapt_order(func, tn, yn, args, h, k, atol, rtol, pool,
         return (y, h, k, h_new, k_new, (fe_seq, fe_tot))
 
 def ex_midpoint_parallel(func, y0, t, args=(), full_output=0, rtol=1.0e-8,
-        atol=1.0e-8, h0=0.5, adaptive="order", p=4):
+        atol=1.0e-8, h0=0.5, mxstep=10e4, adaptive="order", p=4):
     '''
         An instantiation of extrapolation_parallel() function with the midpoint 
         method. For more details, refer to extrapolation_serial() function.
@@ -657,8 +674,8 @@ def ex_midpoint_parallel(func, y0, t, args=(), full_output=0, rtol=1.0e-8,
     method = midpoint_adapt_order if adaptive == "order" else midpoint_fixed_step
 
     return extrapolation_parallel(method, func, y0, t, args=args,
-        full_output=full_output, rtol=rtol, atol=atol, h0=h0, adaptive=adaptive,
-        p=p, seq=seq)
+        full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep,
+        adaptive=adaptive, p=p, seq=seq)
 
 
 # TODO list:
