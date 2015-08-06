@@ -302,13 +302,13 @@ def burgers_problem():
     tf = 3.
     y0 = burgers_init(t0)
     y_ref = np.loadtxt("reference_burgers.txt")
-    compare_preformance(burgers_func, y0, t0, tf, y_ref, "burgers_problem", tol_boundary=(0,3), nsteps=10e4, is_complex=True, solout=burgers_solout)
+    compare_preformance(burgers_func, y0, t0, tf, y_ref, "burgers_problem", tol_boundary=(0,4), nsteps=10e4, is_complex=True, solout=burgers_solout)
 
 
 ########### RUN TESTS ###########
 if __name__ == "__main__":
     nbod_problem()
-    # kdv_problem()
+    kdv_problem()
     burgers_problem()
 
 
