@@ -125,10 +125,10 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
             Maximum number of (internally defined) steps allowed for each
             integration point in t. Defaults to 10e4
         - adaptive: string, optional
-            Can take the three values:
-            -- "fixed" = use fixed step size and order.
-            -- "step"  = use adaptive step size but fixed order.
-            -- "order" = use adaptive step size and adaptive order.
+            Specifies the strategy of integration. Can take three values:
+            -- "fixed" = use fixed step size and order strategy.
+            -- "step"  = use adaptive step size but fixed order strategy.
+            -- "order" = use adaptive step size and adaptive order strategy.
             Defaults to "order"
         - p: int, optional
             The order of extrapolation if adaptive is not "order", and the 
@@ -662,8 +662,65 @@ def midpoint_adapt_order(func, tn, yn, args, h, k, atol, rtol, pool,
 def ex_midpoint_parallel(func, y0, t, args=(), full_output=0, rtol=1.0e-8,
         atol=1.0e-8, h0=0.5, mxstep=10e4, adaptive="order", p=4):
     '''
-        An instantiation of extrapolation_parallel() function with the midpoint 
-        method. For more details, refer to extrapolation_serial() function.
+    (An instantiation of extrapolation_parallel() function with the midpoint 
+    method.)
+    
+    Solves the system of IVPs dy/dt = func(y, t0, ...) with parallel extrapolation. 
+    
+    **Parameters**
+        - func: callable(y, t0, ...)
+            Computes the derivative of y at t0 (i.e. the right hand side of the 
+            IVP). Must output a non-scalar numpy.ndarray
+        - y0 : numpy.ndarray
+            Initial condition on y (can be a vector). Must be a non-scalar 
+            numpy.ndarray
+        - t : array
+            A sequence of time points for which to solve for y. The initial 
+            value point should be the first element of this sequence.
+        - args : tuple, optional
+            Extra arguments to pass to function.
+        - full_output : bool, optional
+            True if to return a dictionary of optional outputs as the second 
+            output. Defaults to False
+
+    **Returns**
+        - ys : numpy.ndarray, shape (len(t), len(y0))
+            Array containing the value of y for each desired time in t, with 
+            the initial value y0 in the first row.
+        - infodict : dict, only returned if full_output == True
+            Dictionary containing additional output information
+            KEY         MEANING
+            'fe_seq'    cumulative number of sequential derivative evaluations
+            'fe_tot'    cumulative number of total derivative evaluations
+            'nstp'      cumulative number of successful time steps
+            'h_avg'     average step size if adaptive == "order" (None otherwise)
+            'k_avg'     average extrapolation order if adaptive == "order" 
+                        ... (None otherwise)
+
+    **Other Parameters**
+        - rtol, atol : float, optional
+            The input parameters rtol and atol determine the error control 
+            performed by the solver. The solver will control the vector, 
+            e = y2 - y1, of estimated local errors in y, according to an 
+            inequality of the form l2-norm of (e / (ewt * len(e))) <= 1, 
+            where ewt is a vector of positive error weights computed as 
+            ewt = atol + max(y1, y2) * rtol. rtol and atol can be either vectors
+            the same length as y0 or scalars. Both default to 1.0e-8.
+        - h0 : float, optional
+            The step size to be attempted on the first step. Defaults to 0.5
+        - mxstep : int, optional
+            Maximum number of (internally defined) steps allowed for each
+            integration point in t. Defaults to 10e4
+        - adaptive: string, optional
+            Specifies the strategy of integration. Can take three values:
+            -- "fixed" = use fixed step size and order strategy.
+            -- "step"  = use adaptive step size but fixed order strategy.
+            -- "order" = use adaptive step size and adaptive order strategy.
+            Defaults to "order"
+        - p: int, optional
+            The order of extrapolation if adaptive is not "order", and the 
+            starting order otherwise. Defaults to 4
+
     '''
 
     if len(t) > 2:
@@ -677,9 +734,3 @@ def ex_midpoint_parallel(func, y0, t, args=(), full_output=0, rtol=1.0e-8,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep,
         adaptive=adaptive, p=p, seq=seq)
 
-
-# TODO list:
-# 1) optimize by removing unnecessary array constructions in the compute_stages* functions
-# 2) double check comments are all updated, and add comments to ex_midpoint_parallel
-# 
-#

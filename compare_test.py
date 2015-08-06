@@ -31,9 +31,11 @@ def get_fe(out):
 def relative_error(y, y_ref):
     return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref)
 
-def compare_preformance(func, y0, t0, tf, y_ref, problem_name, is_complex=False, nsteps=10e5, solout=(lambda t: t), nbod_problem=False):
+def compare_preformance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,5), is_complex=False, nsteps=10e5, solout=(lambda t: t), run_odex_code=False):
     print 'RUNNING COMPARISON TEST FOR ' + problem_name
     tol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
+    a, b = tol_boundary
+    tol = tol[a:b]
     extrap_order = 12
     num_threads = 4
 
@@ -43,7 +45,7 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, is_complex=False,
     py_yerr = np.zeros(len(tol))
     py_nstp = np.zeros(len(tol))
 
-    if nbod_problem:
+    if run_odex_code:
         f_dop853_runtime = np.zeros(len(tol))
         f_dop853_fe_seq = np.zeros(len(tol))
         f_dop853_fe_tot = np.zeros(len(tol))
@@ -117,7 +119,7 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, is_complex=False,
         print 'Runtime: ', dop853_runtime[i], ' s   Error: ', dop853_yerr[i], '   fe_seq: ', dop853_fe_seq[i], '   fe_tot: ', dop853_fe_tot[i], '   nstp: ', dop853_nstp[i]
         print ''
 
-        if nbod_problem:
+        if run_odex_code:
             # run Fortran DOP853
             replace_in_file('odex/dr_dop853.f','odex/driver.f','relative_tolerance',str(tol[i]))
             subprocess.call('gfortran -O3 odex/driver.f',shell=True)
@@ -157,7 +159,7 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, is_complex=False,
     print dopri5_runtime, dopri5_fe_seq, dopri5_fe_tot, dopri5_yerr, dopri5_nstp
     print "Final data: DOP853 (scipy)"
     print dop853_runtime, dop853_fe_seq, dop853_fe_tot, dop853_yerr, dop853_nstp
-    if nbod_problem:
+    if run_odex_code:
         print "Final data: Fortran DOP853"
         print f_dop853_runtime, f_dop853_fe_seq, f_dop853_fe_tot, f_dop853_yerr, f_dop853_nstp
         print "Final data: ODEX-P"
@@ -172,7 +174,7 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, is_complex=False,
     py_line,   = plt.loglog(py_yerr, py_runtime, "s-")
     dopri5_line, = plt.loglog(dopri5_yerr, dopri5_runtime, "s-")
     dop853_line, = plt.loglog(dop853_yerr, dop853_runtime, "s-")
-    if nbod_problem:
+    if run_odex_code:
         f_dop853_line, = plt.loglog(f_dop853_yerr, f_dop853_runtime, "s-")
         odex_line, = plt.loglog(odex_yerr, odex_runtime, "s-")
         plt.legend([py_line, f_dop853_line, odex_line, dopri5_line, dop853_line], ["Python Extrap", "Fortran DOP853", "ODEX-P(12)", "DOPRI5 (scipy)", "DOP853 (scipy)"], loc=1)
@@ -184,7 +186,7 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, is_complex=False,
     plt.savefig('images/' + problem_name + '_err_vs_time.png')
     plt.close()
 
-    if nbod_problem:
+    if run_odex_code:
         py_line,   = plt.loglog(py_yerr, py_fe_seq, "s-")
         f_dop853_line, = plt.loglog(f_dop853_yerr, f_dop853_fe_seq, "s-")
         odex_line, = plt.loglog(odex_yerr, odex_fe_seq, "s-")
@@ -228,7 +230,8 @@ def nbod_problem():
     tf = 0.08
     y0 = fnbod.init_fnbod(2400)
     y_ref = np.loadtxt("reference.txt")
-    compare_preformance(nbod_func, y0, t0, tf, y_ref, "nbod_problem", nbod_problem=True)
+    # compare_preformance(nbod_func, y0, t0, tf, y_ref, "nbod_problem", run_odex_code=True)
+    compare_preformance(nbod_func, y0, t0, tf, y_ref, "nbod_problem")
 
 ###### kdv Problem ######
 def kdv_init(t0):
@@ -299,13 +302,13 @@ def burgers_problem():
     tf = 3.
     y0 = burgers_init(t0)
     y_ref = np.loadtxt("reference_burgers.txt")
-    compare_preformance(burgers_func, y0, t0, tf, y_ref, "burgers_problem", nsteps=10e4, is_complex=True, solout=burgers_solout)
+    compare_preformance(burgers_func, y0, t0, tf, y_ref, "burgers_problem", tol_boundary=(0,3), nsteps=10e4, is_complex=True, solout=burgers_solout)
 
 
 ########### RUN TESTS ###########
 if __name__ == "__main__":
     nbod_problem()
-    kdv_problem()
-    # burgers_problem()
+    # kdv_problem()
+    burgers_problem()
 
 

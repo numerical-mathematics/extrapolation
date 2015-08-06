@@ -95,7 +95,7 @@ if __name__ == "__main__":
     N = 64
     x = np.arange(-N/2,N/2)*(2*np.pi/N)
     burgers_ref = np.loadtxt("reference_burgers.txt")
-    rk4_ref = np.squeeze(np.real(np.fft.ifft(burgers_equation(0.18))))
+    rk4_ref = np.squeeze(np.real(np.fft.ifft(burgers_equation(3.))))
     rk4_line, = plt.plot(x, rk4_ref, "s-")
     burgers_line, = plt.plot(x, burgers_ref, "s-")
     plt.legend([rk4_line, burgers_line], ["Rk4", "burgers"], loc=1)
