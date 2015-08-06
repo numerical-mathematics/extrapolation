@@ -59,9 +59,7 @@ def f_5(y,t):
     return fnbod.fnbod(y,t)
 
 def check(err, err_ref, test_num):
-    # assert (np.less_equal(err, err_ref*10)).all(), ("REGRESSION TEST " + str(test_num) + " FAILED")
-    print (np.less_equal(err, err_ref*10))
-    print (np.less_equal(err_ref, err*10))
+    assert (np.less_equal(err, err_ref*10)).all(), ("REGRESSION TEST " + str(test_num) + " FAILED")
 
 ########### RUN TESTS ###########
 if __name__ == "__main__":
