@@ -144,7 +144,7 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
             by (lambda t: 2*t)
         - nworkers: int, optional
             The number of workers working in parallel. If nworkers==None, then 
-            the the number of workers is set to the number of cups on the the
+            the the number of workers is set to the number of CPUs on the the
             running machine. Defaults to None.
     '''
 
@@ -734,7 +734,7 @@ def ex_midpoint_parallel(func, y0, t, args=(), full_output=0, rtol=1.0e-8,
             starting order otherwise. Defaults to 4
         - nworkers: int, optional
             The number of workers working in parallel. If nworkers==None, then 
-            the the number of workers is set to the number of cups on the the
+            the the number of workers is set to the number of CPUs on the the
             running machine. Defaults to None.
     '''
 
