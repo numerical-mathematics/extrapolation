@@ -59,7 +59,9 @@ def f_5(y,t):
     return fnbod.fnbod(y,t)
 
 def check(err, err_ref, test_num):
-    assert (np.less_equal(err, err_ref*10)).all(), ("REGRESSION TEST " + str(test_num) + " FAILED")
+    # assert (np.less_equal(err, err_ref*10)).all(), ("REGRESSION TEST " + str(test_num) + " FAILED")
+    print (np.less_equal(err, err_ref*10))
+    print (np.less_equal(err_ref, err*10))
 
 ########### RUN TESTS ###########
 if __name__ == "__main__":
@@ -68,7 +70,7 @@ if __name__ == "__main__":
     y0 = exact_1(t0)
     y_ref = exact_1(tf)
     err = regression_tst(f_1, y0, [t0, tf], y_ref)
-    err_ref_1 = np.array([5.88838286e-04, 1.81025200e-06, 1.13209455e-08, 7.56285559e-11, 1.38080058e-13, 5.00877951e-14]) 
+    err_ref_1 = np.array([1.02154130e-03, 1.22710679e-05, 9.25784586e-08, 7.71182340e-10, 4.91119065e-12, 4.44094761e-14]) 
     check(err, err_ref_1, 1)
     print err
 
@@ -77,7 +79,7 @@ if __name__ == "__main__":
     y0 = exact_2(t0)
     y_ref = exact_2(tf)
     err = regression_tst(f_2, y0, [t0, tf], y_ref)
-    err_ref_2 = np.array([2.47659081e-04, 3.59278996e-06, 7.14037355e-07, 3.21678516e-09, 1.13278021e-11, 4.61973180e-13]) 
+    err_ref_2 = np.array([8.54505911e-02, 2.48291275e-04, 8.17836269e-07, 2.85969698e-09, 2.54201200e-11, 9.10317032e-13])
     check(err, err_ref_2, 2)
     print err
 
@@ -86,7 +88,7 @@ if __name__ == "__main__":
     y0 = exact_3(t0)
     y_ref = exact_3(tf)
     err = regression_tst(f_3, y0, [t0, tf], y_ref)
-    err_ref_3 = np.array([4.57090672e-06, 2.50348696e-08, 1.07432535e-10, 2.77778815e-12, 2.08628331e-14, 2.49640738e-15]) 
+    err_ref_3 = np.array([1.93968837e-05, 9.48240508e-08, 1.21300220e-09, 2.83645194e-10, 1.74748516e-13, 5.88438882e-15]) 
     check(err, err_ref_3, 3)
     print err
 
@@ -95,7 +97,7 @@ if __name__ == "__main__":
     y0 = exact_4(t0)
     y_ref = exact_4(tf)
     err = regression_tst(f_4, y0, [t0, tf], y_ref)
-    err_ref_4 = np.array([4.55316677e-03, 6.64359288e-05, 2.14299317e-07, 6.15033099e-10, 1.68573340e-11, 3.53697615e-13]) 
+    err_ref_4 = np.array([6.77863684e-03, 9.50343703e-05, 4.90535263e-07, 3.36128205e-09, 2.47615358e-11, 2.92147596e-13]) 
     check(err, err_ref_4, 4)
     print err
 
@@ -104,7 +106,7 @@ if __name__ == "__main__":
     y0 = fnbod.init_fnbod(2400)
     y_ref = np.loadtxt("reference.txt")
     err = regression_tst(f_5, y0, [t0, tf], y_ref)
-    err_ref_5 = np.array([4.88309757e-01, 1.41317737e-01, 1.40019042e-03, 1.25488605e-04, 2.74782735e-07, 3.21542638e-09]) 
+    err_ref_5 = np.array([4.37570440e-01, 8.00304222e-02, 1.61054385e-03, 1.02688616e-05, 1.97577888e-07, 1.73545176e-09]) 
     check(err, err_ref_5, 5)
     print err
 
@@ -113,7 +115,7 @@ if __name__ == "__main__":
     y0 = kdv_init(t0)
     y_ref = np.loadtxt("reference_kdv.txt")
     err = regression_tst(kdv_func, y0, [t0, tf], y_ref, solout=kdv_solout)
-    err_ref_6 = np.array([1.77032382e-05, 8.79188769e-08, 1.14493849e-09, 4.88142372e-12, 7.11948506e-12, 6.82866795e-13]) 
+    err_ref_6 = np.array([1.20373187e-05, 7.98230720e-08, 1.63759715e-10, 1.75095038e-12, 3.66764576e-12, 1.69146958e-12]) 
     check(err, err_ref_6, 6)
     print err
 
@@ -122,6 +124,6 @@ if __name__ == "__main__":
     y0 = burgers_init(t0)
     y_ref = np.loadtxt("reference_burgers.txt")
     err = regression_tst(burgers_func, y0, [t0, tf], y_ref, solout=burgers_solout, tol_boundary=(0,4))
-    err_ref_7 = np.array([3.48157737e-10, 4.45753764e-11, 6.35315497e-13, 2.45959376e-14]) 
+    err_ref_7 = np.array([6.92934673e-09, 4.45755379e-11, 6.26721092e-13, 2.49897416e-14]) 
     check(err, err_ref_7, 7)
     print err
