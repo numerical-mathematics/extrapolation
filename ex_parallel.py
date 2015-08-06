@@ -3,11 +3,18 @@ import numpy as np
 import multiprocessing as mp
 import math
 
-try:
-    NUM_WORKERS = mp.cpu_count()
-except NotImplementedError:
-    NUM_WORKERS = 4
+NUM_WORKERS = None
 
+def set_NUM_WORKERS(nworkers):
+    global NUM_WORKERS
+    if nworkers == None:
+        try:
+            NUM_WORKERS = mp.cpu_count()
+        except NotImplementedError:
+            NUM_WORKERS = 4
+    else: 
+        NUM_WORKERS = max(nworkers, 1)
+    print NUM_WORKERS
 
 def error_norm(y1, y2, atol, rtol):
     tol = atol + np.maximum(y1,y2)*rtol
@@ -74,7 +81,7 @@ def adapt_step(method, func, tn_1, yn_1, args, y, y_hat, h, p, atol, rtol, pool,
 
 def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
         rtol=1.0e-8, atol=1.0e-8, h0=0.5, mxstep=10e4, adaptive="order", p=4,
-        seq=(lambda t: 2*t)):
+        seq=(lambda t: 2*t), nworkers=None):
     '''
     Solves the system of IVPs dy/dt = func(y, t0, ...) with parallel extrapolation. 
     
@@ -136,8 +143,14 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
         - seq: callable(k) (k: positive int), optional
             The step-number sequence. Defaults to the harmonic sequence given 
             by (lambda t: 2*t)
+        - nworkers: int, optional
+            The number of workers working in parallel. If nworkers==None, then 
+            the the number of workers is set to the number of cups on the the
+            running machine. Defaults to None.
     '''
 
+    set_NUM_WORKERS(nworkers)
+    
     pool = mp.Pool(NUM_WORKERS)
 
     assert len(t) > 1, ("the array t must be of length at least 2, " + 
@@ -660,7 +673,7 @@ def midpoint_adapt_order(func, tn, yn, args, h, k, atol, rtol, pool,
         return (y, h, k, h_new, k_new, (fe_seq, fe_tot))
 
 def ex_midpoint_parallel(func, y0, t, args=(), full_output=0, rtol=1.0e-8,
-        atol=1.0e-8, h0=0.5, mxstep=10e4, adaptive="order", p=4):
+        atol=1.0e-8, h0=0.5, mxstep=10e4, adaptive="order", p=4, nworkers=None):
     '''
     (An instantiation of extrapolation_parallel() function with the midpoint 
     method.)
@@ -720,7 +733,10 @@ def ex_midpoint_parallel(func, y0, t, args=(), full_output=0, rtol=1.0e-8,
         - p: int, optional
             The order of extrapolation if adaptive is not "order", and the 
             starting order otherwise. Defaults to 4
-
+        - nworkers: int, optional
+            The number of workers working in parallel. If nworkers==None, then 
+            the the number of workers is set to the number of cups on the the
+            running machine. Defaults to None.
     '''
 
     if len(t) > 2:
@@ -732,5 +748,5 @@ def ex_midpoint_parallel(func, y0, t, args=(), full_output=0, rtol=1.0e-8,
 
     return extrapolation_parallel(method, func, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep,
-        adaptive=adaptive, p=p, seq=seq)
+        adaptive=adaptive, p=p, seq=seq, nworkers=nworkers)
 

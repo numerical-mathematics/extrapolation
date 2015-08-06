@@ -11,7 +11,7 @@ def relative_error(y, y_ref):
     return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref)
 
 def regression_tst(func, y0, t, y_ref, tol_boundary=(0,6), h0=0.5, mxstep=10e4,
-        adaptive="order", p=4, solout=(lambda t: t)):
+        adaptive="order", p=4, solout=(lambda t: t), nworkers=2):
     tol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
     a, b = tol_boundary
     tol = tol[a:b]
@@ -21,7 +21,7 @@ def regression_tst(func, y0, t, y_ref, tol_boundary=(0,6), h0=0.5, mxstep=10e4,
     for i in range(len(tol)):
         print tol[i]
         ys, infodict = ex_p.ex_midpoint_parallel(func, y0, t, atol=tol[i], 
-            rtol=tol[i], mxstep=mxstep, adaptive="order", full_output=True)
+            rtol=tol[i], mxstep=mxstep, adaptive="order", full_output=True, nworkers=nworkers)
         y = solout(ys[1:len(ys)])
         err[i] = relative_error(y, y_ref)
     return err
