@@ -14,7 +14,6 @@ def set_NUM_WORKERS(nworkers):
             NUM_WORKERS = 4
     else: 
         NUM_WORKERS = max(nworkers, 1)
-    print NUM_WORKERS
 
 def error_norm(y1, y2, atol, rtol):
     tol = atol + np.maximum(y1,y2)*rtol
