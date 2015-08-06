@@ -4,13 +4,16 @@ import math
 import time
 import cProfile
 
-# import matplotlib
-# matplotlib.use('agg')
+import matplotlib
+matplotlib.use('agg')
 import matplotlib.pyplot as plt
 
 import ex_serial as ex_s
 import ex_parallel as ex_p
 import fnbod
+
+def relative_error(y, y_ref):
+    return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref)
 
 def tst_convergence(f, t0, tf, y0, order, exact, method, title="tst_convergence"):
     '''
@@ -46,12 +49,13 @@ def tst_convergence(f, t0, tf, y0, order, exact, method, title="tst_convergence"
     plt.ylabel('||error||')
     plt.xlabel('time step size')
     plt.show()
+    return err
 
 def tst_adaptive(f, t0, tf, y0, order, exact, method, title="tst_adaptive"):
     '''
         Runs a test, integrating a system of initial value problems y'(t) = f(y, t)
         with the given adaptive step size and adaptive order extrapolation method
-        using a sequence of absolute tolerance of local error.
+        using a sequence of tolerances for local error.
         Creates a plot of the number of f evaluations versus the global error.
 
         **Inputs**:
@@ -86,10 +90,8 @@ def tst_adaptive(f, t0, tf, y0, order, exact, method, title="tst_adaptive"):
     plt.xlabel('||error||')
     plt.ylabel('fe')
     plt.show()
+    return (err_step, err_order)
 
-
-def rel_error_norm(y, y_ref):
-    return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref*len(y_ref))
 
 def tst_parallel_vs_serial(f, t0, tf, y0, title="tst_parallel_vs_serial"):
     tol = np.asarray([10**(-k) for k in range(3, 14)])
@@ -109,12 +111,12 @@ def tst_parallel_vs_serial(f, t0, tf, y0, title="tst_parallel_vs_serial"):
         y_, infodict = ex_p.ex_midpoint_parallel(f, y0, [t0, tf], atol=(tol[i]), rtol=(tol[i]), adaptive="order", full_output=True)
         parallel_time = time.time() - time_
         fe_seq[i], fe_tot[i], h_avg_, k_avg_ = infodict['fe_seq'], infodict['fe_tot'], infodict['h_avg'], infodict['k_avg']
-        err_p[i] = rel_error_norm(y_[-1], y_ref)
+        err_p[i] = relative_error(y_[-1], y_ref)
         print "parallel = " + '%g' % (parallel_time) + "\terr  = " + '%e' % err_p[i] + "\th_avg = " + '%e' % h_avg_ + "\tk_avg = " + '%e' % k_avg_ + "\tfe_s1 = " + str(fe_seq[i]) + "\tfe_t1 = " + str(fe_tot[i]) + "\tfe_t1/fe_s1 = " + '%g' % (fe_tot[i]/fe_seq[i])
         time_ = time.time()
         y, fe, h_avg, k_avg = ex_s.ex_midpoint_serial(f, t0, tf, y0, atol=(tol[i]), rtol=(tol[i]), adaptive="order")
         serial_time = time.time() - time_
-        err_s[i] = rel_error_norm(y, y_ref)
+        err_s[i] = relative_error(y, y_ref)
         print "serial   = " + '%g' % (serial_time)   + "\terr  = " + '%e' % err_s[i] + "\th_avg = " + '%e' % h_avg + "\tk_avg = " + '%e' % k_avg + "\tfe_s2 = " + str(fe) + "\tfe_t2 = " + str(fe) + "\tfe_s2/fe_s1 = " + '%g' % (fe/fe_seq[i])
         time_ratio[i] = serial_time / parallel_time
         fe_diff[i] = fe_seq[i] - fe
@@ -123,30 +125,14 @@ def tst_parallel_vs_serial(f, t0, tf, y0, title="tst_parallel_vs_serial"):
         print "ratio    = " + '%g' % (time_ratio[i]) + "\tdiff = " + '%e' %(err_p[i] - err_s[i]) + "\tdiff  = " + '%e' %(h_avg_diff[i]) + "\tdiff  = " + '%e' %(k_avg_diff[i]) + "\tdiff  = " + str(fe_diff[i]) + "\tdiff  = " + str(fe_tot[i] - fe) + "\ttime_ratio/(fe_s2/fe_s1) = " + '%g' % (time_ratio[i]/(fe/fe_seq[i]))
         print
 
-if __name__ == "__main__":
-   # plt.hold('true')
-   # plt.semilogx(tol, time_ratio, "s-")
-   # plt.semilogx(tol, [1]*len(tol))
-   # plt.title(title)
-   # plt.xlabel('tol')
-   # plt.ylabel('serial time / parallel time')
-   # plt.show()
-
-   # plt.hold('true')
-   # plt.semilogx(tol, fe_diff, "s-")
-   # plt.semilogx(tol, [0]*len(tol))
-   # plt.title(title)
-   # plt.xlabel('tol')
-   # plt.ylabel('fe_parallel - fe_seq')
-   # plt.show()
-   pass
+    return (err_p, err_s)
 
 
 def tst(f, t0, tf, exact, test_name):
 
     # tst_parallel_vs_serial(f, t0, tf, exact(t0), 4, exact, ex_s.ex_midpoint_serial,
     #     title="tst_parallel_vs_serial")
-
+    
     for i in range(4, 6):    
         tst_convergence(f, t0, tf, exact(t0), i, exact, ex_s.ex_euler_serial,
             title=(test_name + ": fixed step (Euler)"))
@@ -233,7 +219,7 @@ def test5():
     t0 = 0
     tf = 0.08
     y0 = fnbod.init_fnbod(n)
-    tst_parallel_vs_serial(f_5, t0, tf, y0, title="tst_parallel_vs_serial w/ N = " + str(n))
+    return tst_parallel_vs_serial(f_5, t0, tf, y0, title="tst_parallel_vs_serial w/ N = " + str(n))
 
 def cprofile_tst():
     bodys = 200
@@ -251,16 +237,6 @@ def cprofile_tst():
     h_avg, k_avg = infodict['h_avg'], infodict['k_avg']
     print "h_avg = " + str(h_avg) + "\tk_avg = " + str(k_avg)
 
-if __name__ == "__main__":
-    # t0 = 0
-    # tf = 10
-    # tol = 10**(-9)
-    # print ex_p.ex_midpoint_parallel(f_2, exact_2(t0), [t0, tf], atol=tol, rtol=tol, adaptive="order")
-    # print ex_p.ex_midpoint_parallel(f_2, exact_2(t0), [t0, tf], atol=tol, rtol=tol, adaptive="order")
-    # print ex_p.ex_midpoint_parallel(f_3, exact_3(t0), [t0, tf], atol=tol, rtol=tol, adaptive="order")
-    # print ex_p.ex_midpoint_parallel(f_4, exact_4(t0), [t0, tf], atol=tol, rtol=tol, adaptive="order")
-    # print ex_p.ex_midpoint_parallel(f_5, exact_5(t0), [t0, tf], atol=tol, rtol=tol, adaptive="order")
-    pass
 
 import multiprocessing as mp
 import random
@@ -274,10 +250,9 @@ def exact_6(t):
 def test_interpolation():
     f = f_6
     exact = lambda t: np.array([math.cos(t)])
-    t0 = random.random()*math.pi
+    t0 = 0
+    # t0 = random.random()*math.pi
     h = t0+2*math.pi
-    # t0 = 0
-    # h = t0+2*math.pi
     pool = mp.Pool(mp.cpu_count())    
     seq = lambda t: 4*t -2
     dense = True
@@ -298,7 +273,7 @@ def test_interpolation():
         plt.legend([line_exact, line_poly], ["exact", "poly w/ k=" + str(k)], loc=4)
         plt.show()
         
-        err[k] = rel_error_norm(ys_poly, ys_exact)
+        err[k] = relative_error(ys_poly, ys_exact)
         line_error, = plt.semilogy(ts, abs(ys_exact - ys_poly))
         plt.legend([line_error], ["error w/ k=" + str(k)], loc=4)
         plt.show()
@@ -327,7 +302,7 @@ def test_dense():
         line_sol, = plt.plot(t, ys, "s-")
         plt.legend([line_exact, line_sol], ["exact", "sol w/ tol =" + str(tol[i])], loc=4)
         plt.show()
-        err[i] = rel_error_norm(ys, ys_exact)
+        err[i] = relative_error(ys, ys_exact)
         line_error, = plt.semilogy(t, abs(ys_exact - ys), "s-")
         plt.legend([line_error], ["error"], loc=4)
         plt.show()

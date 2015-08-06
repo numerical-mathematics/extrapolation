@@ -6,7 +6,7 @@ from scipy.integrate import complex_ode
 import ex_parallel as ex_p
 
 def relative_error(y, y_ref):
-    return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref*len(y_ref))
+    return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref)
 
 # reference for kdv problem  
 def kdv_reference():

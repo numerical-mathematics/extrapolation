@@ -73,7 +73,7 @@ def burgers_equation(tmax):
     return uhat
 
 def relative_error(y, y_ref):
-    return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref*len(y_ref))
+    return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref)
 
 # compare the computed reference solutions from create_reference.py 
 # with those solution from the RK4 code above

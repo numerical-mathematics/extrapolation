@@ -31,7 +31,7 @@ def get_fe(out):
 def relative_error(y, y_ref):
     return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref)
 
-def compare_preformance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,5), is_complex=False, nsteps=10e5, solout=(lambda t: t), run_odex_code=False):
+def compare_preformance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6), is_complex=False, nsteps=10e5, solout=(lambda t: t), run_odex_code=False):
     print 'RUNNING COMPARISON TEST FOR ' + problem_name
     tol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
     a, b = tol_boundary
