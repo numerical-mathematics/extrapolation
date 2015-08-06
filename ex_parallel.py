@@ -564,17 +564,17 @@ def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
 
 def midpoint_fixed_step(func, tn, yn, args, h, p, pool, seq=(lambda t: 2*t),
         dense=False):
-    r = int(round(p/2))
+    k = int(round(p/2))
     if dense:
         T, fe_seq, fe_tot, y0, Tkk, f_Tkk, y_half, f_yj, hs = compute_ex_table(
-            func, tn, yn, args, h, r, pool, seq=seq, dense=dense)
-        poly = interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, r, atol, rtol,
+            func, tn, yn, args, h, k, pool, seq=seq, dense=dense)
+        poly = interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k, atol, rtol,
             seq=seq)
-        return (T[r,r], T[r-1,r-1], (fe_seq, fe_tot), poly)
+        return (T[k,k], T[k-1,k-1], (fe_seq, fe_tot), poly)
     else:
-        T, fe_seq, fe_tot = compute_ex_table(func, tn, yn, args, h, r, pool,
+        T, fe_seq, fe_tot = compute_ex_table(func, tn, yn, args, h, k, pool,
             seq=seq, dense=dense)
-        return (T[r,r], T[r-1,r-1], (fe_seq, fe_tot))
+        return (T[k,k], T[k-1,k-1], (fe_seq, fe_tot))
 
 def midpoint_adapt_order(func, tn, yn, args, h, k, atol, rtol, pool,
         seq=(lambda t: 2*t), dense=False):
