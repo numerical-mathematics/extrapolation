@@ -22,6 +22,8 @@ def error_norm(y1, y2, atol, rtol):
 def adapt_step(method, func, tn_1, yn_1, args, y, y_hat, h, p, atol, rtol, pool,
         seq=(lambda t: 2*t), dense=False):
     '''
+        Only called when adaptive == 'step'; i.e., for fixed order.
+
         Checks if the step size is accepted. If not, computes a new step size
         and checks again. Repeats until step size is accepted 
 
@@ -166,6 +168,7 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
     cur_stp = 0
 
     if adaptive == "fixed":
+        # Doesn't work correctly with dense output
         ts, h = np.linspace(t0, t[-1], (t[-1]-t0)/h0 + 1, retstep=True)
         y = 1*y0
 
@@ -393,6 +396,18 @@ def balance_load(k, seq=(lambda t: 2*t)):
 
 def compute_ex_table(func, tn, yn, args, h, k, pool, seq=(lambda t: 2*t),
         dense=False):
+    """
+    **Inputs**:
+
+        - func:         RHS of ODE
+        - tn, yn:       time and solution values from previous step
+        - args:         any extra args to func
+        - h:            proposed step size
+        - k:            proposed # of extrapolation iterations
+        - pool:         parallel worker pool
+        - seq:          extrapolation step number sequence
+        - dense:        whether to provide dense output
+    """
     T = np.zeros((k+1,k+1, len(yn)), dtype=(type(yn[0])))
     k_nj_lst, fe_seq, fe_tot = balance_load(k, seq=seq)
     jobs = [(func, tn, yn, args, h, k_nj) for k_nj in k_nj_lst]
@@ -419,6 +434,7 @@ def compute_ex_table(func, tn, yn, args, h, k, pool, seq=(lambda t: 2*t),
                 T[k_, 1] = Tk_
 
     # compute extrapolation table 
+    # only correct for midpoint method
     for i in range(2, k+1):
         for j in range(i, k+1):
             T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j)/(seq(j-i+1)))**2 - 1)
@@ -434,6 +450,7 @@ def compute_ex_table(func, tn, yn, args, h, k, pool, seq=(lambda t: 2*t),
 
 
 def finite_diff(j, f_yj, hj):
+    # Called by interpolate
     max_order = 2*j
     nj = len(f_yj) - 1
     coeff = [1,1]
@@ -452,6 +469,7 @@ def finite_diff(j, f_yj, hj):
     return dj
 
 def compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
+    # Called by interpolate
     dj_kappa = np.zeros((2*k+1, k+1), dtype=(type(y_half[1])))
     ds = np.zeros((2*k+1), dtype=(type(y_half[1])))
     
@@ -594,10 +612,14 @@ def midpoint_adapt_order(func, tn, yn, args, h, k, atol, rtol, pool,
     k_min = 3
     k = min(k_max, max(k_min, k))
     def A_k(k):
+        """
+           Expected time to compute k lines of the extrapolation table,
+           in units of RHS evaluations.
+        """
         sum_ = 0
         for i in range(k):
             sum_ += seq(i+1)
-        return max(seq(k), sum_/NUM_WORKERS)
+        return max(seq(k), sum_/NUM_WORKERS) # The second value is only an estimate
 
     H_k = lambda h, k, err_k: h*0.94*(0.65/err_k)**(1/(2*k-1)) 
     W_k = lambda Ak, Hk: Ak/Hk
