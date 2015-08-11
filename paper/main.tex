@@ -11,8 +11,10 @@
 %
 % For tracking purposes => this is v1.3 - March 2012
 
+
 \documentclass[prodmode,acmtecs]{acmsmall} % Aptara syntax
 
+\usepackage{amsmath}
 % Package to generate and customize Algorithm as per ACM style
 \usepackage[ruled]{algorithm2e}
 \renewcommand{\algorithmcfname}{ALGORITHM}
@@ -139,11 +141,55 @@ Introduce extrapolation methods here and review previous work.
 \section{Parallel Extrapolation}
 Describe algorithmic details including parallel load balancing, adaptivity, and dense output.
 
-
 \section{Numerical results}
-Compare our solver with existing solvers on some test problems.
+In this section we compare our code to $DOPRI5$ and $DOP853$ integrators from $scipy.integrate.ode$. We ran the comparison test on three problems: N-body problem, Burgers' equation, and Korteweg-de Vries (KdV) equation. For each problem, we compared the relative global error in the final solution vs. wall clock time. The reference solutions used for each problem were computed at tight tolerances. The tests were run on a workstation with two 2.66 GHz quad-core Intel Xeon processors.
 
-\section{Conclusions}
+\subsection{N-body problem}
+We tested with $N = 400$. The initial time was 0, and the final time was set to $T = 0.008$.
+\begin{figure}[h]
+\includegraphics[scale=0.5]{../images/nbod_problem_err_vs_time.png}
+\centering
+\caption{Runtime versus achieved relative error for N-body problem}
+\end{figure} 
+
+\subsection{Burgers' equation ($u_t+uu_x=\epsilon u_{xx}$)}
+We transform Burgers' equation to a non-stiff ODE by taking the Fourier transform and replacing each $x$-derivative by $i\xi$. We get the equivalent ODE
+\begin{align*}
+\hat{U}'(t) = - \frac{i\xi}{2} e^{\left( \xi^2 \epsilon t \right)} 
+  \mathcal{F} \left\{
+      \left[
+          \mathcal{F}^{-1} \left(
+              e^{\left( -\xi^2 \epsilon t \right)}\hat{U}
+          \right)
+      \right]^2
+  \right\}
+\end{align*}
+Here $\mathcal{F}$ is the Fourier transform, and $\hat{U} = e^{\xi^2 \epsilon t} \hat{u}$ ($\hat{u}$ is the Fourier transform of $u$).
+
+We tested with $\epsilon = 0.1$, $x \in [-\pi,\pi]$, and a grid size of $N=64$. The initial time and value were $t_0=0$ and $u(0) = \sin(x)^2$ for $x \in [-\pi,0]$ and $0$ otherwise. The final time was set to $T = 3$.
+\begin{figure}[h]
+\includegraphics[scale=0.5]{../images/burgers_problem_err_vs_time.png}
+\centering
+\caption{Runtime versus achieved relative error for Burgers' equation}
+\end{figure}
+
+\subsection{KdV equation ($u_t+uu_x+u_{xxx}=0$)}
+Similar to Burger's equation, we transform KdV equation to the equivalent non-stiff ODE
+\begin{align*}
+\hat{U}'(t) = - \frac{i \xi}{2} e^{\left( -i\xi^3 t \right)}
+    \mathcal F \left\{
+        \left[ \mathcal F^{-1} \left( e^{\left(i\xi^3 t \right)} \hat{U} \right) \right]^2
+    \right\}.
+\end{align*}
+Here $\mathcal{F}$ is the Fourier transform, and $\hat{U} = e^{\left( -i\xi^3 t \right)} \hat{u}$ ($\hat{u}$ is the Fourier transform of $u$).
+
+We tested with $x \in [-\pi,\pi]$, and a grid size of $N=256$. The initial time and value were $t_0=0$ and $u(0) = 3*25^2/\cosh(0.5*(25*(x+2.)))^2 + 3*16^2/\cosh(0.5*(16*(x+1)))^2 $. The final time was set to $T = 0.003$.
+\begin{figure}[h]
+\includegraphics[scale=0.5]{../images/kdv_problem_err_vs_time.png}
+\centering
+\caption{Runtime versus achieved relative error for KdV equation}
+\end{figure}
+
 
 % Start of "Sample References" section
 
