@@ -308,8 +308,7 @@ def ex_euler_serial(f, t0, tf, y0, adaptive="order", p=4, step_size=0.5, atol=0,
     method = euler_fixed_step
 
     if adaptive == "order":
-        # not implemented yet, so change to adaptive step for now 
-        adaptive = "step"
+        raise NotImplementedError
 
     return extrapolation_serial(method, f, t0, tf, y0, 
         adaptive=adaptive, p=p, step_size=step_size, atol=atol, rtol=rtol, 
