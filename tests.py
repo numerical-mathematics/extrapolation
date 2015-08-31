@@ -78,7 +78,7 @@ def tst_adaptive(f, t0, tf, y0, order, exact, method, title="tst_adaptive"):
     for i in range(len(tol)):
         y, fe_step[i] = method(f, t0, tf, y0, p=order, atol=(tol[i]), rtol=(tol[i]), exact=exact, adaptive="step")
         err_step[i] = np.linalg.norm(y - exact(tf))
-        y, fe_order[i] = method(f, t0, tf, y0, p=order, atol=(tol[i]), rtol=(tol[i]), exact=exact, adaptive="order")
+        y, fe_order[i], _, _ = method(f, t0, tf, y0, p=order, atol=(tol[i]), rtol=(tol[i]), exact=exact, adaptive="order")
         err_order[i] = np.linalg.norm(y - exact(tf))
 
     plt.hold('true')
@@ -136,8 +136,9 @@ def tst(f, t0, tf, exact, test_name):
     for i in range(4, 6):    
         tst_convergence(f, t0, tf, exact(t0), i, exact, ex_s.ex_euler_serial,
             title=(test_name + ": fixed step (Euler)"))
-        tst_adaptive(f, t0, tf, exact(t0), i, exact, ex_s.ex_euler_serial,
-             title=(test_name + ": adaptive Euler"))
+        # Not yet implemented:
+        #tst_adaptive(f, t0, tf, exact(t0), i, exact, ex_s.ex_euler_serial,
+        #     title=(test_name + ": adaptive Euler"))
     for i in range(4, 12, 2):    
         tst_convergence(f, t0, tf, exact(t0), i, exact, ex_s.ex_midpoint_serial,
             title=(test_name + ": fixed step (midpoint)"))
