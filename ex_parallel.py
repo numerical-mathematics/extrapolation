@@ -2,6 +2,8 @@ from __future__ import division
 import numpy as np
 import multiprocessing as mp
 import math
+from scipy import optimize
+import os
 
 NUM_WORKERS = None
 
@@ -97,7 +99,8 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
             numpy.ndarray
         - t : array
             A sequence of time points for which to solve for y. The initial 
-            value point should be the first element of this sequence.
+            value point should be the first element of this sequence. And the last 
+            one the final time
         - args : tuple, optional
             Extra arguments to pass to function.
         - full_output : bool, optional
@@ -215,6 +218,8 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
                         method, func, t_curr, y, args, y_, y_hat, h, p, atol, 
                         rtol, pool, seq=seq, dense=dense)
                     reject_inter = False
+                    # For all points specified for dense output in the interval calculated
+                    # use the polynomial to interpolate their values
                     while t_index < len(t) and t[t_index] <= t_curr + h:
                         y_poly, errint, h_int = poly((t[t_index] - t_curr)/h)
                         
@@ -332,9 +337,13 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
     else:
         return ys
     
+    
+#TODO: merge code with compute_stages
+#TODO: remove hard-coded midpoint method
 def compute_stages_dense((func, tn, yn, args, h, k_nj_lst)):
     res = []
-    for (k, nj) in k_nj_lst:
+#     k, nj = k_nj[0]
+    for (k,nj) in k_nj_lst:
         nj = int(nj)
         Y = np.zeros((nj+1, len(yn)), dtype=(type(yn[0])))
         f_yj = np.zeros((nj+1, len(yn)), dtype=(type(yn[0])))
@@ -346,21 +355,62 @@ def compute_stages_dense((func, tn, yn, args, h, k_nj_lst)):
                 y_half = Y[j-1]
             f_yj[j-1] = func(*(Y[j-1], tn + (j-1)*(h/nj)) + args)
             Y[j] = Y[j-2] + (2*h/nj)*f_yj[j-1]
-
+    
         f_yj[nj] = func(*(Y[nj], tn + h) + args)
         res += [(k, nj, Y[nj], y_half, f_yj)]
 
     return res
 
+
 def compute_stages((func, tn, yn, args, h, k_nj_lst)):
     res = []
-    for (k, nj) in k_nj_lst:
+    #k, nj = k_nj[0]
+    for (k,nj) in k_nj_lst:
         nj = int(nj)
         Y = np.zeros((nj+1, len(yn)), dtype=(type(yn[0])))
         Y[0] = yn
         Y[1] = Y[0] + h/nj*func(*(Y[0], tn) +args)
+        #Use midpoint method to calculate point at tn+h using nj intermediate points
         for j in range(2,nj+1):
             Y[j] = Y[j-2] + (2*h/nj)*func(*(Y[j-1], tn + (j-1)*(h/nj))+ args)
+#             print(str(os.getpid()) + " " + str(Y[j]))
+        res += [(k, nj, Y[nj])]
+
+    return res
+
+
+def midpoint_zero_function(f,previousValue,step,timeOfMiddleStep):
+    """
+    Creates midpoint function method formula u_n+1=u_n+h*f(
+    
+    @param f: derivative of u(t) (ODE RHS, f(u,t))
+    @param previousValue: previous solution value used to obtain of next point
+    @param step: step length
+    @param timeOfMiddleStep: time of the midpoint value
+    
+    @return implicit method's formula (time at zero is our solution)
+    """
+    def func(x):
+        return x-previousValue-step*f((previousValue+x)/2, timeOfMiddleStep)
+    
+    return func
+
+#TODO: Implicit method does not work for func having explicit time dependence
+def compute_stages_implicit((func, tn, yn, args, h, k_nj_lst)):
+    res = []
+#     print(str(os.getpid()) + " " +"entra")
+    for (k, nj) in k_nj_lst:
+        nj = int(nj)
+        Y = np.zeros((nj+1, len(yn)), dtype=(type(yn[0])))
+        Y[0] = yn
+        #Use midpoint method to calculate point at tn+h using nj intermediate points
+        for j in range(1,nj+1):
+            previousValue = Y[j-1]
+            step = h/nj
+            #Check if this is better for newton initial value:
+            estimatedValueExplicit=previousValue+step*func(previousValue,tn + (j-1)*(h/nj))
+            Y[j] = optimize.fsolve(midpoint_zero_function(func, previousValue, step, tn + (j-1/2)*(h/nj)),estimatedValueExplicit)
+#             print(str(os.getpid()) + " " + str(Y[j]))
         res += [(k, nj, Y[nj])]
 
     return res
@@ -434,7 +484,8 @@ def compute_ex_table(func, tn, yn, args, h, k, pool, seq=(lambda t: 2*t),
                 T[k_, 1] = Tk_
 
     # compute extrapolation table 
-    # only correct for midpoint method
+    # only correct for midpoint method, use for non-symmetric methods:
+    #T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j)/(seq(j-i+1))) - 1)
     for i in range(2, k+1):
         for j in range(i, k+1):
             T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j)/(seq(j-i+1)))**2 - 1)
@@ -631,7 +682,7 @@ def midpoint_adapt_order(func, tn, yn, args, h, k, atol, rtol, pool,
         T, fe_seq, fe_tot = compute_ex_table(func, tn, yn, args, h, k, pool,
             seq=seq, dense=dense)
 
-    # compute the error and work function for the stages k-2 and k
+    # compute the error and work function for the stages k-2, k-1 and k
     err_k_2 = error_norm(T[k-2,k-3], T[k-2,k-2], atol, rtol)
     err_k_1 = error_norm(T[k-1,k-2], T[k-1,k-1], atol, rtol)
     err_k   = error_norm(T[k,k-1],   T[k,k],     atol, rtol)

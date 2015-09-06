@@ -59,7 +59,14 @@ def f_5(y,t):
     return fnbod.fnbod(y,t)
 
 def check(err, err_ref, test_num):
-    assert (np.less_equal(err, err_ref*10)).all(), ("REGRESSION TEST " + str(test_num) + " FAILED")
+    """
+    Checks if err equals err_ref, returns silently if err equals err_ref (matching 10 decimals)
+    or raises an exception otherwise
+    @param err: calculated error
+    @param err_ref: expected error
+    @param test_num: test number (TODO: change by tests explanation and/or explanatory name
+    """
+    np.testing.assert_array_almost_equal(err, err_ref, 10, "REGRESSION TEST " + str(test_num) + " FAILED")
 
 ########### RUN TESTS ###########
 if __name__ == "__main__":
@@ -104,7 +111,7 @@ if __name__ == "__main__":
     y0 = fnbod.init_fnbod(2400)
     y_ref = np.loadtxt("reference.txt")
     err = regression_tst(f_5, y0, [t0, tf], y_ref)
-    err_ref_5 = np.array([4.37570440e-01, 8.00304222e-02, 1.61054385e-03, 1.02688616e-05, 1.97577888e-07, 1.73545176e-09]) 
+    err_ref_5 = np.array([4.6785364959e-01, 8.0415058627e-02, 1.6090309508e-03, 1.0235932826e-05, 1.0988144963e-07, 1.1568408676e-09]) 
     check(err, err_ref_5, 5)
     print err
 

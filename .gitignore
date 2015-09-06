@@ -60,3 +60,5 @@ target/
 a.out
 
 old_images/
+/.project
+/.pydevproject
