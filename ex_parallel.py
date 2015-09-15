@@ -37,6 +37,14 @@ def method_implicit/explicit(f,previousValue/previousValues,previousTime,step)
     explicit -> return the next estimated solution value and the f evaluation
 '''''
 
+def solve_implicit_step(zero_f):
+    '''
+    
+    @param zero_f: function to find the root of (estimation of next step)
+    '''
+    estimatedValueExplicit=previousValue+step/2*f(previousValue)
+    return optimize.newton_krylov(zero_f,estimatedValueExplicit)
+
 def midpoint_implicit(f,previousValues, previousTime,step, args):
     """
     Creates midpoint function method formula u_n+1=u_n+h*f(
@@ -46,14 +54,14 @@ def midpoint_implicit(f,previousValues, previousTime,step, args):
     @param previousTime: time at which previous solution is found
     @param step: step length
     
-    @return implicit method's formula (time at zero is our solution)
+    @return implicit method's solution
     """
     previousPreviousValue, previousValue = previousValues
     
-    def func(x):
+    def zero_func(x):
         return x-previousValue-step*f(*((previousValue+x)/2, previousTime+step/2) + args)
     
-    return func
+    return (solve_implicit_step(zero_func), None)
 
 
 def midpoint_explicit(f,previousValues, previousTime, step, args):
@@ -69,21 +77,38 @@ def midpoint_explicit(f,previousValues, previousTime, step, args):
     """
     previousPreviousValue, previousValue = previousValues
     
-    if(previousPreviousValue==None):
-        previousPreviousValue=euler_explicit(f, previousValues, previousTime, step)
-
-    return previousPreviousValue + (2*step)*f(*(previousValue, previousTime)+args)
+    if(previousPreviousValue is None):
+        return euler_explicit(f, previousValues, previousTime, step, args)
+    
+    f_yj = f(*(previousValue, previousTime)+args)
+    return (previousPreviousValue + (2*step)*f_yj, f_yj)
 
 def euler_explicit(f,previousValues, previousTime,step, args):
     previousPreviousValue, previousValue = previousValues
-
-    return previousValue + step*f(*(previousValue, previousTime)+args)
+    f_yj = f(*(previousValue, previousTime)+args)
+    return (previousValue + step*f_yj, f_yj)
 
 
 '''''
 END: ODE numerical methods formulas (explicit and implicit)
 '''''
 
+def compute_stages((method, func, tn, yn, args, h, k_nj_lst)):
+    res = []
+    for (k,nj) in k_nj_lst:
+        nj = int(nj)
+        Y = np.zeros((nj+1, len(yn)), dtype=(type(yn[0])))
+        f_yj = np.zeros((nj+1, len(yn)), dtype=(type(yn[0])))
+        Y[0] = yn
+        step = h/nj
+
+        Y[1],f_yj[0] = method(func,(None, Y[0]), tn, step, args)
+        for j in range(2,nj+1):
+            Y[j],f_yj[j-1] = method(func,(Y[j-2], Y[j-1]), tn + (j-1)*(h/nj), step, args)
+        y_half = Y[nj/2]
+        res += [(k, nj, Y[nj], y_half, f_yj)]
+
+    return res
 
 def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
         rtol=1.0e-8, atol=1.0e-8, h0=0.5, mxstep=10e4, p=4,
@@ -230,27 +255,6 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
         return (ys, infodict)
     else:
         return ys
-    
-    
-def compute_stages((method, func, tn, yn, args, h, k_nj_lst)):
-    res = []
-    for (k,nj) in k_nj_lst:
-        nj = int(nj)
-        Y = np.zeros((nj+1, len(yn)), dtype=(type(yn[0])))
-        f_yj = np.zeros((nj+1, len(yn)), dtype=(type(yn[0])))
-        Y[0] = yn
-        f_yj[0] = func(*(Y[0], tn) + args)
-        Y[1] = Y[0] + h/nj*f_yj[0]
-        for j in range(2,nj+1):
-            if j == nj/2 + 1:
-                y_half = Y[j-1]
-            f_yj[j-1] = func(*(Y[j-1], tn + (j-1)*(h/nj)) + args)
-            Y[j] = Y[j-2] + (2*h/nj)*f_yj[j-1]
-    
-        res += [(k, nj, Y[nj], y_half, f_yj)]
-
-    return res
-
 
 def balance_load(k, seq=(lambda t: 2*t)):
     if k <= NUM_WORKERS:
@@ -314,7 +318,6 @@ def compute_extrapolation_table(method, func, tn, yn, args, h, k, pool, seq=(lam
     fill_extrapolation_table(T,k,seq)
 
     return (T, fe_seq, fe_tot, yn, y_half, f_yj, hs)
-
 
 def fill_extrapolation_table(T,k,seq):
     '''''
@@ -482,7 +485,7 @@ def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
 def getStepAndSequence(t_final, t, t_index):
     dense=True
     #See if any intermediate points are asked in the interval we are
-    #calculating
+    #calculating (the value at t_final is not interpolated)
     if(t[t_index]>=t_final):
         dense=False
     
@@ -490,9 +493,6 @@ def getStepAndSequence(t_final, t, t_index):
         seq = lambda t: 4*t - 2     # {2,6,10,14,...} sequence for dense output
     else:
         seq = lambda t: 2*t         # harmonic sequence for midpoint method
-    #TODO: remove and change tests
-#     seq = lambda t: 4*t - 2
-#     dense=True
     return (dense,seq)
 
 def estimate_next_step_and_order(T, k, h, atol, rtol, seq): 
@@ -623,7 +623,7 @@ def interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half,
     rejectStep=False
     return (rejectStep, y_solution, h_int)
 
-def ex_midpoint_parallel(func, y0, t, args=(), full_output=0, rtol=1.0e-8,
+def ex_midpoint_explicit_parallel(func, y0, t, args=(), full_output=0, rtol=1.0e-8,
         atol=1.0e-8, h0=0.5, mxstep=10e4, p=4, nworkers=None):
     '''
     (An instantiation of extrapolation_parallel() function with the midpoint 
@@ -690,13 +690,20 @@ def ex_midpoint_parallel(func, y0, t, args=(), full_output=0, rtol=1.0e-8,
             running machine. Defaults to None.
     '''
 
-    #method = midpoint_adapt_order #if adaptive == "order" else midpoint_fixed_step
     method = midpoint_explicit
 
     return extrapolation_parallel(method, func, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep,
          p=p, nworkers=nworkers)
 
+def ex_midpoint_implicit_parallel(func, y0, t, args=(), full_output=0, rtol=1.0e-8,
+        atol=1.0e-8, h0=0.5, mxstep=10e4, p=4, nworkers=None):
+
+    method = midpoint_implicit
+
+    return extrapolation_parallel(method, func, y0, t, args=args,
+        full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep,
+         p=p, nworkers=nworkers)
 
 '''''
 Deprecated code    

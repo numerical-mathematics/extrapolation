@@ -20,7 +20,7 @@ def regression_tst(func, y0, t, y_ref, tol_boundary=(0,6), h0=0.5, mxstep=10e4,
     print ''
     for i in range(len(tol)):
         print tol[i]
-        ys, infodict = ex_p.ex_midpoint_parallel(func, y0, t, atol=tol[i], 
+        ys, infodict = ex_p.ex_midpoint_explicit_parallel(func, y0, t, atol=tol[i], 
             rtol=tol[i], mxstep=mxstep, full_output=True, nworkers=nworkers)
         y = solout(ys[1:len(ys)])
         err[i] = relative_error(y, y_ref)
@@ -91,7 +91,7 @@ def non_dense_tests():
     err_ref_2 = np.array([8.54505911e-02, 2.48291275e-04, 8.17836269e-07, 2.85969698e-09, 2.54201200e-11, 9.10317032e-13])
     check(err, err_ref_2, "Test 2")
     print err
- 
+  
     # Test 3
     t0, tf = 0, 10
     y0 = exact_3(t0)
@@ -100,7 +100,7 @@ def non_dense_tests():
     err_ref_3 = np.array([1.93968837e-05, 9.48240508e-08, 1.21300220e-09, 2.83645194e-10, 1.74748516e-13, 5.88438882e-15]) 
     check(err, err_ref_3, "Test 3")
     print err
- 
+  
     # Test 4
     t0, tf = 0.5, 10
     y0 = exact_4(t0)
@@ -109,7 +109,7 @@ def non_dense_tests():
     err_ref_4 = np.array([6.77863684e-03, 9.50343703e-05, 4.90535263e-07, 3.36128205e-09, 2.47615358e-11, 2.92147596e-13]) 
     check(err, err_ref_4, "Test 4")
     print err
-  
+   
     # Test 5
     t0, tf = 0, 0.08
     y0 = fnbod.init_fnbod(2400)
@@ -118,7 +118,7 @@ def non_dense_tests():
     err_ref_5 = np.array([4.6785364959e-01, 8.0415058627e-02, 1.6090309508e-03, 1.0235932826e-05, 1.0988144963e-07, 1.1568408676e-09]) 
     check(err, err_ref_5, "Test 5")
     print err
- 
+  
     # Test 6
     t0, tf = 0, 0.003
     y0 = kdv_init(t0)
@@ -127,7 +127,7 @@ def non_dense_tests():
     err_ref_6 = np.array([1.20373187e-05, 7.98230720e-08, 1.63759715e-10, 1.75095038e-12, 3.66764576e-12, 1.69146958e-12]) 
     check(err, err_ref_6, "Test 6")
     print err
- 
+  
     # Test 7
     t0, tf = 0, 3.
     y0 = burgers_init(t0)
@@ -136,6 +136,8 @@ def non_dense_tests():
     err_ref_7 = np.array([6.92934673e-09, 4.45755379e-11, 6.26721092e-13, 2.49897416e-14]) 
     check(err, err_ref_7, "Test 7")
     print err
+    
+    print("All tests passed")
 
 
 def dense_tests():
@@ -146,7 +148,7 @@ def dense_tests():
     y0 = exact_1(t0)
     y_ref = exact_1([[2.5],[5],[7.5],[10]])
     err = regression_tst(f_1, y0, t, y_ref)
-    err_ref_1 = np.array([1.45770475e-04, 1.14841518e-06, 1.54196490e-06, 3.88285196e-06, 1.26814157e-07, 1.88666778e-08]) 
+    err_ref_1 = np.array([1.2907640918e-03, 2.4902557569e-05, 1.4756470422e-05, 9.0373926283e-07, 3.5619436576e-07, 4.7570587235e-09]) 
     check(err, err_ref_1, "Test 1 dense")
     print err
       
@@ -156,7 +158,7 @@ def dense_tests():
     y0 = exact_2(t0)
     y_ref = exact_2([[2.5],[5],[7.5],[10]])
     err = regression_tst(f_2, y0, t, y_ref)
-    err_ref_2 = np.array([3.17429818e-04, 4.86595063e-05, 1.10295116e-05, 1.99391509e-06, 2.11069640e-07, 9.94570884e-08])
+    err_ref_2 = np.array([1.9986826139e-02, 8.0729032796e-05, 6.4759621032e-07, 3.3835824885e-07, 5.6336165545e-08, 2.1270889427e-09])
     check(err, err_ref_2, "Test 2 dense")
     print err
   
@@ -166,7 +168,7 @@ def dense_tests():
     y0 = exact_3(t0)
     y_ref = exact_3(np.array([[2.5],[5],[7.5],[10]]))
     err = regression_tst(f_3, y0, t, y_ref)
-    err_ref_3 = np.array([8.99830265e-06, 2.02137818e-06, 4.63896854e-08, 2.05977138e-08, 2.36656866e-09, 1.44506569e-09]) 
+    err_ref_3 = np.array([9.7730360766e-07, 1.8066876369e-07, 7.3135413266e-08, 5.3546940651e-09, 1.0413606653e-08, 8.3899459586e-11]) 
     check(err, err_ref_3, "Test 3 dense")
     print err
  
@@ -176,10 +178,11 @@ def dense_tests():
     y0 = exact_4(t0)
     y_ref = exact_4(np.array([[2.5],[5],[7.5],[10]]))
     err = regression_tst(f_4, y0, t, y_ref)
-    err_ref_4 = np.array([4.43565713e-03,   9.09774798e-05, 6.04212715e-07, 2.39230449e-09, 5.32280637e-11, 6.44359887e-11]) 
+    err_ref_4 = np.array([6.5637056667e-03, 1.0019008999e-04, 5.7943976364e-07, 5.7887658428e-09, 8.9361296728e-11, 4.9891671699e-11]) 
     check(err, err_ref_4, "Test 4 dense")
     print err
     
+    print("All tests passed")
     #TODO: add tests 5, 6 and 7 for dense output
 
 
