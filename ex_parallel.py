@@ -14,7 +14,6 @@ secondDiff = False
 thirdDiff = False
 
 NUM_WORKERS = None
-exactsolution = None
 
 def set_NUM_WORKERS(nworkers):
     global NUM_WORKERS
