@@ -79,10 +79,10 @@ def non_dense_tests():
     y0 = exact_1(t0)
     y_ref = exact_1(tf)
     err = regression_tst(f_1, y0, [t0, tf], y_ref)
-    err_ref_1 = np.array([1.02154130e-03, 1.22710679e-05, 9.25784586e-08, 7.71182340e-10, 4.91119065e-12, 4.44094761e-14]) 
+    err_ref_1 = np.array([  2.6716177733e-03,   2.0211717955e-05,   1.4248356310e-07,   1.1229200827e-09,   9.4184968610e-12,   7.6482844347e-14]) 
     check(err, err_ref_1, "Test 1: linear ODE")
     print err
- 
+  
     # Test 2
     t0, tf = 0, 10
     y0 = exact_2(t0)
@@ -91,7 +91,7 @@ def non_dense_tests():
     err_ref_2 = np.array([8.54505911e-02, 2.48291275e-04, 8.17836269e-07, 2.85969698e-09, 2.54201200e-11, 9.10317032e-13])
     check(err, err_ref_2, "Test 2")
     print err
-  
+    
     # Test 3
     t0, tf = 0, 10
     y0 = exact_3(t0)
@@ -100,7 +100,7 @@ def non_dense_tests():
     err_ref_3 = np.array([1.93968837e-05, 9.48240508e-08, 1.21300220e-09, 2.83645194e-10, 1.74748516e-13, 5.88438882e-15]) 
     check(err, err_ref_3, "Test 3")
     print err
-  
+    
     # Test 4
     t0, tf = 0.5, 10
     y0 = exact_4(t0)
@@ -109,34 +109,34 @@ def non_dense_tests():
     err_ref_4 = np.array([6.77863684e-03, 9.50343703e-05, 4.90535263e-07, 3.36128205e-09, 2.47615358e-11, 2.92147596e-13]) 
     check(err, err_ref_4, "Test 4")
     print err
-   
+      
     # Test 5
     t0, tf = 0, 0.08
     y0 = fnbod.init_fnbod(2400)
     y_ref = np.loadtxt("reference.txt")
     err = regression_tst(f_5, y0, [t0, tf], y_ref)
-    err_ref_5 = np.array([4.6785364959e-01, 8.0415058627e-02, 1.6090309508e-03, 1.0235932826e-05, 1.0988144963e-07, 1.1568408676e-09]) 
+    err_ref_5 = np.array([  5.8878680341e-01,   7.8285273702e-02,   7.7063734719e-03,     1.6273023075e-05,   6.5385240310e-07,   1.1777903740e-08]) 
     check(err, err_ref_5, "Test 5")
     print err
-  
+    
     # Test 6
     t0, tf = 0, 0.003
     y0 = kdv_init(t0)
     y_ref = np.loadtxt("reference_kdv.txt")
     err = regression_tst(kdv_func, y0, [t0, tf], y_ref, solout=kdv_solout)
-    err_ref_6 = np.array([1.20373187e-05, 7.98230720e-08, 1.63759715e-10, 1.75095038e-12, 3.66764576e-12, 1.69146958e-12]) 
+    err_ref_6 = np.array([1.0836832917e-05,   9.9714488340e-08,   1.0502531783e-10,    1.8228543865e-12,   5.6552581702e-13,   2.3612922649e-12]) 
     check(err, err_ref_6, "Test 6")
     print err
-  
+   
     # Test 7
     t0, tf = 0, 3.
     y0 = burgers_init(t0)
     y_ref = np.loadtxt("reference_burgers.txt")
     err = regression_tst(burgers_func, y0, [t0, tf], y_ref, solout=burgers_solout, tol_boundary=(0,4))
-    err_ref_7 = np.array([6.92934673e-09, 4.45755379e-11, 6.26721092e-13, 2.49897416e-14]) 
+    err_ref_7 = np.array([4.4209014256e-08,   4.6450102760e-11,   6.4950357912e-13,   1.6405125244e-14]) 
     check(err, err_ref_7, "Test 7")
     print err
-    
+     
     print("All tests passed")
 
 
@@ -148,7 +148,7 @@ def dense_tests():
     y0 = exact_1(t0)
     y_ref = exact_1([[2.5],[5],[7.5],[10]])
     err = regression_tst(f_1, y0, t, y_ref)
-    err_ref_1 = np.array([1.2907640918e-03, 2.4902557569e-05, 1.4756470422e-05, 9.0373926283e-07, 3.5619436576e-07, 4.7570587235e-09]) 
+    err_ref_1 = np.array([ 1.9949855355e-03,   1.8730357330e-05,   9.6645858019e-07,   2.9442885980e-07,   2.5058865168e-07,   5.3709499479e-09]) 
     check(err, err_ref_1, "Test 1 dense")
     print err
       
