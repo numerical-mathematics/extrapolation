@@ -16,15 +16,6 @@ IV.10 Numerical Experiment, Twelve Test Problems
 #finalTime has no relation with dense output times (used for different testing)
 TestProblemDefinition = namedtuple("TestProblemDefinition", ["problemName","RHSFunction","initialTime","initialValue", "finalTime", "denseOutput"])
 
-def countEntra():
-    i=0
-    resultFile = open("temp.txt", "r+")
-    lines = resultFile.readlines()
-    for line in lines:
-        if(line=="entra \n"):
-            i+=1
-    resultFile.close()
-    return i
 
 #Linear problem
 
@@ -47,6 +38,14 @@ def VDPOLf(y,t):
 
 def VDPOLProblem():    
     return TestProblemDefinition("VDPOL", VDPOLf, 0, np.array([2.,0.]),12., np.arange(0,13,1.))
+
+def VDPOLMildf(y,t):
+    epsilon=1e-2
+    second_dim=1/epsilon*(((1-y[0]**2)*y[1])-y[0])
+    return np.array([y[1],second_dim])
+
+def VDPOLMildProblem():    
+    return TestProblemDefinition("VDPOLMild", VDPOLMildf, 0, np.array([2.,0]),12., np.arange(0,13,1.))
 
 def VDPOLEasyf(y,t):
     epsilon=1
@@ -120,41 +119,30 @@ def E5Problem():
 def getAllTests():
     tests = []
 #     tests.append(VDPOLProblem())
+#     tests.append(VDPOLMildProblem())
     tests.append(VDPOLEasyProblem())
 #     tests.append(ROBERProblem())
 #     tests.append(OREGOProblem())
 #     tests.append(HIRESProblem())
 #     tests.append(E5Problem())
-    tests.append(LinearProblem())
+#     tests.append(LinearProblem())
     
     return tests
 
 #TO calculate exact solutions switch all tests functions to f(t,y) (instead of f(y,t))
 def storeTestsExactSolutions():
     for test in getAllTests():
-        exactSolver = integrate.ode(test.RHSFunction)
-        nostep=1000000000
-        exactSolver.set_initial_value(test.initialValue, test.initialTime)
-        exactSolver.set_integrator("vode",method="BDF")
-        i=0
-        denseOutput = test.denseOutput
-        finalTime = test.finalTime
-        step=finalTime/nostep
-        while exactSolver.successful() and exactSolver.t<finalTime:
-            i+=1
-            exactSolver.integrate(exactSolver.t + step)
-            if(i%100000==0):
-                print(str(exactSolver.t))
-            if(exactSolver.t>=finalTime):
-                print("Store solution for " + test.problemName)
-                np.savetxt(getReferenceFile(test.problemName), exactSolver.y)
+        #denseOutput = test.denseOutput
+        exactSolution, infodict = integrate.odeint(test.RHSFunction,test.initialValue, [test.initialTime, test.finalTime], atol=1e-13, rtol=1e-13, mxstep=100000000, full_output = True)
+        print("Store solution for " + test.problemName + "; solution: " + str(exactSolution))
+        np.savetxt(getReferenceFile(test.problemName), exactSolution[-1])
                 
 def getReferenceFile(problemName):
     return "reference_" + problemName + ".txt"
       
 
 def comparisonTest():
-    dense=True
+    dense=False
     tol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11]
     resultDict={}
     for test in getAllTests():
@@ -170,7 +158,6 @@ def comparisonTest():
             startTime = time.time()
             ys, infodict = ex_parallel.ex_midpoint_explicit_parallel(*functionTuple)
             testProblemResult[0].append([time.time()-startTime, np.linalg.norm((ys[-1]-y_ref)/y_ref), infodict["fe_tot"]])
-#             print(countEntra())
             print("Done: Explicit parallel current mcr design, abs error: " + str(np.linalg.norm(ys[-1]-y_ref)) + " rel error: " + str(np.linalg.norm((ys[-1]-y_ref)/y_ref))+ " func eval: " + str(infodict["fe_tot"]))
              
             #Explicit parallel old hum design
