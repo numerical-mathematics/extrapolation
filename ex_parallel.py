@@ -50,9 +50,13 @@ def solve_implicit_step(zero_f, estimatedValueExplicit):
     
     @param zero_f: function to find the root of (estimation of next step)
     '''
-
-    x, infodict, ier, mesg = optimize.fsolve(zero_f,estimatedValueExplicit, full_output = True)
-    return (x, infodict["fvec"] , infodict["nfev"])
+    #TODO: Problem -> fsolve doesn't seem to work well with xtol parameter
+    #TODO: pass to the zero finder solver the tolerance required to the overall problem 
+    # by doing this the error by the solver doesn't limit the global error of the ODE's solution
+    x, infodict, ier, mesg = optimize.fsolve(zero_f,estimatedValueExplicit, full_output = True,xtol=1e-15)
+    return (x, infodict["nfev"])
+#     x = optimize.newton_krylov(zero_f,estimatedValueExplicit, f_tol=1e-9)
+#     return (x, 0,0)
 
 def midpoint_implicit(f,previousValues, previousTime, step, args):
     """
@@ -73,10 +77,13 @@ def midpoint_implicit(f,previousValues, previousTime, step, args):
     #Estimation of the value as the starting point for the zero solver 
     estimatedValueExplicit, f_yj, fe_tot=euler_explicit(f, previousValues, previousTime, step, args)
     
-    #TODO: return function evaluations to build polynomial extrapolation
-    #TODO: return also fe_tot (all function evaluations)
-    x, f_yj, fe_tot_ = solve_implicit_step(zero_func, estimatedValueExplicit)
+    x, fe_tot_ = solve_implicit_step(zero_func, estimatedValueExplicit)
     fe_tot +=fe_tot_
+    #TODO: see it this extra function can be done only if interpolating polynomial is calculated (looks complicated)
+    #This can't follow the midpoint_explicit approach because in midpoint_implicit we are doing function evaluations
+    #at previousTime+step/2
+    f_yj= f(*(previousValue,previousTime)+args)
+    fe_tot += 1
     return (x, f_yj, fe_tot)
 
 
@@ -131,7 +138,7 @@ def compute_stages((method, func, tn, yn, args, h, k_nj_lst)):
     return res
 
 def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
-        rtol=1.0e-8, atol=1.0e-8, h0=0.5, mxstep=10e4, p=4,
+        rtol=1.0e-8, atol=1.0e-8, h0=0.5, mxstep=10e4, robustness_factor=2, p=4,
         nworkers=None):
     '''
     Solves the system of IVPs dy/dt = func(y, t0, ...) with parallel extrapolation. 
@@ -200,7 +207,7 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
             the the number of workers is set to the number of CPUs on the the
             running machine. Defaults to None.
     '''
-
+    
     #Initialize pool of workers to parallelize extrapolation table calculations
     set_NUM_WORKERS(nworkers)  
     pool = mp.Pool(NUM_WORKERS)
@@ -230,10 +237,12 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
     sum_ks, sum_hs = 0, 0
 
     #Iterate until you reach final time
-    while t_curr < t_max:   
+    while t_curr < t_max:
         rejectStep, y_temp, ysolution, h, k, h_new, k_new, (fe_seq_, fe_tot_) = solve_one_step(
                 method, func, t_curr, t, t_index, yn, args, h, k, atol, rtol, pool)
-        
+#         print(rejectStep)
+#         print(h)
+#         print(t_curr)
         #Store values if step is not rejected
         if(not rejectStep):
             yn = 1*y_temp
@@ -264,7 +273,13 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
         if cur_stp > mxstep:
             raise Exception('Reached Max Number of Steps. Current t = ' 
                 + str(t_curr))
-
+        
+        #Update to new step (limit the change of h_new by a robustness_factor)
+        if(h_new>h and h_new/h>robustness_factor):
+            h_new = h*robustness_factor
+        elif(h_new<h and h_new/h<1/robustness_factor):
+            h_new = h/robustness_factor
+        #Check that h_new doesn't step after t_max
         h = min(h_new, t_max - t_curr)
         k = k_new
 
@@ -663,7 +678,7 @@ def interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half,
     return (rejectStep, y_solution, h_int, fe_tot)
 
 def ex_midpoint_explicit_parallel(func, y0, t, args=(), full_output=0, rtol=1.0e-8,
-        atol=1.0e-8, h0=0.5, mxstep=10e4, p=4, nworkers=None):
+        atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, p=4, nworkers=None):
     '''
     (An instantiation of extrapolation_parallel() function with the midpoint 
     method.)
@@ -736,13 +751,14 @@ def ex_midpoint_explicit_parallel(func, y0, t, args=(), full_output=0, rtol=1.0e
     method = midpoint_explicit
 
     return extrapolation_parallel(method, func, y0, t, args=args,
-        full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep,
+        full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
          p=p, nworkers=nworkers)
 
 def ex_midpoint_implicit_parallel(func, y0, t, args=(), full_output=0, rtol=1.0e-8,
-        atol=1.0e-8, h0=0.5, mxstep=10e4, p=4, nworkers=None):
+        atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, p=4, nworkers=None):
+    
     method = midpoint_implicit
 
     return extrapolation_parallel(method, func, y0, t, args=args,
-        full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep,
+        full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
          p=p, nworkers=nworkers)

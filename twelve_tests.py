@@ -13,7 +13,8 @@ From book: Solving Ordinary Differential Equations II,
 IV.10 Numerical Experiment, Twelve Test Problems
 '''
 
-#finalTime has no relation with dense output times (used for different testing)
+#finalTime has no relation with dense output times 
+#(used for testing with stiff problems-> some dense output final time would take really long time)
 TestProblemDefinition = namedtuple("TestProblemDefinition", ["problemName","RHSFunction","initialTime","initialValue", "finalTime", "denseOutput"])
 
 
@@ -65,7 +66,9 @@ def ROBERf(y,t):
     
 
 def ROBERProblem():
-    denseOutput = [0,np.power(12*[10.],range(0,12))]
+    base=13*[10.]
+    base[0]=0
+    denseOutput = np.power(base,range(0,13))
     return TestProblemDefinition("ROBER", ROBERf, 0, np.array([1.,0,0]), 100., denseOutput)
     
 
@@ -112,15 +115,20 @@ def E5f(y,t):
     fourth_dim = B*y[0]*y[2]-C*y[3]
     return np.array([first_dim,second_dim,third_dim,fourth_dim])
 
-def E5Problem():    
-    denseOutput = [0,np.power(7*[10.],range(1,15,2))]
+def E5Problem():
+    base=8*[10.]
+    base[0]=0
+    exp = range(-1,15,2)
+    #OBS: the first exponent doesn't matter (base =0)
+    exp[0]=1
+    denseOutput = np.power(base,exp)
     return TestProblemDefinition("E5", E5f, 0, np.array([1.76e-3,0,0,0]), 100., denseOutput)
 
 def getAllTests():
     tests = []
-#     tests.append(VDPOLProblem())
+    tests.append(VDPOLProblem())
 #     tests.append(VDPOLMildProblem())
-    tests.append(VDPOLEasyProblem())
+#     tests.append(VDPOLEasyProblem())
 #     tests.append(ROBERProblem())
 #     tests.append(OREGOProblem())
 #     tests.append(HIRESProblem())
@@ -129,13 +137,12 @@ def getAllTests():
     
     return tests
 
-#TO calculate exact solutions switch all tests functions to f(t,y) (instead of f(y,t))
 def storeTestsExactSolutions():
     for test in getAllTests():
-        #denseOutput = test.denseOutput
-        exactSolution, infodict = integrate.odeint(test.RHSFunction,test.initialValue, [test.initialTime, test.finalTime], atol=1e-13, rtol=1e-13, mxstep=100000000, full_output = True)
+        denseOutput = test.denseOutput
+        exactSolution, infodict = integrate.odeint(test.RHSFunction,test.initialValue, denseOutput, atol=1e-18, rtol=1e-13, mxstep=100000000, full_output = True)
         print("Store solution for " + test.problemName + "; solution: " + str(exactSolution))
-        np.savetxt(getReferenceFile(test.problemName), exactSolution[-1])
+        np.savetxt(getReferenceFile(test.problemName), exactSolution[1:len(exactSolution)])
                 
 def getReferenceFile(problemName):
     return "reference_" + problemName + ".txt"
@@ -143,42 +150,54 @@ def getReferenceFile(problemName):
 
 def comparisonTest():
     dense=False
-    tol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11]
+    tol = [1.e-3,1e-5,1e-7,1e-9,1e-11]
     resultDict={}
+    solverFunctions = [#ex_parallel.ex_midpoint_explicit_parallel
+#          ,ex_parallel_original.ex_midpoint_parallel
+            ex_parallel.ex_midpoint_implicit_parallel]
+    labelsFunction=[#"New Explicit parallel"
+#           ,"Old Explicit parallel"
+            "Implicit parallel"]
+    robustnesses=[2]#, 3, 5, 10, 100]
     for test in getAllTests():
-        testProblemResult = [[],[],[]]
+        testProblemResult = []
+        for aux in range(0,len(labelsFunction)*len(robustnesses)):
+            testProblemResult.append([])
         y_ref = np.loadtxt(getReferenceFile(test.problemName))
+        if(not dense):
+            y_ref=y_ref[-1]
         print(test.problemName)
+        labels=[]
         for i in range(len(tol)):
             print(tol[i])
-            functionTuple = (test.RHSFunction, test.initialValue, [test.initialTime, test.finalTime],(),True, tol[i], tol[i],0.5,10e8)
-            if(dense):
-                functionTuple = (test.RHSFunction, test.initialValue, test.denseOutput,(),True, tol[i], tol[i],0.5,10e8)
-            #Explicit parallel current mcr design
-            startTime = time.time()
-            ys, infodict = ex_parallel.ex_midpoint_explicit_parallel(*functionTuple)
-            testProblemResult[0].append([time.time()-startTime, np.linalg.norm((ys[-1]-y_ref)/y_ref), infodict["fe_tot"]])
-            print("Done: Explicit parallel current mcr design, abs error: " + str(np.linalg.norm(ys[-1]-y_ref)) + " rel error: " + str(np.linalg.norm((ys[-1]-y_ref)/y_ref))+ " func eval: " + str(infodict["fe_tot"]))
-             
-            #Explicit parallel old hum design
-            startTime = time.time()
-            ys, infodict = ex_parallel_original.ex_midpoint_parallel(*functionTuple)
-            testProblemResult[1].append([time.time()-startTime, np.linalg.norm((ys[-1]-y_ref)/y_ref), infodict["fe_tot"]])
-            print("Done: Explicit parallel old hum design, abs error: " +  str(np.linalg.norm(ys[-1]-y_ref))+ " rel error: " + str(np.linalg.norm((ys[-1]-y_ref)/y_ref))+ " func eval: " + str(infodict["fe_tot"]))
-             
-            #Implicit parallel
-            startTime = time.time()
-            ys, infodict = ex_parallel.ex_midpoint_implicit_parallel(*functionTuple)
-            testProblemResult[2].append([time.time()-startTime, np.linalg.norm((ys[-1]-y_ref)/y_ref), infodict["fe_tot"]])
-            print("Done: Implicit parallel, abs error: " + str(np.linalg.norm(ys[-1]-y_ref)) + " rel error: " + str(np.linalg.norm((ys[-1]-y_ref)/y_ref))+ " func eval: " + str(infodict["fe_tot"]))
-            
+            j=0
+            for robustness in robustnesses:
+                print("robustness " + str(robustness))
+                functionTuple = (test.RHSFunction, test.initialValue, test.denseOutput,(),True, tol[i], tol[i],0.5,10e8,robustness)
+                if(not dense):
+                    denseOutput = test.denseOutput
+                    functionTuple = (test.RHSFunction, test.initialValue, [denseOutput[0], denseOutput[-1]],(),True, tol[i], tol[i],0.5,10e8,robustness)
+                k=0    
+                for solverFunction in solverFunctions:
+                    startTime = time.time()
+                    ys, infodict = solverFunction(*functionTuple)
+                    ys=ys[1:len(ys)]
+                    componentwise_relative_error = (ys-y_ref)/y_ref
+                    relative_error = [np.linalg.norm(output, 2) for output in componentwise_relative_error]
+                    maximum_relative_error = np.max(relative_error)
+                    print(relative_error)
+                    testProblemResult[j].append([time.time()-startTime, maximum_relative_error, infodict["fe_tot"]])
+                    print("Done: " + labelsFunction[k] + ", max rel error: " + str(maximum_relative_error)+ " abs error: " + str(np.linalg.norm(ys-y_ref)) + " rel error: " + str(np.linalg.norm((ys-y_ref)/y_ref))+ " func eval: " + str(infodict["fe_tot"]))
+                    labels.append(labelsFunction[k] +" " + str(robustness))
+                    k+=1
+                    j+=1
+   
         resultDict[test.problemName] = testProblemResult
            
-    return resultDict
+    return resultDict , labels
 
-def plotResults(resultDict):
+def plotResults(resultDict, labels):
     j=1
-    labels=["New Explicit parallel","Old Explicit parallel","Implicit parallel"]
     for test in getAllTests():
         testName = test.problemName
         resultTest = resultDict[testName]
@@ -208,8 +227,8 @@ def plotResults(resultDict):
 
 if __name__ == "__main__":
 #     storeTestsExactSolutions()
-    resultDict = comparisonTest()
-    plotResults(resultDict)
+    resultDict, labels = comparisonTest()
+    plotResults(resultDict, labels)
     print "done"
     
     
