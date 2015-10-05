@@ -117,7 +117,7 @@ def euler_explicit(f,previousValues, previousTime,step, args):
 END: ODE numerical methods formulas (explicit and implicit)
 '''''
 
-def compute_stages((method, func, tn, yn, args, h, k_nj_lst)):
+def compute_stages((method, func, tn, yn, args, h, k_nj_lst, smoothing)):
     res = []
     for (k,nj) in k_nj_lst:
         fe_tot=0
@@ -133,13 +133,20 @@ def compute_stages((method, func, tn, yn, args, h, k_nj_lst)):
             Y[j],f_yj[j-1], fe_tot_ = method(func,(Y[j-2], Y[j-1]), tn + (j-1)*(h/nj), step, args)
             fe_tot+=fe_tot_
         y_half = Y[nj/2]
-        res += [(k, nj, Y[nj], y_half, f_yj, fe_tot)]
+        
+        Tj1 = Y[nj]
+        if(smoothing):
+            nextStepSolution,f_yj_unused,fe_tot_ = method(func,(Y[nj-1], Y[nj]), tn + h, step, args)
+            fe_tot+=fe_tot_
+            Tj1=1/4*(Y[nj-1]+2*Y[nj]+nextStepSolution)
+                
+        res += [(k, nj, Tj1, y_half, f_yj, fe_tot)]
 
     return res
 
 def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
         rtol=1.0e-8, atol=1.0e-8, h0=0.5, mxstep=10e4, robustness_factor=2, p=4,
-        nworkers=None):
+        nworkers=None, smoothing=False):
     '''
     Solves the system of IVPs dy/dt = func(y, t0, ...) with parallel extrapolation. 
     
@@ -239,7 +246,7 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
     #Iterate until you reach final time
     while t_curr < t_max:
         rejectStep, y_temp, ysolution, h, k, h_new, k_new, (fe_seq_, fe_tot_) = solve_one_step(
-                method, func, t_curr, t, t_index, yn, args, h, k, atol, rtol, pool)
+                method, func, t_curr, t, t_index, yn, args, h, k, atol, rtol, pool, smoothing)
 #         print(rejectStep)
 #         print(h)
 #         print(t_curr)
@@ -318,7 +325,7 @@ def balance_load(k, seq=(lambda t: 2*t)):
 
     return (k_nj_lst, fe_seq)
 
-def compute_extrapolation_table(method, func, tn, yn, args, h, k, pool, seq=(lambda t: 2*t)):
+def compute_extrapolation_table(method, func, tn, yn, args, h, k, pool, seq=(lambda t: 2*t), smoothing=False):
     """
     **Inputs**:
 
@@ -332,7 +339,7 @@ def compute_extrapolation_table(method, func, tn, yn, args, h, k, pool, seq=(lam
     """
     T = np.zeros((k+1,k+1, len(yn)), dtype=(type(yn[0])))
     k_nj_lst, fe_seq = balance_load(k, seq=seq)
-    jobs = [(method, func, tn, yn, args, h, k_nj) for k_nj in k_nj_lst]
+    jobs = [(method, func, tn, yn, args, h, k_nj, smoothing) for k_nj in k_nj_lst]
 
     results = pool.map(compute_stages, jobs, chunksize=1)
 
@@ -602,7 +609,7 @@ def estimate_next_step_and_order(T, k, h, atol, rtol, seq):
     return (rejectStep, y, h_new, k_new)
 
 
-def solve_one_step(method, func, t_curr, t, t_index, yn, args, h, k, atol, rtol, pool):
+def solve_one_step(method, func, t_curr, t, t_index, yn, args, h, k, atol, rtol, pool, smoothing):
     
     dense, seq = getStepAndSequence(t_curr+h, t, t_index)
     
@@ -612,7 +619,7 @@ def solve_one_step(method, func, t_curr, t, t_index, yn, args, h, k, atol, rtol,
     k = min(k_max, max(k_min, k))
 
     T, fe_seq, fe_tot, y0, y_half, f_yj, hs = compute_extrapolation_table(
-            method, func, t_curr, yn, args, h, k, pool, seq)
+            method, func, t_curr, yn, args, h, k, pool, seq, smoothing)
     
     rejectStep, y, h_new, k_new = estimate_next_step_and_order(T, k, h, atol, rtol, seq)
     
@@ -678,7 +685,7 @@ def interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half,
     return (rejectStep, y_solution, h_int, fe_tot)
 
 def ex_midpoint_explicit_parallel(func, y0, t, args=(), full_output=0, rtol=1.0e-8,
-        atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, p=4, nworkers=None):
+        atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = False, p=4, nworkers=None):
     '''
     (An instantiation of extrapolation_parallel() function with the midpoint 
     method.)
@@ -752,13 +759,13 @@ def ex_midpoint_explicit_parallel(func, y0, t, args=(), full_output=0, rtol=1.0e
 
     return extrapolation_parallel(method, func, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=p, nworkers=nworkers)
+         p=p, nworkers=nworkers, smoothing=smoothing)
 
 def ex_midpoint_implicit_parallel(func, y0, t, args=(), full_output=0, rtol=1.0e-8,
-        atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, p=4, nworkers=None):
+        atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = False, p=4, nworkers=None):
     
     method = midpoint_implicit
 
     return extrapolation_parallel(method, func, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=p, nworkers=nworkers)
+         p=p, nworkers=nworkers, smoothing=smoothing)
