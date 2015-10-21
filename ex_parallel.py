@@ -71,7 +71,8 @@ def solve_implicit_step(zero_f, zero_grad, estimatedValueExplicit):
 #     print ("func ev: " + str(infodict["nfev"]))
     #TODO change solver so it doesn't do the 2 extra unnnecessary function evaluations
     #https://github.com/scipy/scipy/issues/5369
-    return (x, infodict["nfev"]+2)
+    #TODO: add extra 2 function evaluations
+    return (x, infodict["nfev"])
 
 #     optObject = optimize.root(zero_f, estimatedValueExplicit, jac = zero_grad)
 # #     if(useGrad and not zero_grad is None):
@@ -226,7 +227,7 @@ def compute_stages((method, methodargs, func, grad, tn, yn, args, h, k_nj_lst, s
 
 def extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full_output=False,
         rtol=1.0e-8, atol=1.0e-8, h0=0.5, mxstep=10e4, robustness_factor=2, p=4,
-        nworkers=None, smoothing='no', symmetric=True, seq=None):
+        nworkers=None, smoothing='no', symmetric=True, seq=None, adaptative="order"):   
     '''
     Solves the system of IVPs dy/dt = func(y, t0, ...) with parallel extrapolation. 
     
@@ -326,9 +327,11 @@ def extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full
     #Iterate until you reach final time
     while t_curr < t_max:
         rejectStep, y_temp, ysolution, h, k, h_new, k_new, (fe_seq_, fe_tot_) = solve_one_step(
-                method, methodargs, func, grad, t_curr, t, t_index, yn, args, h, k, atol, rtol, pool, smoothing, symmetric, seq)
+                method, methodargs, func, grad, t_curr, t, t_index, yn, args, h, k, 
+                atol, rtol, pool, smoothing, symmetric, seq, adaptative)
 #         print(rejectStep)
 #         print(h)
+#         print k
 #         print(y_temp)
 #         print(t_curr)
         #Store values if step is not rejected
@@ -437,9 +440,12 @@ def compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h,
             stats_function=[value for key,value in stats.items() if ('twelve' in key[0])]
             fe_tot = stats_function[0][0]
 #             print(fe_tot)
+#             print(fe_tot)
 #             prof.print_stats()
         else:
             methodargs['J00'] = grad(yn, tn)
+            fe_tot=0
+#             print(fe_tot)
     else:
         fe_tot=0
     
@@ -458,7 +464,8 @@ def compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h,
             f_yj[k_] = f_yj_
             hs[k_] = h/nj_
             fe_tot += fe_tot_
-
+    
+#     print(fe_tot)
     fill_extrapolation_table(T,k,seq, symmetric)
 
     return (T, fe_seq, fe_tot, yn, y_half, f_yj, hs)
@@ -660,7 +667,12 @@ def getStepAndSequence(t_final, t, t_index, seq):
     
     return (dense,seq)
 
-def estimate_next_step_and_order(T, k, h, atol, rtol, seq): 
+def estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative): 
+    
+    if(adaptative=="fixed"):
+        return (False, T[k,k], h, k)
+    
+    
     #Define work function (to minimize)      
     def A_k(k):
         """
@@ -724,23 +736,26 @@ def estimate_next_step_and_order(T, k, h, atol, rtol, seq):
     #where err_k_x is not nan
     if(math.isnan(h_new)):
         rejectStep = True
-    
+        
     return (rejectStep, y, h_new, k_new)
 
 
-def solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args, h, k, atol, rtol, pool, smoothing, symmetric, seq):
+def solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args, h, k, atol, rtol, 
+                   pool, smoothing, symmetric, seq, adaptative):
     
     dense, seq = getStepAndSequence(t_curr+h, t, t_index, seq)
     
     #Limit k, order of extrapolation
-    k_max = 10
-    k_min = 3
-    k = min(k_max, max(k_min, k))
+    #If order and step are fixed, do not limit order
+    if(not adaptative == 'fixed'):
+        k_max = 10
+        k_min = 3
+        k = min(k_max, max(k_min, k))
 
     T, fe_seq, fe_tot, y0, y_half, f_yj, hs = compute_extrapolation_table(
             method, methodargs, func, grad, t_curr, yn, args, h, k, pool, seq, smoothing, symmetric)
     
-    rejectStep, y, h_new, k_new = estimate_next_step_and_order(T, k, h, atol, rtol, seq)
+    rejectStep, y, h_new, k_new = estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative)
     
     y_solution=[]
     if((not rejectStep) & dense):
@@ -805,7 +820,8 @@ def interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half,
     return (rejectStep, y_solution, h_int, fe_tot)
 
 def ex_midpoint_explicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
-        atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'no', seq=None, p=4, nworkers=None):
+        atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'no', seq=None, p=4, 
+        nworkers=None, adaptative="order"):
     '''
     (An instantiation of extrapolation_parallel() function with the midpoint 
     method.)
@@ -827,6 +843,11 @@ def ex_midpoint_explicit_parallel(func, grad, y0, t, args=(), full_output=0, rto
         - full_output : bool, optional
             True if to return a dictionary of optional outputs as the second 
             output. Defaults to False
+        - adaptive: string, optional
+            Specifies the strategy of integration. Can take three values:
+            -- "fixed"  = use fixed step size but fixed order strategy.
+            -- "order" = use adaptive step size and adaptive order strategy.
+            Defaults to "order"
     
     IMPORTANT: all input parameters should be float types, this solver doesn't work
     properly if for example y0 is not a float but an int variable (i.e. 1 instead of 1.)
@@ -871,28 +892,36 @@ def ex_midpoint_explicit_parallel(func, grad, y0, t, args=(), full_output=0, rto
     '''
 
     method = midpoint_explicit
+    
+    k=p//2
 
     return extrapolation_parallel(method,  {}, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=p, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq)
+         p=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptative=adaptative)
 
 def ex_midpoint_implicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
-        atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'no', seq=None, useGradient=False, p=4, nworkers=None):
+        atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'no', seq=None, useGradient=False, p=4,
+        nworkers=None, adaptative="order"):
     
     method = midpoint_implicit
+    
+    k=p//2
     
     global useGrad
     useGrad = useGradient
 
     return extrapolation_parallel(method, {}, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=p, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq)
+         p=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptative=adaptative)
 
 
 def ex_midpoint_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
-        atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'no', seq=None, useGradient=False, p=4, nworkers=None):
+        atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'no', seq=None, useGradient=False, p=4,
+        nworkers=None, adaptative="order"):
     
     method = Rosenbrock_midpoint_implicit
+    
+    k=p//2
     
     global useGrad
     useGrad = useGradient
@@ -902,25 +931,30 @@ def ex_midpoint_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0
 
     return extrapolation_parallel(method, methodargs, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=p, nworkers=nworkers, smoothing=smoothing, symmetric = True, seq=seq)
+         p=k, nworkers=nworkers, smoothing=smoothing, symmetric = True, seq=seq, adaptative=adaptative)
 
 def ex_euler_explicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
-        atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'no', seq=None, p=4, nworkers=None):
+        atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'no', seq=None, p=4,
+        nworkers=None, adaptative="order"):
     
     method = euler_explicit
 
     return extrapolation_parallel(method, {}, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=p, nworkers=nworkers, smoothing=smoothing, symmetric = False, seq=seq)
+         p=p, nworkers=nworkers, smoothing=smoothing, symmetric = False, seq=seq, adaptative=adaptative)
     
 def ex_euler_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
-        atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'no', seq=None, p=4, nworkers=None):
+        atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'no', seq=None, useGradient=False,p=4,
+        nworkers=None, adaptative="order"):
     
     method = Rosenbrock_euler_implicit
+    
+    global useGrad
+    useGrad = useGradient
     
     methodargs={}
     methodargs["J00"]=None
 
     return extrapolation_parallel(method, methodargs, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=p, nworkers=nworkers, smoothing=smoothing, symmetric = False, seq=seq)
+         p=p, nworkers=nworkers, smoothing=smoothing, symmetric = False, seq=seq, adaptative=adaptative)

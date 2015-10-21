@@ -2,10 +2,13 @@ from __future__ import division
 import numpy as np
 import math 
 import time
-import ex_parallel as ex_p
+import ex_parallel
 import fnbod
 from compare_test import kdv_init, kdv_func, kdv_solout, burgers_init, burgers_func, burgers_solout
+import twelve_tests as tst
+import matplotlib.pyplot as plt
 
+plotConv=False
 
 def relative_error(y, y_ref):
     return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref)
@@ -20,7 +23,7 @@ def regression_tst(func, y0, t, y_ref, tol_boundary=(0,6), h0=0.5, mxstep=10e4,
     print ''
     for i in range(len(tol)):
         print tol[i]
-        ys, infodict = ex_p.ex_midpoint_explicit_parallel(func, y0, t, atol=tol[i], 
+        ys, infodict = ex_parallel.ex_midpoint_explicit_parallel(func, y0, t, atol=tol[i], 
             rtol=tol[i], mxstep=mxstep, full_output=True, nworkers=nworkers)
         y = solout(ys[1:len(ys)])
         err[i] = relative_error(y, y_ref)
@@ -185,8 +188,105 @@ def dense_tests():
     print("All tests passed")
     #TODO: add tests 5, 6 and 7 for dense output
 
+def implicit_dense_tests():
+    #TODO: to implement
+    print("To implement")
+
+def inputTuple(k,denseOutput,test,firstStep,robustness, order):    
+    standardTuple = {'func': test.RHSFunction, 'grad': test.RHSGradient, 'y0': test.initialValue, 't': denseOutput
+                     ,'full_output': True, 'h0': firstStep, 'mxstep': 10e8, 'robustness': robustness,
+                     'adaptative':'fixed', 'p':order}    
+    
+    midimplicitTuple = standardTuple.copy()
+    midimplicitTuple.update({'smoothing': 'gbs','seq':None})
+    midsemiimplicitTuple = standardTuple.copy()
+    midsemiimplicitTuple.update({'smoothing': 'semiimp' ,'seq':(lambda t: 2*(2*t-1))})
+    eulersemiimplicitTuple = standardTuple.copy()
+    eulersemiimplicitTuple.update({'smoothing': 'no','seq':(lambda t: 2*(2*t-1))})
+    optimalTuples =[
+        midimplicitTuple
+        ,
+        midsemiimplicitTuple
+        ,
+        eulersemiimplicitTuple
+    ]
+    return optimalTuples[k]
+
+def convergenceTest(test, allSteps, order):
+    '''''
+       Perform a convergence test with the test problem (in test parameter) with
+       the given steps in parameter allSteps. 
+    '''''
+    dense=False
+    useOptimal = True
+    solverFunctions = [
+        ex_parallel.ex_midpoint_implicit_parallel
+        ,
+        ex_parallel.ex_midpoint_semi_implicit_parallel
+        ,
+        ex_parallel.ex_euler_semi_implicit_parallel
+        ]
+    labelsFunction=[
+        "Implicit parl"
+        ,
+        "SemiImp Midpoint parl"
+        ,
+        "SemiImp Euler parl"
+        ]
+
+    y_ref = np.loadtxt(tst.getReferenceFile(test.problemName))
+    denseOutput = test.denseOutput
+    if(not dense):
+        y_ref=y_ref[1]
+        denseOutput=[denseOutput[0], denseOutput[1]]
+    print(test.problemName + " order: " + str(order))
+    k=0
+    for solverFunction in solverFunctions:
+        errorPerStep=[]
+        print(labelsFunction[k])
+        for step in allSteps:
+            #rtol and atol are not important as we are fixing the step size
+            functionTuple=inputTuple(k,denseOutput, test,step,3, order)
+            ys, infodict = solverFunction(**functionTuple)
+            
+            print("number steps: " + str(infodict['nst']) + " (should be " + str(denseOutput[1]/step) + ")")
+            ys=ys[1:len(ys)]
+            error = np.linalg.norm(y_ref-ys, 2)
+            errorPerStep.append(error)
+        
+        coefficients = np.polyfit(np.log(allSteps), np.log(errorPerStep), 1)
+#         np.testing.assert_array_almost_equal(coefficients[0], p, 1, "CONVERGENCE TEST " + test.problemName + " " + labelsFunction[k] + " FAILED")
+        print("coefficients: " + str(coefficients) + " order is: " + str(order))
+        
+        if(plotConv):
+            fig = plt.figure()
+            fig.suptitle(test.problemName + " " + labelsFunction[k])
+            plt.plot(np.log10(allSteps),np.log10(errorPerStep), marker="x")
+        print(errorPerStep)
+        k+=1
+    plt.show()
+
+def doAllConvergenceTests():
+    global plotConv
+    plotConv=True
+    
+    linearSteps = [0.5,0.4,0.25,0.1,0.08,0.05,0.025,0.01,0.005,0.003,0.001]
+    convergenceTest(tst.LinearProblem(),linearSteps[1:],2)
+    convergenceTest(tst.LinearProblem(),linearSteps[1:],4)
+    convergenceTest(tst.LinearProblem(),linearSteps[0:7],6)
+    convergenceTest(tst.LinearProblem(),linearSteps[0:5],8)
+    
+#     vdpolSteps=[0.5,0.000005]
+#     convergenceTest(tst.VDPOLEasyProblem(),vdpolSteps[:],8)
+    
 
 if __name__ == "__main__":
-    non_dense_tests()
-    dense_tests()
+#     non_dense_tests()
+#     dense_tests()
+#     implicit_dense_tests()
+    doAllConvergenceTests()
     
+
+
+
+
