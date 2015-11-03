@@ -7,6 +7,7 @@ import os
 import numdifftools as ndt
 import warnings
 import cProfile
+import scipy
  
 warnings.filterwarnings('ignore')
 
@@ -72,7 +73,7 @@ def solve_implicit_step(zero_f, zero_grad, estimatedValueExplicit):
     #TODO change solver so it doesn't do the 2 extra unnnecessary function evaluations
     #https://github.com/scipy/scipy/issues/5369
     #TODO: add extra 2 function evaluations
-    return (x, infodict["nfev"])
+    return (x, infodict["nfev"], infodict["njev"])
 
 #     optObject = optimize.root(zero_f, estimatedValueExplicit, jac = zero_grad)
 # #     if(useGrad and not zero_grad is None):
@@ -105,7 +106,7 @@ def Rosenbrock_midpoint_implicit(f, grad, previousValues, previousTime, step, ar
     
     x = previousValue + np.linalg.solve(I-step*J00,np.dot(-(I+step*J00),(previousValue-previousPreviousValue)) + 2*step*f_yj)
     
-    return (x, f_yj, fe_tot)
+    return (x, f_yj, fe_tot, 0)
 
 def Rosenbrock_euler_implicit(f, grad, previousValues, previousTime, step, args, J00):
     """
@@ -121,12 +122,17 @@ def Rosenbrock_euler_implicit(f, grad, previousValues, previousTime, step, args,
     
     previousPreviousValue, previousValue = previousValues
     
-    I = np.identity(len(previousValue), dtype=float)
     
     fe_yj = f(*(previousValue,previousTime)+args)
     fe_tot = 1
-    x = previousValue + np.linalg.solve(I-step*J00, step*fe_yj)
-    return (x, fe_yj, fe_tot)
+    if(type(J00) is scipy.sparse.coo.coo_matrix):
+        Isparse = scipy.sparse.identity(len(previousValue), dtype = float)
+        x = previousValue + scipy.sparse.linalg.spsolve(Isparse-step*J00, step*fe_yj)
+    else:
+        #TODO: move this to a global variable
+        I = np.identity(len(previousValue), dtype=float)
+        x = previousValue + np.linalg.solve(I-step*J00, step*fe_yj)
+    return (x, fe_yj, fe_tot, 0)
 
 
 def midpoint_implicit(f, grad, previousValues, previousTime, step, args):
@@ -154,14 +160,16 @@ def midpoint_implicit(f, grad, previousValues, previousTime, step, args):
     if(grad is None):
         zero_grad=None
         
-    x, fe_tot_ = solve_implicit_step(zero_func, zero_grad, estimatedValueExplicit)
+    x, fe_tot_, je_tot_ = solve_implicit_step(zero_func, zero_grad, estimatedValueExplicit)
     fe_tot +=fe_tot_
+    je_tot += je_tot_
+    
     #TODO: see it this extra function can be done only if interpolating polynomial is calculated (looks complicated)
     #This can't follow the midpoint_explicit approach because in midpoint_implicit we are doing function evaluations
     #at previousTime+step/2
     f_yj= f(*(previousValue,previousTime)+args)
     fe_tot += 1
-    return (x, f_yj, fe_tot)
+    return (x, f_yj, fe_tot, je_tot)
 
 
 def midpoint_explicit(f, grad, previousValues, previousTime, step, args):
@@ -181,13 +189,13 @@ def midpoint_explicit(f, grad, previousValues, previousTime, step, args):
     
     f_yj = f(*(previousValue, previousTime)+args)
     fe_tot=1
-    return (previousPreviousValue + (2*step)*f_yj, f_yj, fe_tot)
+    return (previousPreviousValue + (2*step)*f_yj, f_yj, fe_tot,0)
 
 def euler_explicit(f, grad, previousValues, previousTime, step, args):
     previousPreviousValue, previousValue = previousValues
     f_yj = f(*(previousValue, previousTime)+args)
     fe_tot=1
-    return (previousValue + step*f_yj, f_yj, fe_tot)
+    return (previousValue + step*f_yj, f_yj, fe_tot,0)
 
 
 '''''
@@ -198,30 +206,34 @@ def compute_stages((method, methodargs, func, grad, tn, yn, args, h, k_nj_lst, s
     res = []
     for (k,nj) in k_nj_lst:
         fe_tot=0
+        je_tot=0
         nj = int(nj)
         Y = np.zeros((nj+1, len(yn)), dtype=(type(yn[0])))
         f_yj = np.zeros((nj+1, len(yn)), dtype=(type(yn[0])))
         Y[0] = yn
         step = h/nj
 
-        Y[1], f_yj[0], fe_tot_ = method(func, grad, (None, Y[0]), tn, step, args, **methodargs)
-        fe_tot+=fe_tot_
+        Y[1], f_yj[0], fe_tot_, je_tot_ = method(func, grad, (None, Y[0]), tn, step, args, **methodargs)
+        fe_tot += fe_tot_
+        je_tot += je_tot_
         for j in range(2,nj+1):
-            Y[j], f_yj[j-1], fe_tot_ = method(func, grad, (Y[j-2], Y[j-1]), tn + (j-1)*(h/nj), step, args, **methodargs)
+            Y[j], f_yj[j-1], fe_tot_ , je_tot_= method(func, grad, (Y[j-2], Y[j-1]), tn + (j-1)*(h/nj), step, args, **methodargs)
             fe_tot += fe_tot_
+            je_tot += je_tot_
         y_half = Y[nj/2]
         
         #Perform smoothing step
         Tj1 = Y[nj]
         if(not smoothing == 'no'):
-            nextStepSolution, f_yj_unused, fe_tot_ = method(func, grad, (Y[nj-1], Y[nj]), tn + h, step, args, **methodargs)
+            nextStepSolution, f_yj_unused, fe_tot_, je_tot_ = method(func, grad, (Y[nj-1], Y[nj]), tn + h, step, args, **methodargs)
             fe_tot += fe_tot_
+            je_tot += je_tot_
             if(smoothing == 'gbs'):
                 Tj1 = 1/4*(Y[nj-1]+2*Y[nj]+nextStepSolution)
             elif(smoothing == 'semiimp'):
                 Tj1 = 1/2*(Y[nj-1]+nextStepSolution)
                 
-        res += [(k, nj, Tj1, y_half, f_yj, fe_tot)]
+        res += [(k, nj, Tj1, y_half, f_yj, fe_tot, je_tot)]
 
     return res
 
@@ -312,6 +324,7 @@ def extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full
     #Initialize values
     fe_seq = 0
     fe_tot = 0
+    je_tot = 0
     nstp = 0
     cur_stp = 0
 
@@ -326,14 +339,12 @@ def extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full
 
     #Iterate until you reach final time
     while t_curr < t_max:
-        rejectStep, y_temp, ysolution, h, k, h_new, k_new, (fe_seq_, fe_tot_) = solve_one_step(
+        rejectStep, y_temp, ysolution, h, k, h_new, k_new, (fe_seq_, fe_tot_, je_tot_) = solve_one_step(
                 method, methodargs, func, grad, t_curr, t, t_index, yn, args, h, k, 
                 atol, rtol, pool, smoothing, symmetric, seq, adaptative)
-#         print(rejectStep)
-#         print(h)
-#         print k
-#         print(y_temp)
-#         print(t_curr)
+        print(h)
+        print(rejectStep)
+        print(t_curr)
         #Store values if step is not rejected
         if(not rejectStep):
             yn = 1*y_temp
@@ -355,6 +366,7 @@ def extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full
         #Update function evaluations
         fe_seq += fe_seq_
         fe_tot += fe_tot_
+        je_tot += je_tot_
 
         sum_ks += k
         sum_hs += h
@@ -381,7 +393,7 @@ def extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full
     pool.close()
 
     if full_output:
-        infodict = {'fe_seq': fe_seq, 'nfe': fe_tot, 'nst': nstp, 
+        infodict = {'fe_seq': fe_seq, 'nfe': fe_tot, 'nst': nstp, 'nje': je_tot,
                     'h_avg': sum_hs/nstp, 'k_avg': sum_ks/nstp}
         return (ys, infodict)
     else:
@@ -408,9 +420,7 @@ def balance_load(k, seq=(lambda t: 2*t)):
                 break
             index = index[::-1]
      
-    fe_seq = sum([pair[1] for pair in k_nj_lst[0]])
-
-    return (k_nj_lst, fe_seq)
+    return k_nj_lst
 
 def compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h, k, pool, seq=(lambda t: 2*t), smoothing='no', symmetric = True):
     """
@@ -425,8 +435,9 @@ def compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h,
         - seq:          extrapolation step number sequence
     """
     T = np.zeros((k+1,k+1, len(yn)), dtype=(type(yn[0])))
-    k_nj_lst, fe_seq = balance_load(k, seq=seq)
+    k_nj_lst = balance_load(k, seq=seq)
     
+    je_tot=0
     prof = cProfile.Profile()
     if(not methodargs=={}):
         def func_at_tn(y):
@@ -444,7 +455,8 @@ def compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h,
 #             prof.print_stats()
         else:
             methodargs['J00'] = grad(yn, tn)
-            fe_tot=0
+            je_tot = 1
+            fe_tot = 0
 #             print(fe_tot)
     else:
         fe_tot=0
@@ -452,23 +464,34 @@ def compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h,
     jobs = [(method, methodargs, func, grad, tn, yn, args, h, k_nj, smoothing) for k_nj in k_nj_lst]
 
     results = pool.map(compute_stages, jobs, chunksize=1)
-
+    
+    #At this stage fe_tot has only counted the function evaluations for the jacobian estimation
+    fe_seq = 1*fe_tot
+    fe_tot_stage_max=0
     # process the returned results from the pool 
     y_half = (k+1)*[None]
     f_yj = (k+1)*[None]
     hs = (k+1)*[None]
+    
     for res in results:
-        for (k_, nj_, Tk_, y_half_, f_yj_, fe_tot_) in res:
+        fe_tot_stage = 0
+        for (k_, nj_, Tk_, y_half_, f_yj_, fe_tot_, je_tot_) in res:
             T[k_, 1] = Tk_
             y_half[k_] = y_half_
             f_yj[k_] = f_yj_
             hs[k_] = h/nj_
             fe_tot += fe_tot_
+            je_tot += je_tot_
+            fe_tot_stage += fe_tot_
+        #Count the maximum number of sequential 
+        #function evaluations taken
+        if(fe_tot_stage_max<fe_tot_stage):
+            fe_tot_stage_max = fe_tot_stage 
     
-#     print(fe_tot)
+    fe_seq += fe_tot_stage_max
     fill_extrapolation_table(T,k,seq, symmetric)
 
-    return (T, fe_seq, fe_tot, yn, y_half, f_yj, hs)
+    return (T, fe_seq, fe_tot, je_tot, yn, y_half, f_yj, hs)
 
 def fill_extrapolation_table(T,k,seq, symmetric):
     '''''
@@ -483,8 +506,6 @@ def fill_extrapolation_table(T,k,seq, symmetric):
     
     '''''
     # compute extrapolation table 
-    # only correct for midpoint method, use for non-symmetric methods:
-    #T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j)/(seq(j-i+1))) - 1)
     for i in range(2, k+1):
         for j in range(i, k+1):
             if(symmetric):
@@ -636,7 +657,30 @@ def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
     return poly
     
 
-def getStepAndSequence(t_final, t, t_index, seq):
+def getDenseAndSequence(t_final, t, t_index, seq):
+    '''
+    Returns whether dense output is needed because an intermediate solution
+    is wanted at this step. Also chooses the step sequence to use for this step
+    
+    
+    **Parameters**
+        - t_final: float
+            final time after step is taken
+        - t : numpy.ndarray
+            All times when output is requested
+        - t_index : int
+            Index of t ndarray at which next output value is requested
+        - seq: callable(k) (k: positive int)
+            The step-number sequence used to compute T, if None a default is used
+            depending on whether a dense output is needed
+    
+    **Returns**
+        - dense : whether at the interval currently calculated there is intermediate solutions
+            to be calculated by dense output
+        - seq : step sequence to take for this step
+ 
+    '''
+    
     dense=True
     #See if any intermediate points are asked in the interval we are
     #calculating (the value at t_final is not interpolated)
@@ -668,6 +712,38 @@ def getStepAndSequence(t_final, t, t_index, seq):
     return (dense,seq)
 
 def estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative): 
+    '''
+    Estimates next step and order, and whether to reject step, from the results
+    obtained by the solver and the tolerance asked
+    
+    
+    **Parameters**
+        - T: numpy.ndarray (bidimensional matrix)
+            Extrapolation tableau with all the extrapolation values
+        - k : int
+            Initial condition on y (can be a vector). Must be a non-scalar 
+            numpy.ndarray
+        - h : float
+            An ordered sequence of time points for which to solve for y. The initial 
+            value point should be the first element of this sequence.
+        - atol, rtol : float
+            The input parameters atol and rtol (absolute tolerance and relative tolerance)
+            determine the error control performed by the solver.
+        - seq: callable(k) (k: positive int)
+            The step-number sequence used to compute T
+        - adaptive: string
+            Specifies the strategy of integration. Can take two values:
+            -- "fixed"  = use fixed step size and fixed order strategy.
+            -- "order" = use adaptive step size and adaptive order strategy.
+    
+    **Returns**
+        - rejectStep : whether to reject the step and the solution obtained
+            (because it doesn't satisfy the asked tolerances)
+        - y : best solution at the end of the step
+        - h_new : new step to take
+        - k_new :  new order to use
+ 
+    '''
     
     if(adaptative=="fixed"):
         return (False, T[k,k], h, k)
@@ -743,7 +819,7 @@ def estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative):
 def solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args, h, k, atol, rtol, 
                    pool, smoothing, symmetric, seq, adaptative):
     
-    dense, seq = getStepAndSequence(t_curr+h, t, t_index, seq)
+    dense, seq = getDenseAndSequence(t_curr+h, t, t_index, seq)
     
     #Limit k, order of extrapolation
     #If order and step are fixed, do not limit order
@@ -752,7 +828,7 @@ def solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args,
         k_min = 3
         k = min(k_max, max(k_min, k))
 
-    T, fe_seq, fe_tot, y0, y_half, f_yj, hs = compute_extrapolation_table(
+    T, fe_seq, fe_tot, je_tot, y0, y_half, f_yj, hs = compute_extrapolation_table(
             method, methodargs, func, grad, t_curr, yn, args, h, k, pool, seq, smoothing, symmetric)
     
     rejectStep, y, h_new, k_new = estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative)
@@ -767,7 +843,7 @@ def solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args,
             #Use same order if step is rejected by the interpolation (do not use the k_new of the adapted order)
             k_new = k  
 
-    return (rejectStep, y, y_solution, h, k, h_new, k_new, (fe_seq, fe_tot))
+    return (rejectStep, y, y_solution, h, k, h_new, k_new, (fe_seq, fe_tot, je_tot))
 
 
 def interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half, f_yj, y0, fe_seq, fe_tot, atol, rtol, seq):
