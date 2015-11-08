@@ -8,6 +8,7 @@ import numdifftools as ndt
 import warnings
 import cProfile
 import scipy
+import time
  
 warnings.filterwarnings('ignore')
 
@@ -108,6 +109,16 @@ def Rosenbrock_midpoint_implicit(f, grad, previousValues, previousTime, step, ar
     
     return (x, f_yj, fe_tot, 0)
 
+def isSparseMatrix(J):
+    return (isinstance(J, scipy.sparse.csr_matrix) or isinstance(J, scipy.sparse.coo_matrix)
+            or isinstance(J, scipy.sparse.csc_matrix) or isinstance(J, scipy.sparse.dia_matrix))
+
+min_tol = 1e-5
+useIterative=True
+def setiterative(iterative):
+    global useIterative
+    useIterative= iterative
+
 def Rosenbrock_euler_implicit(f, grad, previousValues, previousTime, step, args, J00):
     """
     Creates midpoint function method formula u_n+1=u_n+h*f(
@@ -125,9 +136,21 @@ def Rosenbrock_euler_implicit(f, grad, previousValues, previousTime, step, args,
     
     fe_yj = f(*(previousValue,previousTime)+args)
     fe_tot = 1
-    if(type(J00) is scipy.sparse.coo.coo_matrix):
-        Isparse = scipy.sparse.identity(len(previousValue), dtype = float)
-        x = previousValue + scipy.sparse.linalg.spsolve(Isparse-step*J00, step*fe_yj)
+    #TODO: change this checking of the sparsity type of the matrix only once
+    # at the beginning of the ODE solving 
+    #Choose system solver: 
+    #http://scicomp.stackexchange.com/questions/3262/how-to-choose-a-method-for-solving-linear-equations
+    if(isSparseMatrix(J00)):
+        Isparse = scipy.sparse.identity(len(previousValue), dtype = float, format = 'csr')
+        if(useIterative):
+            #The algorithm terminates when either the relative or the absolute residual is below tol.
+            #Therefore we use the minimum tolerance (more restrictive value)
+#             print(min_tol)
+            sol, info= scipy.sparse.linalg.lgmres(Isparse-step*J00, step*fe_yj, tol=min_tol)
+        else:
+            sol = scipy.sparse.linalg.spsolve(Isparse-step*J00, step*fe_yj)
+            
+        x = previousValue + sol
     else:
         #TODO: move this to a global variable
         I = np.identity(len(previousValue), dtype=float)
@@ -307,6 +330,8 @@ def extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full
             the the number of workers is set to the number of CPUs on the the
             running machine. Defaults to None.
     '''
+    global min_tol
+    min_tol = min(atol,rtol)
     
     #Initialize pool of workers to parallelize extrapolation table calculations
     set_NUM_WORKERS(nworkers)  
@@ -342,9 +367,9 @@ def extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full
         rejectStep, y_temp, ysolution, h, k, h_new, k_new, (fe_seq_, fe_tot_, je_tot_) = solve_one_step(
                 method, methodargs, func, grad, t_curr, t, t_index, yn, args, h, k, 
                 atol, rtol, pool, smoothing, symmetric, seq, adaptative)
-        print(h)
-        print(rejectStep)
-        print(t_curr)
+#         print(h)
+#         print(rejectStep)
+#         print(t_curr)
         #Store values if step is not rejected
         if(not rejectStep):
             yn = 1*y_temp
@@ -464,7 +489,7 @@ def compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h,
     jobs = [(method, methodargs, func, grad, tn, yn, args, h, k_nj, smoothing) for k_nj in k_nj_lst]
 
     results = pool.map(compute_stages, jobs, chunksize=1)
-    
+#     res = compute_stages(jobs[0])
     #At this stage fe_tot has only counted the function evaluations for the jacobian estimation
     fe_seq = 1*fe_tot
     fe_tot_stage_max=0
@@ -474,6 +499,7 @@ def compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h,
     hs = (k+1)*[None]
     
     for res in results:
+#     for i in range(1,2):
         fe_tot_stage = 0
         for (k_, nj_, Tk_, y_half_, f_yj_, fe_tot_, je_tot_) in res:
             T[k_, 1] = Tk_
@@ -711,6 +737,11 @@ def getDenseAndSequence(t_final, t, t_index, seq):
     
     return (dense,seq)
 
+addwork=True
+def setwork(count):
+    global addwork
+    addwork=count
+
 def estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative): 
     '''
     Estimates next step and order, and whether to reject step, from the results
@@ -747,8 +778,9 @@ def estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative):
     
     if(adaptative=="fixed"):
         return (False, T[k,k], h, k)
-    
-    
+    sizeODE=0
+#     if(addwork):
+#         sizeODE = len(T[k,k])
     #Define work function (to minimize)      
     def A_k(k):
         """
@@ -758,7 +790,8 @@ def estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative):
         sum_ = 0
         for i in range(k):
             sum_ += seq(i+1)
-        return max(seq(k), sum_/NUM_WORKERS) # The second value is only an estimate
+        #sizeODE is the length of the ODE
+        return max(seq(k), sum_/NUM_WORKERS)+sizeODE # The second value is only an estimate
 
     H_k = lambda h, k, err_k: h*0.94*(0.65/err_k)**(1/(2*k-1)) 
     W_k = lambda Ak, Hk: Ak/Hk

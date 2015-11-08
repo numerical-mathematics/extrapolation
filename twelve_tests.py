@@ -81,13 +81,24 @@ def ROBERf(y,t):
     second_dim = 0.04*y[0]-1e4*y[1]*y[2]-3e7*y[1]**2
     third_dim = 3e7*y[1]**2
     return np.array([first_dim,second_dim,third_dim])
-    
+
+def ROBERgrad(y,t):
+    matrix11=-0.04
+    matrix12=1e4*y[2]
+    matrix13=1e4*y[1]
+    matrix21=0.04
+    matrix22=-1e4*y[2]-3e7*y[1]*2
+    matrix23=-1e4*y[1]
+    matrix31=0
+    matrix32=3e7*y[1]*2
+    matrix33=0
+    return np.array([[matrix11,matrix12,matrix13],[matrix21,matrix22,matrix23],[matrix31,matrix32,matrix33]])
 
 def ROBERProblem():
     base=13*[10.]
     base[0]=0
     denseOutput = np.power(base,range(0,13))
-    return TestProblemDefinition("ROBER", ROBERf, None, 0, np.array([1.,0,0]), 100., denseOutput,1.e-6,None)
+    return TestProblemDefinition("ROBER", ROBERf, ROBERgrad, 0, np.array([1.,0,0]), 100., denseOutput,1.e-6,None)
     
 
 #OREGO problem
@@ -98,10 +109,21 @@ def OREGOf(y,t):
     third_dim = 0.161*(y[0]-y[2])
     return np.array([first_dim,second_dim,third_dim])
     
+def OREGOgrad(y,t):
+    matrix11=77.27*(1-8.375e-6*y[0]*2-y[1])
+    matrix12=77.27*(1-y[0])
+    matrix13=0
+    matrix21=1/77.27*(-y[1])
+    matrix22=1/77.27*(-(1+y[0]))
+    matrix23=1/77.27
+    matrix31=0.161
+    matrix32=0
+    matrix33=-0.161
+    return np.array([[matrix11,matrix12,matrix13],[matrix21,matrix22,matrix23],[matrix31,matrix32,matrix33]])
 
 def OREGOProblem():
     denseOutput = np.arange(0,390,30.)
-    return TestProblemDefinition("OREGO", OREGOf, None, 0, np.array([1.,2.,3.]), 360., denseOutput, 1.e-6,None)
+    return TestProblemDefinition("OREGO", OREGOf, OREGOgrad, 0, np.array([1.,2.,3.]), 360., denseOutput, 1.e-6,None)
 
 #HIRES problem
 
@@ -116,9 +138,19 @@ def HIRESf(y,t):
     eighth_dim = -seventh_dim
     return np.array([first_dim,second_dim,third_dim,fourth_dim,fifth_dim,sixth_dim,seventh_dim,eighth_dim])
 
+def HIRESgrad(y,t):
+    return np.array([[-1.71,0.43,8.32,0,0,0,0,0],
+                     [1.71,-8.75,0,0,0,0,0,0],
+                     [0,0,-10.03,0.43,0.035,0,0,0],
+                     [0,8.32,1.71,-1.12,0,0,0,0],
+                     [0,0,0,0,-1.745,0.43,0.035,0],
+                     [0,0,0,0.69,1.71,-0.43-280*y[7],0.69,-280*y[5]],
+                     [0,0,0,0,0,280*y[7],-1.81,280*y[5]],
+                     [0,0,0,0,0,-280*y[7],1.81,-280*y[5]]])
+
 def HIRESProblem():
     denseOutput = np.array([0,321.8122,421.8122])
-    return TestProblemDefinition("HIRES", HIRESf, None, 0, np.array([1.,0,0,0,0,0,0,0.0057]),425. ,denseOutput,1.e-4,None)
+    return TestProblemDefinition("HIRES", HIRESf, HIRESgrad, 0, np.array([1.,0,0,0,0,0,0,0.0057]),425. ,denseOutput,1.e-4,None)
 
 #E5 problem
 
@@ -147,16 +179,18 @@ def E5Problem():
 #BRUSS-2D problem
     
 A=0
-N=128
+Aperm=0
+N=30
 step=0
 x=0
 y=0
 alpha=0.1
 
 def initializeBRUSS2DValues(Nval):
-    global A,N,step,x,y
+    global A,Aperm,N,step,x,y
     N=Nval
     A=five_pt_laplacian_sparse_periodic(N,0,1)
+#     Aperm = laplacianPerm(N,0,1)
     step=1/(N-1)
     x=np.multiply(step,range(N)*N)
     y=np.multiply(step,np.repeat(range(N),N))
@@ -168,12 +202,11 @@ def five_pt_laplacian_sparse_periodic(m,a,b):
     e=np.ones(m**2)
     e2=([1]*(m-1)+[0])*m
     e3=([0]+[1]*(m-1))*m
-    ######IMPORTANT: in the examples is m+1????
     h=(b-a)/(m-1)
     A=scipy.sparse.spdiags([-4*e,e2,e3,e,e],[0,-1,1,-m,m],m**2,m**2)
     # Top & bottom BCs:
-    A_periodic_top = scipy.sparse.spdiags([e[0:m]],[2*m-m**2],m**2,m**2).tolil().transpose()
-    A_periodic_bottom = scipy.sparse.spdiags(np.concatenate((np.zeros(m),e[0:m])),[2*m-m**2],m**2,m**2).tolil()
+    A_periodic_top = scipy.sparse.spdiags([e[0:m]],[2*m-m**2],m**2,m**2).transpose()
+    A_periodic_bottom = scipy.sparse.spdiags(np.concatenate((np.zeros(m),e[0:m])),[2*m-m**2],m**2,m**2)
     A_periodic = A_periodic_top + A_periodic_bottom
     # Left & right BCs:
     for i in range(m):
@@ -181,7 +214,7 @@ def five_pt_laplacian_sparse_periodic(m,a,b):
         A_periodic[(i+1)*m-1,i*m+1] = 1.
     A = A + A_periodic
     A/=h**2
-    A = A.todia()
+    A = A.tocsr()
     return A
 
 #Here we will use U to obtain the coordinates (x,y)
@@ -215,8 +248,44 @@ def BRUSS2Dgrad(yn,tn):
     df2dv = scipy.sparse.spdiags(-U**2,0,N**2,N**2)+alpha*A
     left = scipy.sparse.vstack([df1du,df2du])
     right = scipy.sparse.vstack([df1dv,df2dv])
-    final = scipy.sparse.hstack([left, right])
+    final = scipy.sparse.hstack([left, right], format='csr')
     return final
+
+def laplacianPerm(m,a,b):
+    e=np.ones(2*m**2)
+    e2=np.zeros(2*m**2)
+    e3=np.zeros(2*m**2)
+    e2h=([1]*(m-1)+[0])*m
+    e2[::2]=e2h
+    e2[1::2]=e2h
+    e3h=([0]+[1]*(m-1))*m
+    e3[::2]=e3h
+    e3[1::2]=e3h
+    h=(b-a)/(m-1)
+    Aperm=scipy.sparse.spdiags([-4*e,e2,e3,e,e],[0,-2,2,-2*m,2*m],2*m**2,2*m**2)
+    # Top & bottom BCs:*
+    A_periodic_top = scipy.sparse.spdiags([e[0:2*m]],[2*(2*m-m**2)],2*m**2,2*m**2).transpose()
+    A_periodic_bottom = scipy.sparse.spdiags(np.concatenate((np.zeros(2*m),e[0:2*m])),[2*(2*m-m**2)],2*m**2,2*m**2)
+    A_periodic = A_periodic_top + A_periodic_bottom
+    # Left & right BCs:
+    for i in range(m):
+        A_periodic[2*i*m,2*((i+1)*m-2)] = 1.
+        A_periodic[2*i*m+1,2*((i+1)*m-2)+1] = 1.
+        A_periodic[2*((i+1)*m-1),2*(i*m+1)] = 1.
+        A_periodic[2*((i+1)*m-1)+1,2*(i*m+1)+1] = 1.
+    Aperm = Aperm + A_periodic
+    Aperm/=h**2
+    Aperm = Aperm.tocsr()
+    plt.spy(Aperm)
+    plt.xticks(range(0,2*m**2))
+    plt.yticks(range(0,2*m**2))
+    plt.figure()
+    plt.spy(A)
+    plt.xticks(range(0,m**2))
+    plt.yticks(range(0,m**2))
+#     plt.show()
+    return Aperm
+
 
 def FortBRUSS2Df(y,t):
     aux=fnbruss.fnbruss(y,t,N)
@@ -244,7 +313,7 @@ def BRUSS2DProblem():
     denseOutput = [0,1.5,tf]
     initialValue = BRUSS2DInitialValue(N)
     denseOutput = [0,0.5,1.,1.3,1.4,5.6,6.,6.1,6.2,10]
-    return TestProblemDefinition("BRUSS2D_"+str(N), PyBRUSS2Df, BRUSS2Dgrad, 0, initialValue, tf, denseOutput,1.,None)
+    return TestProblemDefinition("BRUSS2D_"+str(N), FortBRUSS2Df, BRUSS2Dgrad, 0, initialValue, tf, denseOutput,1.,None)
 
 #KDV problem
 
@@ -261,12 +330,12 @@ def getAllTests():
 #     tests.append(VDPOLWithGradProblem())
 #     tests.append(VDPOLMildProblem())
 #     tests.append(VDPOLEasyProblem())
-#     tests.append(ROBERProblem())
-#     tests.append(OREGOProblem())
-#     tests.append(HIRESProblem())
+    tests.append(ROBERProblem())
+    tests.append(OREGOProblem())
+    tests.append(HIRESProblem())
 #     tests.append(KDVProblem())
 #     tests.append(E5Problem())
-    tests.append(BRUSS2DProblem())
+#     tests.append(BRUSS2DProblem())
 #     tests.append(LinearProblem())
     
     return tests
@@ -299,7 +368,7 @@ def getReferenceFile(problemName):
 def inputTuple(k,denseOutput,test,rtol,atol,firstStep,robustness,smoothing,seq,useGrad, useOptimal):    
     standardTuple = {'func': test.RHSFunction, 'grad': test.RHSGradient, 'y0': test.initialValue, 't': denseOutput
                      ,'full_output': True, 'rtol': rtol, 'atol': atol, 'h0': firstStep, 'mxstep': 10e8, 'robustness': robustness,
-                     'smoothing': smoothing,'seq':seq,'useGradient':useGrad}    
+                     'smoothing': smoothing,'seq':seq,'useGradient':useGrad}#, 'nworkers': 1}    
     
     if(useOptimal):
         midimplicitTuple = standardTuple.copy()
@@ -325,8 +394,8 @@ def inputTuple(k,denseOutput,test,rtol,atol,firstStep,robustness,smoothing,seq,u
     return standardTuple
 
 def comparisonTest():
-    dense=True
-    tol = [1.e-7]#, 1.e-11]#,1.e-12]
+    dense=False
+    tol = [1.e-4,1.e-5,1.e-7,1.e-9,1.e-11,1.e-12]
     resultDict={}
     useOptimal = True
     solverFunctions = [
@@ -339,26 +408,26 @@ def comparisonTest():
 #         ex_parallel.ex_midpoint_semi_implicit_parallel
 #         ,
         ex_parallel.ex_euler_semi_implicit_parallel
-#         ,
-#         integrate.odeint
+        ,
+        integrate.odeint
         ]
     labelsFunction=[
 #         "New Explicit parl"
 #         ,
 #         "Old Explicit parl"
 #         ,
-#         "Implicit parl"
+#         "Implicit"
 #         ,
-#         "SemiImp Midpoint parl"
+#         "SemiImp Midpoint"
 #         ,
-        "SemiImp Euler parl"
-#         ,
-#         "Scipy int"
+        "Semi Eul"
+        ,
+        "Scipy int"
         ]
 
     robustnesses=[3]#, 3, 5, 10, 100]
     smoothings = ['no']#,'semiimp']#,'gbs']
-    useGrads = [True]
+    useGrads = [False]#, False]
 
     def BD1983(t):
         #First value of the sequence not used
@@ -366,18 +435,19 @@ def comparisonTest():
         return seq[t]
     
     seqs = {'2(2t-1)':(lambda t: 2*(2*t-1))}#,'B&D1983':BD1983,'None':None}#, 't+1':(lambda t: t+1)}
-    firstStep=0.05
+    firstStep=0.0005
     for test in getAllTests():
         testProblemResult = []
         for aux in range(0,len(labelsFunction)*len(robustnesses)*len(smoothings)*len(useGrads)*len(seqs)):
             testProblemResult.append([])
-#         y_ref = np.loadtxt(getReferenceFile(test.problemName))
+        y_ref = np.loadtxt(getReferenceFile(test.problemName))
         denseOutput = test.denseOutput
         if(not dense):
             y_ref=y_ref[-1]
             denseOutput=[denseOutput[0], denseOutput[-1]]
         print(test.problemName)
         for i in range(len(tol)):
+            first =True
             print(tol[i])
             j=0
             labels=[]
@@ -389,13 +459,13 @@ def comparisonTest():
             print("rtol: " + str(rtol) + " atol:" + str(atol))
             for seqStr in seqs:
                 seq = seqs[seqStr]
-                print("sequence " + seqStr)
+#                 print("sequence " + seqStr)
                 for useGrad in useGrads:
-                    print("gradient " + str(useGrad))
+#                     print("gradient " + str(useGrad))
                     for smoothing in smoothings:
-                        print("smoothing " + str(smoothing))
+#                         print("smoothing " + str(smoothing))
                         for robustness in robustnesses:
-                            print("robustness " + str(robustness))
+#                             print("robustness " + str(robustness))
                             k=0    
                             for solverFunction in solverFunctions:
                                 startTime = time.time()
@@ -409,11 +479,17 @@ def comparisonTest():
                                     mean_order = 0
                                     fe_seq = infodict["nfe"]
                                 else:
+                                    print(first)
+                                    aaa=(True and first)
+#                                     ex_parallel.setwork(first)
+                                    ex_parallel.setiterative(first)
+                                    if(first):
+                                        first=False
                                     functionTuple=inputTuple(k,denseOutput, test,rtol,atol,firstStep,robustness,smoothing,seq,useGrad, useOptimal)
-                                    yappi.start()
+#                                     yappi.start()
                                     ys, infodict = solverFunction(**functionTuple)
-                                    yappi.get_func_stats().print_all()
-                                    yappi.clear_stats()                                    
+#                                     yappi.get_func_stats().print_all()
+#                                     yappi.clear_stats()                                    
                                     mean_order = infodict["k_avg"]
                                     fe_seq = infodict["fe_seq"]
                                 
@@ -428,17 +504,17 @@ def comparisonTest():
 #                                 plt.plot(np.log10(denseOutput[1:n]),np.log(y4[1:n]))
         
 #                                 plt.show()
-                                X, Y = np.meshgrid(np.multiply(step,range(N)),np.multiply(step,range(N)))
-                                for i in range(len(ys)):
-                                    z=ys[i]
-                                    U=np.reshape(z[range(N**2)], (N,N))
-                                    V=np.reshape(z[range(N**2,2*N**2)], (N,N))
-                                    fig = plt.figure()
-                                    fig.suptitle("time : " + str(denseOutput[i]))
-                                    ax = fig.gca(projection='3d')
-                                    ax.plot_wireframe(X, Y, U)
-                                    ax.plot_wireframe(X, Y, V, color='r')
-                                plt.show()
+#                                 X, Y = np.meshgrid(np.multiply(step,range(N)),np.multiply(step,range(N)))
+#                                 for i in range(len(ys)):
+#                                     z=ys[i]
+#                                     U=np.reshape(z[range(N**2)], (N,N))
+#                                     V=np.reshape(z[range(N**2,2*N**2)], (N,N))
+#                                     fig = plt.figure()
+#                                     fig.suptitle("time : " + str(denseOutput[i]))
+#                                     ax = fig.gca(projection='3d')
+#                                     ax.plot_wireframe(X, Y, U)
+#                                     ax.plot_wireframe(X, Y, V, color='r')
+#                                 plt.show()
         
                                 finalTime = time.time()
                                 fe_tot = infodict["nfe"]
@@ -449,16 +525,16 @@ def comparisonTest():
                                 relative_error = [np.linalg.norm(output, 2) for output in componentwise_relative_error]
                                 maximum_relative_error = np.max(relative_error)
                                 testProblemResult[j].append([finalTime-startTime, maximum_relative_error, fe_tot, nsteps, mean_order, fe_seq, je_tot])
-                                print("Done: " + labelsFunction[k] + " rel error: " + str(relative_error) + " func eval: " + str(fe_tot) + " jac eval: " + str(je_tot) + " func eval seq: " + str(fe_seq)+ " num steps: " + str(nsteps) + " mean_order: " + str(mean_order))
+                                print("Done: " + labelsFunction[k] + " time: " + str(finalTime-startTime) +  " rel error: " + str(relative_error) + " func eval: " + str(fe_tot) + " jac eval: " + str(je_tot) + " func eval seq: " + str(fe_seq)+ " num steps: " + str(nsteps) + " mean_order: " + str(mean_order))
 #                                 labels.append(labelsFunction[k] +", rob=" + str(robustness) + ", smooth=" + str(smoothing) + ", usegrad=" + str(useGrad) + " , seq = " + seqStr)
                                 if(not useOptimal):
                                     labels.append(labelsFunction[k] + ", smooth=" + str(smoothing) + " , seq = " + seqStr)
                                 else:
-                                    labels.append(labelsFunction[k] + " optimal param, usegrad=" + str(useGrad) )
+                                    labels.append(labelsFunction[k] + " optim, J=" + str(useGrad) + ", it= " + str(aaa))
                                 k+=1
                                 j+=1
         
-#         getComparisonFactorMetric(testProblemResult, labels, labelsFunction)
+        getComparisonFactorMetric(testProblemResult, labels, labelsFunction)
         resultDict[test.problemName] = testProblemResult
         
            
@@ -542,32 +618,21 @@ def plotResults(resultDict, labels):
         plt.subplot(711)
         plt.legend()
         plt.ylabel("time(log)")
-        plt.xlabel("relative error (log10)")
         plt.subplot(712)
-        plt.legend()
         plt.ylabel("fun.ev.")
-        plt.xlabel("relative error (log10)")
         plt.subplot(714)
-        plt.legend()
         plt.ylabel("mean order")
-        plt.xlabel("relative error (log10)")
         plt.subplot(717)
-        plt.legend()
         plt.ylabel("#steps")
         plt.xlabel("relative error (log10)")
         plt.subplot(713)
-        plt.legend()
         plt.ylabel("fun.ev. ratio")
-        plt.xlabel("relative error (log10)")
         plt.subplot(715)
-        plt.legend()
         plt.ylabel("fun.ev.seq")
-        plt.xlabel("relative error (log10)")
         plt.subplot(716)
-        plt.legend()
         plt.ylabel("jac.ev.")
-        plt.xlabel("relative error (log10)")
         j+=1
+        fig.subplots_adjust(left=0.05, top = 0.96, bottom=0.06, right=0.99)
     plt.show()
 
 
@@ -576,6 +641,13 @@ if __name__ == "__main__":
 #     storeTestsExactSolutions()
     resultDict, labels = comparisonTest()
     plotResults(resultDict, labels)
+#     initializeBRUSS2DValues(4)
+#     J=BRUSS2Dgrad(np.ones(32),0)
+#     plt.figure()
+#     plt.spy(J)
+#     plt.xticks(range(0,2*4**2))
+#     plt.yticks(range(0,2*4**2))
+#     plt.show()
     print "done"
     
     
