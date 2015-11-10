@@ -118,6 +118,12 @@ useIterative=True
 def setiterative(iterative):
     global useIterative
     useIterative= iterative
+    
+addinitialguess=True
+
+def setaddinitialguess(initialguess):
+    global addinitialguess
+    addinitialguess=initialguess
 
 def Rosenbrock_euler_implicit(f, grad, previousValues, previousTime, step, args, J00):
     """
@@ -146,7 +152,13 @@ def Rosenbrock_euler_implicit(f, grad, previousValues, previousTime, step, args,
             #The algorithm terminates when either the relative or the absolute residual is below tol.
             #Therefore we use the minimum tolerance (more restrictive value)
 #             print(min_tol)
-            sol, info= scipy.sparse.linalg.lgmres(Isparse-step*J00, step*fe_yj, tol=min_tol)
+            if(not addinitialguess):
+                xval=None
+            else:
+                xval=previousValue
+            sol, info= scipy.sparse.linalg.gmres(Isparse-step*J00, step*fe_yj, tol=min_tol,x0=xval, maxiter=100)
+            if info >0:
+                print("Info: maximum iterations reached for sparse system solver (GMRES).")
         else:
             sol = scipy.sparse.linalg.spsolve(Isparse-step*J00, step*fe_yj)
             
@@ -244,7 +256,6 @@ def compute_stages((method, methodargs, func, grad, tn, yn, args, h, k_nj_lst, s
             fe_tot += fe_tot_
             je_tot += je_tot_
         y_half = Y[nj/2]
-        
         #Perform smoothing step
         Tj1 = Y[nj]
         if(not smoothing == 'no'):
@@ -255,7 +266,6 @@ def compute_stages((method, methodargs, func, grad, tn, yn, args, h, k_nj_lst, s
                 Tj1 = 1/4*(Y[nj-1]+2*Y[nj]+nextStepSolution)
             elif(smoothing == 'semiimp'):
                 Tj1 = 1/2*(Y[nj-1]+nextStepSolution)
-                
         res += [(k, nj, Tj1, y_half, f_yj, fe_tot, je_tot)]
 
     return res
