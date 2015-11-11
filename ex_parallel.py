@@ -156,7 +156,7 @@ def Rosenbrock_euler_implicit(f, grad, previousValues, previousTime, step, args,
                 xval=None
             else:
                 xval=previousValue
-            sol, info= scipy.sparse.linalg.gmres(Isparse-step*J00, step*fe_yj, tol=min_tol,x0=xval, maxiter=100)
+            sol, info= scipy.sparse.linalg.gmres(Isparse-step*J00, step*fe_yj, tol=min_tol,x0=xval, maxiter=100)                             
             if info >0:
                 print("Info: maximum iterations reached for sparse system solver (GMRES).")
         else:
