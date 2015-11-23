@@ -35,11 +35,12 @@ TestProblemDefinition = namedtuple("TestProblemDefinition", ["problemName","RHSF
 #Linear problem
 
 def Linearf(y,t):
-    lam = 3.
+    lam = -1.
     return lam*y
 
-def LinearProblem():    
-    return TestProblemDefinition("Linear", Linearf, None, 0, np.array([1.]), np.arange(0,11,1.),1.,None)
+def LinearProblem():
+    denseOutput = np.array([0,0.1,0.2,0.3,0.4,0.5,0.536498185, 0.6,0.7,0.8,0.9,1.])    
+    return TestProblemDefinition("Linear", Linearf, None, 0, np.array([1.]),denseOutput ,1.,None)
 
 #VDPOL problem
 
@@ -58,10 +59,8 @@ def VDPOLgrad(y,t):
     return np.array([[0,1],[matrix12,matrix22]])
 
 def VDPOLProblem():    
-    return TestProblemDefinition("VDPOL", VDPOLf, None, 0, np.array([2.,0.]),np.arange(0,13,1.),1.,None)
+    return TestProblemDefinition("VDPOL", VDPOLf, VDPOLgrad, 0, np.array([2.,0.]),np.arange(0,13,1.),1.,None)
 
-def VDPOLWithGradProblem():    
-    return TestProblemDefinition("VDPOL", VDPOLf, VDPOLgrad, 0, np.array([2.,0.]), np.arange(0,13,1.),1.,None)
 
 def VDPOLMildf(y,t):
     epsilon=1e-2
@@ -207,7 +206,7 @@ def E5Problem():
 #BRUSS-2D problem
     
 A=0
-N=30
+N=20
 step=0
 x=0
 y=0
@@ -337,7 +336,6 @@ def getAllTests():
     '''
     tests = []
 #     tests.append(VDPOLProblem())
-#     tests.append(VDPOLWithGradProblem())
 #     tests.append(VDPOLMildProblem())
 #     tests.append(VDPOLEasyProblem())
 #     tests.append(ROBERProblem())
@@ -383,6 +381,9 @@ def inputTuple(k,denseOutput,test,rtol,atol,firstStep,robustness,smoothing,seq,u
                      ,'full_output': True, 'rtol': rtol, 'atol': atol, 'h0': firstStep, 'mxstep': 10e8, 'robustness': robustness,
                      'smoothing': smoothing,'seq':seq,'useGradient':useGrad}#, 'nworkers': 1}    
     
+    standardOldTuple = {'func': test.RHSFunction, 'y0': test.initialValue, 't': denseOutput
+                     ,'full_output': True, 'rtol': rtol, 'atol': atol, 'h0': firstStep, 'mxstep': 10e8}
+    
     if(useOptimal):
         midimplicitTuple = standardTuple.copy()
         midimplicitTuple.update({'smoothing': 'gbs','seq':None})
@@ -391,10 +392,11 @@ def inputTuple(k,denseOutput,test,rtol,atol,firstStep,robustness,smoothing,seq,u
         eulersemiimplicitTuple = standardTuple.copy()
         eulersemiimplicitTuple.update({'smoothing': 'no','seq':(lambda t: 2*(2*t-1))})
 #         eulersemiimplicitTuple.update({'smoothing': 'no','seq':seq})
+
         optimalTuples =[
 #             standardTuple
 #             ,
-#             standardTuple
+#             standardOldTuple
 #             ,
 #             midimplicitTuple
 #             ,
@@ -419,12 +421,12 @@ def comparisonTest():
     (see inputTuple(...))
     '''
     dense=False
-    tol = [1.e-4,1.e-5,1.e-7,1.e-9,1.e-11,1.e-12]#,1.e-13,1.e-15]
+    tol = [1.e-4,1.e-5,1.e-7,1.e-9]#,1.e-10,1.e-12]#,1.e-13,1.e-15]
     resultDict={}
     useOptimal = True
     solverFunctions = [
 #         ex_parallel.ex_midpoint_explicit_parallel
-#             ,
+#         ,
 #         ex_parallel_original.ex_midpoint_parallel
 #             ,
 #         ex_parallel.ex_midpoint_implicit_parallel
@@ -432,8 +434,8 @@ def comparisonTest():
 #         ex_parallel.ex_midpoint_semi_implicit_parallel
 #         ,
         ex_parallel.ex_euler_semi_implicit_parallel
-#         ,
-#         integrate.odeint
+        ,
+        integrate.odeint
         ]
     labelsFunction=[
 #         "New Explicit parl"
@@ -445,13 +447,13 @@ def comparisonTest():
 #         "SemiImp Midpoint"
 #         ,
         "Semi Eul"
-#         ,
-#         "Scipy int"
+        ,
+        "Scipy int"
         ]
 
     robustnesses=[3]#, 3, 5, 10, 100]
     smoothings = ['no']#,'semiimp']#,'gbs']
-    useGrads = [True]#, False]
+    useGrads = [False, False]
 
     def BD1983(t):
         #First value of the sequence not used
@@ -469,6 +471,7 @@ def comparisonTest():
         if(not dense):
             y_ref=y_ref[-1]
             denseOutput=[denseOutput[0], denseOutput[-1]]
+        print(denseOutput)
         print(test.problemName)
         for i in range(len(tol)):
             first =True
@@ -485,7 +488,7 @@ def comparisonTest():
                 seq = seqs[seqStr]
 #                 print("sequence " + seqStr)
                 for useGrad in useGrads:
-#                     print("gradient " + str(useGrad))
+                    print("gradient " + str(useGrad))
                     for smoothing in smoothings:
 #                         print("smoothing " + str(smoothing))
                         for robustness in robustnesses:
@@ -498,12 +501,18 @@ def comparisonTest():
                                         grad = test.RHSGradient
                                     else:
                                         grad = None
+
                                     ys, infodict = solverFunction(test.RHSFunction,test.initialValue, denseOutput, Dfun= grad, atol=atol, rtol=rtol, mxstep=100000000, full_output = True)
                                     mean_order = 0
-                                    fe_seq = infodict["nfe"]
+                                    fe_seq = np.sum(infodict["nfe"])
+                                    mused = infodict["mused"]
+#                                     print "1: adams (nonstiff), 2: bdf (stiff) -->" + str(mused)
                                 else:
-                                    print(first)
+#                                     print("initial guess " + str(first))
+#                                     print("iterative "+ str(first))
+                                    print("freeze jac " + str(first))
                                     aaa=(True and first)
+                                    ex_parallel.setfrezeejacobian(first)
 #                                     ex_parallel.setwork(True)
                                     ex_parallel.setaddinitialguess(False)
                                     ex_parallel.setiterative(True)
@@ -513,6 +522,11 @@ def comparisonTest():
 #                                     yappi.start()
 #                                     print(functionTuple)
                                     ys, infodict = solverFunction(**functionTuple)
+                                #Code to get all vaps from problem calculated and plot them
+#                                     allvaps = ex_parallel.getallvaps()
+#                                     ex_parallel.setallvaps()
+#                                     ploteigenvalues(allvaps, test.problemName, tol[i])
+                                #Code to see bottleneck in the code
 #                                     yappi.get_func_stats().print_all()
 #                                     yappi.clear_stats()                                    
                                     mean_order = infodict["k_avg"]
@@ -520,30 +534,39 @@ def comparisonTest():
 
         
                                 finalTime = time.time()
-                                fe_tot = infodict["nfe"]
-                                nsteps = infodict["nst"]
-                                je_tot = infodict["nje"]
+                                fe_tot = np.sum(infodict["nfe"])
+                                nsteps = np.sum(infodict["nst"])
+                                je_tot = np.sum(infodict["nje"])
                                 ys=ys[1:len(ys)]
                                 componentwise_relative_error = (ys-y_ref)/y_ref
                                 relative_error = [np.linalg.norm(output, 2) for output in componentwise_relative_error]
-                                maximum_relative_error = np.max(relative_error)
+                                print(relative_error)
+                                maximum_relative_error = np.linalg.norm(relative_error)
                                 testProblemResult[j].append([finalTime-startTime, maximum_relative_error, fe_tot, nsteps, mean_order, fe_seq, je_tot])
-                                print("Done: " + labelsFunction[k] + " time: " + str(finalTime-startTime) +  " rel error: " + str(relative_error) + " func eval: " + str(fe_tot) + " jac eval: " + str(je_tot) + " func eval seq: " + str(fe_seq)+ " num steps: " + str(nsteps) + " mean_order: " + str(mean_order))
+                                print("Done: " + labelsFunction[k] + " time: " + str(finalTime-startTime) +  " rel error: " + str(maximum_relative_error) + " func eval: " + str(fe_tot) + " jac eval: " + str(je_tot) + " func eval seq: " + str(fe_seq)+ " num steps: " + str(nsteps) + " mean_order: " + str(mean_order))
+                                print("\n")
 #                                 labels.append(labelsFunction[k] +", rob=" + str(robustness) + ", smooth=" + str(smoothing) + ", usegrad=" + str(useGrad) + " , seq = " + seqStr)
                                 if(not useOptimal):
                                     labels.append(labelsFunction[k] + ", smooth=" + str(smoothing) + " , seq = " + seqStr)
                                 else:
-                                    labels.append(labelsFunction[k] + " optim, J=" + str(useGrad) + ", seq = " + str(seqStr))#", it= " + str(aaa))
+                                    labels.append(labelsFunction[k] + " optim, freeze=" + str(aaa) ) # + ", seq = " + str(seqStr))#", it= " + str(aaa))
                                 k+=1
                                 j+=1
         
 #         getComparisonFactorMetric(testProblemResult, labels, labelsFunction)
         resultDict[test.problemName] = testProblemResult
-        
+    plt.show()
            
     return resultDict , labels
 
-
+def ploteigenvalues(allvaps, testName, tol):
+    allvapsreal = [k.real for k in allvaps]
+    allvapsim = [k.imag for k in allvaps]
+    fig = plt.figure()
+    fig.suptitle(testName + " " + str(tol))
+    plt.scatter(allvapsreal, allvapsim)
+    plt.axvline()
+    plt.axhline()
 
 def getReferenceIndex(labels, labelsFunction):
     '''

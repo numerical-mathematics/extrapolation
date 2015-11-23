@@ -314,7 +314,7 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
         pool.close()
 
         if full_output:
-            infodict = {'fe_seq': fe_seq, 'fe_tot': fe_tot, 'nstp': nstp, 
+            infodict = {'fe_seq': fe_seq, 'nfe': fe_tot, 'nst': nstp, 'nje': 0,
                         'h_avg': sum_hs/nstp, 'k_avg': sum_ks/nstp}
             return (ys, infodict)
         else:
@@ -326,7 +326,7 @@ def extrapolation_parallel (method, func, y0, t, args=(), full_output=False,
     pool.close()
 
     if full_output:
-        infodict = {'fe_seq': fe_seq, 'fe_tot': fe_tot, 'nstp': nstp, 
+        infodict = {'fe_seq': fe_seq, 'fe_tot': fe_tot, 'nst': nstp, 
                     'h_avg': None, 'k_avg': None}
         return (ys, infodict)
     else:

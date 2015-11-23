@@ -3,6 +3,7 @@ import numpy as np
 import math 
 import time
 import ex_parallel
+import ex_parallel_original
 import fnbod
 from compare_test import kdv_init, kdv_func, kdv_solout, burgers_init, burgers_func, burgers_solout
 import twelve_tests as tst
@@ -196,14 +197,22 @@ def inputTuple(k,denseOutput,test,firstStep,robustness, order):
     standardTuple = {'func': test.RHSFunction, 'grad': test.RHSGradient, 'y0': test.initialValue, 't': denseOutput
                      ,'full_output': True, 'h0': firstStep, 'mxstep': 10e8, 'robustness': robustness,
                      'adaptative':'fixed', 'p':order}    
+        
+    standardOldTuple = {'func': test.RHSFunction, 'y0': test.initialValue, 't': denseOutput
+                     ,'full_output': True, 'h0': firstStep, 'mxstep': 10e8,
+                     'adaptive':'fixed', 'p':order}
     
     midimplicitTuple = standardTuple.copy()
-    midimplicitTuple.update({'smoothing': 'gbs','seq':None})
+    midimplicitTuple.update({'smoothing': 'no','seq':None})
     midsemiimplicitTuple = standardTuple.copy()
-    midsemiimplicitTuple.update({'smoothing': 'semiimp' ,'seq':(lambda t: 2*(2*t-1))})
+    midsemiimplicitTuple.update({'smoothing': 'no' ,'seq':(lambda t: 2*(2*t-1))})
     eulersemiimplicitTuple = standardTuple.copy()
     eulersemiimplicitTuple.update({'smoothing': 'no','seq':(lambda t: 2*(2*t-1))})
     optimalTuples =[
+        standardTuple
+#         ,
+#         standardOldTuple
+        ,
         midimplicitTuple
         ,
         midsemiimplicitTuple
@@ -212,35 +221,51 @@ def inputTuple(k,denseOutput,test,firstStep,robustness, order):
     ]
     return optimalTuples[k]
 
-def convergenceTest(test, allSteps, order):
+labelsFunction=[
+    "New Explicit Midpoint parl"
+#     ,
+#     "Old Explicit parl"
+    ,
+    "Implicit Midpoint parl"
+    ,
+    "SemiImp Midpoint parl"
+    ,
+    "SemiImp Euler parl"
+      ]
+
+def convergenceTest(test, allSteps, order, dense=False):
     '''''
        Perform a convergence test with the test problem (in test parameter) with
        the given steps in parameter allSteps. 
     '''''
-    dense=False
+    print("\n" + "order: " + str(order) + ", dense: " +str(dense))
     useOptimal = True
     solverFunctions = [
+        ex_parallel.ex_midpoint_explicit_parallel
+#         ,
+#         ex_parallel_original.ex_midpoint_parallel
+        ,
         ex_parallel.ex_midpoint_implicit_parallel
         ,
         ex_parallel.ex_midpoint_semi_implicit_parallel
         ,
         ex_parallel.ex_euler_semi_implicit_parallel
         ]
-    labelsFunction=[
-        "Implicit parl"
-        ,
-        "SemiImp Midpoint parl"
-        ,
-        "SemiImp Euler parl"
-        ]
 
     y_ref = np.loadtxt(tst.getReferenceFile(test.problemName))
     denseOutput = test.denseOutput
+#     denseOutput = np.linspace(0,12,100)
     if(not dense):
-        y_ref=y_ref[1]
-        denseOutput=[denseOutput[0], denseOutput[1]]
+        y_ref=y_ref[-1]
+        denseOutput=[denseOutput[0], denseOutput[-1]]
+    else:
+        nhalf = np.ceil(len(y_ref)/2)
+        y_ref = y_ref[nhalf]
+        print(denseOutput[nhalf])
     print(test.problemName + " order: " + str(order))
     k=0
+    errorperFunction = np.zeros((len(labelsFunction)+1,len(allSteps)))
+    errorperFunction[0,:]=allSteps
     for solverFunction in solverFunctions:
         errorPerStep=[]
         print(labelsFunction[k])
@@ -248,33 +273,84 @@ def convergenceTest(test, allSteps, order):
             #rtol and atol are not important as we are fixing the step size
             functionTuple=inputTuple(k,denseOutput, test,step,3, order)
             ys, infodict = solverFunction(**functionTuple)
-            
-            print("number steps: " + str(infodict['nst']) + " (should be " + str(denseOutput[1]/step) + ")")
+#             print(ys)
+#             plt.plot(denseOutput,ys,'ok')
+#             plt.show()
+            print("number steps: " + str(infodict['nst']) + " (should be " + str(denseOutput[-1]/step) + ")")
             ys=ys[1:len(ys)]
-            error = np.linalg.norm(y_ref-ys, 2)
+            if(dense):
+                ys=ys[nhalf]
+            error = np.linalg.norm((y_ref-ys)/y_ref, 2)
             errorPerStep.append(error)
         
-        coefficients = np.polyfit(np.log(allSteps), np.log(errorPerStep), 1)
+        coefficients = np.polyfit(np.log10(allSteps), np.log10(errorPerStep), 1)
 #         np.testing.assert_array_almost_equal(coefficients[0], p, 1, "CONVERGENCE TEST " + test.problemName + " " + labelsFunction[k] + " FAILED")
         print("coefficients: " + str(coefficients) + " order is: " + str(order))
         
         if(plotConv):
             fig = plt.figure()
-            fig.suptitle(test.problemName + " " + labelsFunction[k])
+            fig.suptitle(test.problemName + " , " + labelsFunction[k] + " , " + str(step))
             plt.plot(np.log10(allSteps),np.log10(errorPerStep), marker="x")
+        print(allSteps)
         print(errorPerStep)
+        errorperFunction[k+1,:] = errorPerStep
         k+=1
-    plt.show()
+#     plt.show()
+    return errorperFunction
+
+def plotConvergence(allSteps, errorPerFunction, order):
+    for k in range(len(labelsFunction)):
+        errorPerStep = errorPerFunction[k]
+        fig = plt.figure()
+        fig.suptitle(labelsFunction[k] + " order " + str(order))
+        plt.plot(np.log10(allSteps),np.log10(errorPerStep), marker="x")
+        print(labelsFunction[k])
+        coefficients = np.polyfit(np.log10(allSteps), np.log10(errorPerStep), 1)
+        print("coefficients: " + str(coefficients) + " order is: " + str(order))
+        m,b=coefficients
+        plt.plot(np.log10(allSteps), m*np.log10(allSteps) + b, '-')
 
 def doAllConvergenceTests():
     global plotConv
     plotConv=True
-    
-    linearSteps = [0.5,0.4,0.25,0.1,0.08,0.05,0.025,0.01,0.005,0.003,0.001]
-    convergenceTest(tst.LinearProblem(),linearSteps[1:],2)
-    convergenceTest(tst.LinearProblem(),linearSteps[1:],4)
-    convergenceTest(tst.LinearProblem(),linearSteps[0:7],6)
-    convergenceTest(tst.LinearProblem(),linearSteps[0:5],8)
+#     orders = range(2,12,2)
+#     linearSteps = [1.5,1.25,1,0.5,0.1,0.07,0.05,0.03,0.01,0.007,0.005,0.002,0.001,0.0007,0.0005,0.0004,0.0003]
+#     allerrorPerStep = np.zeros((len(orders),len(linearSteps)))
+#     for i in orders:
+#         allerrorPerStep[i/2-1] = convergenceTest(tst.LinearProblem(),linearSteps,i)
+# #     np.savetxt("AllErrorPerStep.txt", allerrorPerStep)
+#     plt.show()
+#     order = 8
+#     linearSteps = np.concatenate((np.linspace(1.1,0.2,10), np.linspace(0.19,0.04,7),np.linspace(0.028,0.01,7)))
+#     errorPerFunction = convergenceTest(tst.VDPOLEasyProblem(),linearSteps,order)
+#     np.savetxt("allerrorperstep_"+str(order)+"_nosmooth"+"_vdpol"+".txt", errorPerFunction)
+#     plt.show()
+    #For vdpol
+#     begend = np.array([[0,0],[0,10],[2,23],[1,8],[0,16]])
+    #For linear
+#     begend = np.array([[0,5],[0,20],[0,15],[0,25],[0,0]])
+    #For dense linear
+    begend = np.array([[0,5],[0,20],[0,20],[0,0],[0,0]])
+#     begend = np.array([[0,0],[0,0],[0,0],[0,0],[0,0]])
+    orders = np.array([2,4,6,8])
+    k=0
+    for order in orders:
+        errorPerFunction = np.loadtxt("allerrorperstep_"+str(order)+"_nosmooth"+"_dense"+".txt")
+        allSteps = errorPerFunction[0]
+        errorPerFunction= errorPerFunction[1:(len(labelsFunction)+1),begend[k,0]:(len(allSteps)-begend[k,1])]
+        allSteps =  allSteps[begend[k,0]:(len(allSteps)-begend[k,1])]
+        plotConvergence(allSteps, errorPerFunction, order)
+        k+=1
+    plt.show()
+
+        
+#     convergenceTest(tst.LinearProblem(),[0.05,0.01,0.005,0.001,0.0005,0.0002,0.00015],2,True)
+#     convergenceTest(tst.LinearProblem(),[0.5,0.07,0.05,0.01,0.005,0.001,0.0009],4,True)
+#     convergenceTest(tst.LinearProblem(),[1,0.7,0.5,0.1,0.07,0.05,0.03,0.01,0.007],6,True)
+#     convergenceTest(tst.LinearProblem(),[1.7,1.5,1.25,1,0.75,0.5,0.1,0.07,0.05],8,True)
+    #TODO: investigate why with order 10 a singular matrix error is thrown.
+#     convergenceTest(tst.LinearProblem(),[2.3,2,1.7,1.5,1.25,1,0.75,0.5,0.1,0.07,0.05],10,True)
+#     plt.show()
     
 #     vdpolSteps=[0.5,0.000005]
 #     convergenceTest(tst.VDPOLEasyProblem(),vdpolSteps[:],8)
