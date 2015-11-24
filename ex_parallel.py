@@ -633,7 +633,7 @@ def fill_extrapolation_table(T,k,seq, symmetric):
             else:
                 T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j)/seq(j-i+1)) - 1)        
             
-def finite_diff(j, f_yj, hj):
+def centered_finite_diff(j, f_yj, hj):
     # Called by interpolate
     max_order = 2*j
     nj = len(f_yj) - 1
@@ -652,6 +652,25 @@ def finite_diff(j, f_yj, hj):
 
     return dj
 
+def backward_finite_diff(j, yj, hj):
+    # Called by interpolate
+    max_order = 2*j
+    nj = len(yj) - 1
+    coeff = [1,1]
+    dj = (max_order+1)*[None]
+    dj[1] = 1*yj[nj/2]
+    dj[2] = (yj[nj/2+1] - yj[nj/2-1])/(2*hj)
+    for order in range(2,max_order):
+        coeff = [1] + [coeff[j] + coeff[j+1] for j in range(len(coeff)-1)] + [1]
+        index = [nj/2 + order - 2*i for i in range(order+1)]
+
+        sum_ = 0
+        for i in range(order+1):
+            sum_ += ((-1)**i)*coeff[i]*yj[index[i]]
+        dj[order+1] = sum_ / (2*hj)**order 
+
+    return dj
+
 def compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
     # Called by interpolate
     dj_kappa = np.zeros((2*k+1, k+1), dtype=(type(y_half[1])))
@@ -660,20 +679,22 @@ def compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
     for j in range(1,k+1):
         dj_kappa[0,j] = 1*y_half[j]
         nj = len(f_yj[j])-1
-        dj_ = finite_diff(j,f_yj[j], hs[j])
+        dj_ = centered_finite_diff(j,f_yj[j], hs[j])
         for kappa in range(1,2*j+1):    
             dj_kappa[kappa,j] = 1*dj_[kappa]
-
+    
+    #skip value is used because extrapolation is required
+    #(k-l) times for dj_(2l-1) and dj_(2l)
     skip = 0
     for kappa in range(2*k+1):
-        T = np.zeros((k+1-int(skip/2), k+1 - int(skip/2)), dtype=(type(y_half[1])))
+        numextrap = k-int(skip/2)
+        T = np.zeros((numextrap+1, numextrap+1), dtype=(type(y_half[1])))
         T[:,1] = 1*dj_kappa[kappa, int(skip/2):]
+        
+        fill_extrapolation_table(T,numextrap,seq,symmetric=True)
 
-        for i in range(2, k+1-int(skip/2)):
-            for j in range(i, k+1-int(skip/2)):
-                T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j)/(seq(j-i+1)))**2 - 1)
         ds[kappa] = 1*T[k-int(skip/2),k-int(skip/2)] 
-        if not(kappa == 0):
+        if (kappa != 0):
             skip +=1
 
     return ds 
@@ -689,8 +710,8 @@ def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
     
     for i in range(u+1):
         a_u[i] = (H**i)*ds[i]/math.factorial(i)
-    for i in range(u_1 + 1):
-        a_u_1[i] = (H**i)*ds[i]/math.factorial(i)
+
+    a_u_1[0:u_1+1] = 1*a_u[0:u_1+1]   
 
     A_inv_u = (2**(u-2))*np.matrix(
                 [[(-2*(3 + u))*(-1)**u,   -(-1)**u,     2*(3 + u),   -1],
@@ -709,34 +730,30 @@ def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
     b1_u = 1*y0
     for i in range(u+1):
         b1_u -= a_u[i]/(-2)**i
-
-    b1_u_1 = 1*y0
-    for i in range(u_1+1):
-        b1_u_1 -= a_u_1[i]/(-2)**i
+    
+    b1_u_1 = np.zeros(len(y0),dtype=(type(y0[0])));
+    b1_u_1[0:u_1+1] = 1*b1_u[0:u_1+1]
 
     b2_u = H*f_yj[1][0]
     for i in range(1, u+1):
         b2_u -= i*a_u[i]/(-2)**(i-1)
 
-    b2_u_1 = H*f_yj[1][0]
-    for i in range(1, u_1+1):
-        b2_u_1 -= i*a_u_1[i]/(-2)**(i-1)
+    b2_u_1 = np.zeros(len(y0),dtype=(type(y0[0])));
+    b2_u_1[0:u_1+1] = 1*b2_u[0:u_1+1]
 
     b3_u = 1*Tkk
     for i in range(u+1):
         b3_u -= a_u[i]/(2**i)
 
-    b3_u_1 = 1*Tkk
-    for i in range(u_1+1):
-        b3_u_1 -= a_u_1[i]/(2**i)
+    b3_u_1 = np.zeros(len(y0),dtype=(type(y0[0])));
+    b3_u_1[0:u_1+1] = 1*b3_u[0:u_1+1]
 
     b4_u = H*f_Tkk
     for i in range(1, u+1):
         b4_u -= i*a_u[i]/(2**(i-1))
 
-    b4_u_1 = H*f_Tkk
-    for i in range(1, u_1+1):
-        b4_u_1 -= i*a_u_1[i]/(2**(i-1))
+    b4_u_1 = np.zeros(len(y0),dtype=(type(y0[0])));
+    b4_u_1[0:u_1+1] = 1*b4_u[0:u_1+1]
 
     b_u = np.array([b1_u,b2_u,b3_u,b4_u])
     b_u_1 = np.array([b1_u_1,b2_u_1,b3_u_1,b4_u_1])
@@ -976,6 +993,10 @@ def interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half,
     for j in range(1,len(T[:,1])):
         Tj1=T[j,1]
         f_yjj = f_yj[j]
+        #TODO: reuse last function evaluation to calculate next step
+        #IMPORTANT!
+        #TODO:review implementation, pag238 solving ODEs I seems to only use
+        #f at nj/2, but the code seems to need f at nj...
         f_yjj[-1] = func(*(Tj1, t_curr + h) + args)
         fe_tot+=1
         
