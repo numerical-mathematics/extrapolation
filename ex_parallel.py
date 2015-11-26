@@ -290,7 +290,7 @@ def compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj_
                 Tj1 = 1/4*(Y[nj-1]+2*Y[nj]+nextStepSolution)
             elif(smoothing == 'semiimp'):
                 Tj1 = 1/2*(Y[nj-1]+nextStepSolution)
-        res += [(k, nj, Tj1, y_half, f_yj, fe_tot, je_tot)]
+        res += [(k, nj, Tj1, y_half, f_yj,Y, fe_tot, je_tot)]
 
     return res
 
@@ -590,15 +590,17 @@ def compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h,
     # process the returned results from the pool 
     y_half = (k+1)*[None]
     f_yj = (k+1)*[None]
+    yj = (k+1)*[None]
     hs = (k+1)*[None]
     
     for res in results:
 #     for i in range(1,2):
         fe_tot_stage = 0
-        for (k_, nj_, Tk_, y_half_, f_yj_, fe_tot_, je_tot_) in res:
+        for (k_, nj_, Tk_, y_half_, f_yj_, yj_, fe_tot_, je_tot_) in res:
             T[k_, 1] = Tk_
             y_half[k_] = y_half_
             f_yj[k_] = f_yj_
+            yj[k_] = yj_
             hs[k_] = h/nj_
             fe_tot += fe_tot_
             je_tot += je_tot_
@@ -611,7 +613,7 @@ def compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h,
     fe_seq += fe_tot_stage_max
     fill_extrapolation_table(T,k,seq, symmetric)
     
-    return (T, fe_seq, fe_tot, je_tot, yn, y_half, f_yj, f_yn, hs)
+    return (T, fe_seq, fe_tot, je_tot, yn, y_half, f_yj, yj, f_yn, hs)
 
 def fill_extrapolation_table(T,k,seq, symmetric):
     '''''
@@ -634,7 +636,7 @@ def fill_extrapolation_table(T,k,seq, symmetric):
                 T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j)/seq(j-i+1)) - 1)        
             
 def centered_finite_diff(j, f_yj, hj):
-    # Called by interpolate
+    # Called by interpolate_sym
     max_order = 2*j
     nj = len(f_yj) - 1
     coeff = [1,1]
@@ -652,33 +654,53 @@ def centered_finite_diff(j, f_yj, hj):
 
     return dj
 
-def backward_finite_diff(j, yj, hj):
-    # Called by interpolate
-    max_order = 2*j
+def backward_finite_diff(j, yj, hj,lam):
+    # Called by interpolate_sym
+    max_order = j-lam
     nj = len(yj) - 1
     coeff = [1,1]
     dj = (max_order+1)*[None]
-    dj[1] = 1*yj[nj/2]
-    dj[2] = (yj[nj/2+1] - yj[nj/2-1])/(2*hj)
-    for order in range(2,max_order):
+    dj[1] = (yj[nj] - yj[nj-1])/hj
+    for order in range(2,max_order+1):
         coeff = [1] + [coeff[j] + coeff[j+1] for j in range(len(coeff)-1)] + [1]
-        index = [nj/2 + order - 2*i for i in range(order+1)]
+        index = [nj - i for i in range(order+1)]
 
         sum_ = 0
         for i in range(order+1):
             sum_ += ((-1)**i)*coeff[i]*yj[index[i]]
-        dj[order+1] = sum_ / (2*hj)**order 
+        dj[order] = sum_ /hj**order 
 
     return dj
 
+def compute_rs(yj, hs, k, seq=(lambda t: 4*t-2)):
+    # Called by interpolate_sym
+    lam=0
+    dj_kappa = np.zeros((k+1-lam, k+1), dtype=(type(yj[1][0])))
+    rs = np.zeros((k+1), dtype=(type(yj[1][0])))
+    
+    for j in range(1+lam,k+1):
+        dj_ = backward_finite_diff(j,yj[j], hs[j],lam)
+        for kappa in range(1,j+1-lam):    
+            dj_kappa[kappa,j] = 1*dj_[kappa]
+    
+    for kappa in range(1,k+1-lam):
+        numextrap = k+1-kappa-lam
+        T = np.zeros((numextrap+1, numextrap+1), dtype=(type(yj[1][0])))
+        T[:,1] = 1*dj_kappa[kappa, (kappa+lam-1):]
+        
+        fill_extrapolation_table(T,numextrap,seq,symmetric=False)
+
+        rs[kappa] = 1*T[numextrap,numextrap] 
+
+    return rs 
+
 def compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
-    # Called by interpolate
+    # Called by interpolate_sym
     dj_kappa = np.zeros((2*k+1, k+1), dtype=(type(y_half[1])))
     ds = np.zeros((2*k+1), dtype=(type(y_half[1])))
     
     for j in range(1,k+1):
         dj_kappa[0,j] = 1*y_half[j]
-        nj = len(f_yj[j])-1
         dj_ = centered_finite_diff(j,f_yj[j], hs[j])
         for kappa in range(1,2*j+1):    
             dj_kappa[kappa,j] = 1*dj_[kappa]
@@ -693,13 +715,56 @@ def compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
         
         fill_extrapolation_table(T,numextrap,seq,symmetric=True)
 
-        ds[kappa] = 1*T[k-int(skip/2),k-int(skip/2)] 
+        ds[kappa] = 1*T[numextrap,numextrap] 
         if (kappa != 0):
             skip +=1
 
     return ds 
 
-def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
+def getPolynomial(a_u,a_u_1,H,degree,pol_shift,atol,rtol):
+    def poly (t):
+        res = 1*a_u[0] 
+        for i in range(1, len(a_u)):
+            res += a_u[i]*((t-pol_shift)**i)
+        
+        res_u_1 = 1*a_u_1[0] 
+        for i in range(1, len(a_u_1)):
+            res_u_1 += a_u_1[i]*((t-pol_shift)**i)
+        
+        errint = error_norm(res, res_u_1, atol, rtol)
+        h_int = H*((1/errint)**(1/degree))
+        
+        return (res, errint, h_int)
+
+    return poly
+
+def interpolate_nonsym(y0, Tkk, yj, hs, H, k, atol, rtol,
+        seq=(lambda t: 4*t-2)):
+    u = k
+    u_1 = u - 1
+    rs = compute_rs(yj, hs, k, seq=seq)
+#     print("rs -> " + str(rs))
+    
+    #a_u are the coefficients for the interpolation polynomial
+    a_u = (u+1)*[None]
+    a_u_1 = (u_1+1)*[None]
+    
+    a_u[0] = 1*Tkk
+    sumcoeff=0
+    for i in range(1,u):
+        a_u[i] = (H**i)*rs[i]/math.factorial(i)
+        sumcoeff+=(-1)**i*a_u[i]
+
+    a_u[u] = 1/(-1)**u*(y0-a_u[0]-sumcoeff)
+#     print(a_u)
+    
+    a_u_1[0:u_1]=1*a_u[0:u_1];
+    a_u_1[u_1]=1/(-1)**u_1*(y0-a_u_1[0]-sumcoeff+(-1)**u_1*a_u[u_1])
+    
+    return getPolynomial(a_u,a_u_1,H,u,1,atol,rtol)
+    
+
+def interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
         seq=(lambda t: 4*t-2)):
     u = 2*k-3
     u_1 = u - 1
@@ -712,20 +777,19 @@ def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
         a_u[i] = (H**i)*ds[i]/math.factorial(i)
 
     a_u_1[0:u_1+1] = 1*a_u[0:u_1+1]   
-
-    A_inv_u = (2**(u-2))*np.matrix(
+    
+    def A_inv(u):
+        return (2**(u-2))*np.matrix(
                 [[(-2*(3 + u))*(-1)**u,   -(-1)**u,     2*(3 + u),   -1],
                  [(4*(4 + u))*(-1)**u,     2*(-1)**u,   4*(4 + u),   -2],
                  [(8*(1 + u))*(-1)**u,     4*(-1)**u,  -8*(1 + u),    4],
                  [(-16*(2 + u))*(-1)**u,  -8*(-1)**u,  -16*(2 + u),   8]]
-                ) 
+                );
+        
+        
+    A_inv_u = A_inv(u)
 
-    A_inv_u_1 = (2**(u_1-2))*np.matrix(
-                [[(-2*(3 + u_1))*(-1)**u_1,   -(-1)**u_1,     2*(3 + u_1),  -1], 
-                 [(4*(4 + u_1))*(-1)**u_1,     2*(-1)**u_1,   4*(4 + u_1),  -2], 
-                 [(8*(1 + u_1))*(-1)**u_1,     4*(-1)**u_1,  -8*(1 + u_1),   4], 
-                 [(-16*(2 + u_1))*(-1)**u_1,  -8*(-1)**u_1,  -16*(2 + u_1),  8]]
-                ) 
+    A_inv_u_1 = A_inv(u_1)
 
     b1_u = 1*y0
     for i in range(u+1):
@@ -762,7 +826,7 @@ def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
     x = np.array(x)
 
     x_1 = A_inv_u_1*b_u_1
-    x_1 = np.array(x)
+    x_1 = np.array(x_1)
 
     a_u[u+1] = x[0]
     a_u[u+2] = x[1]
@@ -777,24 +841,10 @@ def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
     # polynomial of degree u+4 defined on [0,1] and centered about 1/2
     # also returns the interpolation error (errint). If errint > 10, then reject
     # step 
-    def poly (t):
-        res = 1*a_u[0] 
-        for i in range(1, len(a_u)):
-            res += a_u[i]*((t-0.5)**i)
-        
-        res_u_1 = 1*a_u_1[0] 
-        for i in range(1, len(a_u_1)):
-            res_u_1 += a_u_1[i]*((t-0.5)**i)
-        
-        errint = error_norm(res, res_u_1, atol, rtol)
-        h_int = H*((1/errint)**(1/(u+4)))
-        
-        return (res, errint, h_int)
-
-    return poly
+    return getPolynomial(a_u,a_u_1,H,u+4,0.5,atol,rtol)
     
 
-def getDenseAndSequence(t_final, t, t_index, seq):
+def getDenseAndSequence(t_final, t, t_index, seq, symmetric):
     '''
     Returns whether dense output is needed because an intermediate solution
     is wanted at this step. Also chooses the step sequence to use for this step
@@ -827,14 +877,17 @@ def getDenseAndSequence(t_final, t, t_index, seq):
     if(timeOutRange):
         dense=False
     
-    if(seq is not None):
-        return (dense,seq)
-    
     if dense:
-        seq = lambda t: 4*t - 2     # {2,6,10,14,...} sequence for dense output
+        if symmetric:
+            seq = lambda t: 2*(2*t-1)     # {2,6,10,14,...} sequence for dense output
+        else:
+            if(seq is not None):
+                return (dense,seq)
+            seq = lambda t: 2*(2*t-1) 
     else:
-        seq = lambda t: 2*t         # harmonic sequence for midpoint method
-    
+        if(seq is not None):
+            return (dense,seq)
+        seq = lambda t: 2*(2*t-1)         # harmonic sequence for midpoint method
         
 #     seq = lambda t: 2*(2*t-1)
 #     seq = lambda t: t+1
@@ -956,7 +1009,7 @@ def estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative):
 def solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args, h, k, atol, rtol, 
                    pool, smoothing, symmetric, seq, adaptative, rejectPreviousStep, previousStepSolution):
     
-    dense, seq = getDenseAndSequence(t_curr+h, t, t_index, seq)
+    dense, seq = getDenseAndSequence(t_curr+h, t, t_index, seq, symmetric)
     
     #Limit k, order of extrapolation
     #If order and step are fixed, do not limit order
@@ -965,7 +1018,7 @@ def solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args,
         k_min = 3
         k = min(k_max, max(k_min, k))
 
-    T, fe_seq, fe_tot, je_tot, y0, y_half, f_yj,f_yn, hs = compute_extrapolation_table(method, methodargs, func, grad, 
+    T, fe_seq, fe_tot, je_tot, y0, y_half, f_yj,yj, f_yn, hs = compute_extrapolation_table(method, methodargs, func, grad, 
                 t_curr, yn, args, h, k, pool, rejectPreviousStep, previousStepSolution, seq, smoothing, symmetric)
     
     rejectStep, y, h_new, k_new = estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative)
@@ -973,8 +1026,8 @@ def solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args,
     y_solution=[]
     if((not rejectStep) & dense):
         #TODO: see if grad (gradient function) can be used for the interpolating
-        rejectStep, y_solution, h_int, fe_tot_ = interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half, f_yj, y0, 
-                                                                         fe_seq, fe_tot, atol, rtol, seq, adaptative)
+        rejectStep, y_solution, h_int, fe_tot_ = interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half, f_yj,yj, y0, 
+                                                                         fe_seq, fe_tot, atol, rtol, seq, adaptative, symmetric)
         fe_tot += fe_tot_
         if(rejectStep):
             h_new = h_int
@@ -984,8 +1037,8 @@ def solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args,
     return (rejectStep, y, y_solution,f_yn, h, k, h_new, k_new, (fe_seq, fe_tot, je_tot))
 
 
-def interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half, f_yj, y0,
-                            fe_seq, fe_tot, atol, rtol, seq, adaptative):
+def interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half, f_yj,yj, y0,
+                            fe_seq, fe_tot, atol, rtol, seq, adaptative, symmetric):
     
     fe_tot = 0
     #Do last evaluations to construct polynomials
@@ -1007,8 +1060,12 @@ def interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half,
     fe_tot +=1
     
     #Calculate interpolating polynomial
-    poly = interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k, atol,
-        rtol, seq)
+    if(symmetric):
+#         poly = interpolate_nonsym(y0, Tkk, f_Tkk, y_half, yj, hs, h, k, atol,rtol, seq)
+        poly = interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k, atol,rtol, seq)
+    else:
+        poly = interpolate_nonsym(y0, Tkk, yj, hs, h, k, atol,rtol, seq)
+#         poly = interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k, atol,rtol, seq)
 
     y_solution=[]
     old_index = t_index

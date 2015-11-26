@@ -24,10 +24,11 @@ def regression_tst(func, y0, t, y_ref, tol_boundary=(0,6), h0=0.5, mxstep=10e4,
     print ''
     for i in range(len(tol)):
         print tol[i]
-        ys, infodict = ex_parallel.ex_midpoint_explicit_parallel(func, y0, t, atol=tol[i], 
+        ys, infodict = ex_parallel.ex_midpoint_explicit_parallel(func,None, y0, t, atol=tol[i], 
             rtol=tol[i], mxstep=mxstep, full_output=True, nworkers=nworkers)
         y = solout(ys[1:len(ys)])
         err[i] = relative_error(y, y_ref)
+        print (y-y_ref)
         print infodict
     return err
 
@@ -152,7 +153,8 @@ def dense_tests():
     y0 = exact_1(t0)
     y_ref = exact_1([[2.5],[5],[7.5],[10]])
     err = regression_tst(f_1, y0, t, y_ref)
-    err_ref_1 = np.array([ 1.9949855355e-03,   1.8730357330e-05,   9.6645858019e-07,   2.9442885980e-07,   2.5058865168e-07,   5.3709499479e-09]) 
+    err_ref_1 = np.array([ 4.3573323310e-04,   2.0155849793e-04,   6.1571235657e-06,
+         1.3514865737e-06,   9.9131327408e-08,   1.9365386445e-08]) 
     check(err, err_ref_1, "Test 1 dense")
     print err
       
@@ -162,7 +164,8 @@ def dense_tests():
     y0 = exact_2(t0)
     y_ref = exact_2([[2.5],[5],[7.5],[10]])
     err = regression_tst(f_2, y0, t, y_ref)
-    err_ref_2 = np.array([1.9986826139e-02, 8.0729032796e-05, 6.4759621032e-07, 3.3835824885e-07, 5.6336165545e-08, 2.1270889427e-09])
+    err_ref_2 = np.array([  5.1994929145e-03,   8.1213665526e-05,   1.8579393108e-06,
+         1.2171334245e-06,   4.1389667376e-08,   9.7372577540e-08])
     check(err, err_ref_2, "Test 2 dense")
     print err
   
@@ -172,7 +175,8 @@ def dense_tests():
     y0 = exact_3(t0)
     y_ref = exact_3(np.array([[2.5],[5],[7.5],[10]]))
     err = regression_tst(f_3, y0, t, y_ref)
-    err_ref_3 = np.array([9.7730360766e-07, 1.8066876369e-07, 7.3135413266e-08, 5.3546940651e-09, 1.0413606653e-08, 8.3899459586e-11]) 
+    err_ref_3 = np.array([ 3.8670623384e-07,   2.4122935757e-07,   1.2818328551e-07,
+         2.9523589375e-08,   4.7034490983e-10,   3.4956885841e-11]) 
     check(err, err_ref_3, "Test 3 dense")
     print err
  
@@ -182,7 +186,8 @@ def dense_tests():
     y0 = exact_4(t0)
     y_ref = exact_4(np.array([[2.5],[5],[7.5],[10]]))
     err = regression_tst(f_4, y0, t, y_ref)
-    err_ref_4 = np.array([6.5637056667e-03, 1.0019008999e-04, 5.7943976364e-07, 5.7887658428e-09, 8.9361296728e-11, 4.9891671699e-11]) 
+    err_ref_4 = np.array([  1.0309663893e-02,   6.2166423103e-05,   4.2554994818e-07,
+         3.1358489245e-09,   4.3910896661e-11,   7.6981520979e-12]) 
     check(err, err_ref_4, "Test 4 dense")
     print err
     
@@ -209,12 +214,12 @@ def inputTuple(k,denseOutput,test,firstStep,robustness, order):
     eulersemiimplicitTuple = standardTuple.copy()
     eulersemiimplicitTuple.update({'smoothing': 'no','seq':(lambda t: 2*(2*t-1))})
     optimalTuples =[
-        standardTuple
+#         standardTuple
 #         ,
 #         standardOldTuple
-        ,
-        midimplicitTuple
-        ,
+#         ,
+#         midimplicitTuple
+#         ,
         midsemiimplicitTuple
         ,
         eulersemiimplicitTuple
@@ -222,12 +227,12 @@ def inputTuple(k,denseOutput,test,firstStep,robustness, order):
     return optimalTuples[k]
 
 labelsFunction=[
-    "New Explicit Midpoint parl"
+#     "New Explicit Midpoint parl"
 #     ,
 #     "Old Explicit parl"
-    ,
-    "Implicit Midpoint parl"
-    ,
+#     ,
+#     "Implicit Midpoint parl"
+#     ,
     "SemiImp Midpoint parl"
     ,
     "SemiImp Euler parl"
@@ -241,12 +246,12 @@ def convergenceTest(test, allSteps, order, dense=False):
     print("\n" + "order: " + str(order) + ", dense: " +str(dense))
     useOptimal = True
     solverFunctions = [
-        ex_parallel.ex_midpoint_explicit_parallel
+#         ex_parallel.ex_midpoint_explicit_parallel
 #         ,
 #         ex_parallel_original.ex_midpoint_parallel
-        ,
-        ex_parallel.ex_midpoint_implicit_parallel
-        ,
+#         ,
+#         ex_parallel.ex_midpoint_implicit_parallel
+#         ,
         ex_parallel.ex_midpoint_semi_implicit_parallel
         ,
         ex_parallel.ex_euler_semi_implicit_parallel
@@ -320,28 +325,29 @@ def doAllConvergenceTests():
 #         allerrorPerStep[i/2-1] = convergenceTest(tst.LinearProblem(),linearSteps,i)
 # #     np.savetxt("AllErrorPerStep.txt", allerrorPerStep)
 #     plt.show()
-#     order = 8
-#     linearSteps = np.concatenate((np.linspace(1.1,0.2,10), np.linspace(0.19,0.04,7),np.linspace(0.028,0.01,7)))
-#     errorPerFunction = convergenceTest(tst.VDPOLEasyProblem(),linearSteps,order)
-#     np.savetxt("allerrorperstep_"+str(order)+"_nosmooth"+"_vdpol"+".txt", errorPerFunction)
-#     plt.show()
+    order = 8
+    linearSteps = np.concatenate((np.linspace(0.5,0.2,4), np.linspace(0.19,0.04,7),np.linspace(0.039,0.02,7),
+                                  np.linspace(0.019,0.005,10),np.linspace(0.0049,0.002,10),np.linspace(0.0019,0.001,10)))
+    errorPerFunction = convergenceTest(tst.LinearProblem(),linearSteps,order,True)
+    np.savetxt("allerrorperstep_"+str(order)+"_nosmooth"+"_dense2"+".txt", errorPerFunction)
+    plt.show()
     #For vdpol
 #     begend = np.array([[0,0],[0,10],[2,23],[1,8],[0,16]])
     #For linear
 #     begend = np.array([[0,5],[0,20],[0,15],[0,25],[0,0]])
     #For dense linear
-    begend = np.array([[0,5],[0,20],[0,20],[0,0],[0,0]])
-#     begend = np.array([[0,0],[0,0],[0,0],[0,0],[0,0]])
-    orders = np.array([2,4,6,8])
-    k=0
-    for order in orders:
-        errorPerFunction = np.loadtxt("allerrorperstep_"+str(order)+"_nosmooth"+"_dense"+".txt")
-        allSteps = errorPerFunction[0]
-        errorPerFunction= errorPerFunction[1:(len(labelsFunction)+1),begend[k,0]:(len(allSteps)-begend[k,1])]
-        allSteps =  allSteps[begend[k,0]:(len(allSteps)-begend[k,1])]
-        plotConvergence(allSteps, errorPerFunction, order)
-        k+=1
-    plt.show()
+#     begend = np.array([[0,5],[0,20],[0,20],[0,0],[0,0]])
+# #     begend = np.array([[0,0],[0,0],[0,0],[0,0],[0,0]])
+#     orders = np.array([2,4,6,8])
+#     k=0
+#     for order in orders:
+#         errorPerFunction = np.loadtxt("allerrorperstep_"+str(order)+"_nosmooth"+"_dense"+".txt")
+#         allSteps = errorPerFunction[0]
+#         errorPerFunction= errorPerFunction[1:(len(labelsFunction)+1),begend[k,0]:(len(allSteps)-begend[k,1])]
+#         allSteps =  allSteps[begend[k,0]:(len(allSteps)-begend[k,1])]
+#         plotConvergence(allSteps, errorPerFunction, order)
+#         k+=1
+#     plt.show()
 
         
 #     convergenceTest(tst.LinearProblem(),[0.05,0.01,0.005,0.001,0.0005,0.0002,0.00015],2,True)
@@ -355,12 +361,68 @@ def doAllConvergenceTests():
 #     vdpolSteps=[0.5,0.000005]
 #     convergenceTest(tst.VDPOLEasyProblem(),vdpolSteps[:],8)
     
+def polynomial(coeff,x):
+    sum=0
+    for i in range(len(coeff)):
+        sum+=coeff[i]*x**i
+    return np.array([sum])
+
+def checkInterpolationPolynomial():
+    order=4
+    rndpoly = np.random.randn(order+1)
+    print(rndpoly)
+    steps = [0.0005,0.001,0.005,0.01,0.05,0.1,0.5,1]
+    errorPerStep = np.zeros(len(steps))
+    errorIntPerStep = np.zeros(len(steps))
+    seq=(lambda t: 4*t-2)
+    t0=0
+    k=0
+    for H in steps:
+        y0 = polynomial(rndpoly,t0)
+        Tkk = polynomial(rndpoly,H)
+        yj = (order+1)*[None]
+        hs = (order+1)*[None]
+        for i in range(1,order+1):
+            ni = seq(i)
+            yj_ = np.zeros((ni+1, len(y0)), dtype=(type(y0[0])))
+            for j in range(ni+1):
+                yj_[j]=polynomial(rndpoly,j*H/ni)
+            yj[i]=yj_
+            hs[i]=H/ni
+
+        poly = ex_parallel.interpolate_nonsym(y0, Tkk, yj, hs, H, order, atol=1e-1,rtol=1e-1, seq=seq)
+        
+        x=H/2;
+        res,errint,hint = poly(x)
+        errorIntPerStep[k]=errint
+        resexact=polynomial(rndpoly,t0+H*x)
+        errorPerStep[k] = np.linalg.norm((res-resexact)/resexact)
+        k+=1
+    
+    print(steps)
+    print(errorPerStep)
+    fig = plt.figure()
+    coefficients = np.polyfit(np.log10(steps), np.log10(errorPerStep), 1)
+    print("coefficients error " + str(coefficients))
+    plt.plot(np.log10(steps),np.log10(errorPerStep), marker="x")
+    
+    print(steps)
+    print(errorIntPerStep)
+    fig = plt.figure()
+    coefficientsint = np.polyfit(np.log10(steps), np.log10(errorIntPerStep), 1)
+    print("coefficients error interpolation" + str(coefficientsint))
+    plt.plot(np.log10(steps),np.log10(errorIntPerStep), marker="x")
+    plt.show()
+#     for x in np.linspace(0,H,6):
+#         res,errint,hint = poly(x)
+#         print("approx: " +str(res)+" exact: " + str(polynomial(rndpoly,t0+H*x)))
 
 if __name__ == "__main__":
 #     non_dense_tests()
 #     dense_tests()
 #     implicit_dense_tests()
-    doAllConvergenceTests()
+#     doAllConvergenceTests()
+    checkInterpolationPolynomial()
     
 
 
