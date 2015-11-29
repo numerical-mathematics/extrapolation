@@ -14,8 +14,6 @@ from compare_test import kdv_func, kdv_init
 from pyparsing import countedArray
 from numpy import meshgrid
 import fnbruss
-import numdifftools as ndt
-import yappi
 
 
 '''

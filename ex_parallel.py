@@ -4,9 +4,7 @@ import multiprocessing as mp
 import math
 from scipy import optimize
 import os
-import numdifftools as ndt
 import warnings
-import cProfile
 import scipy
 import time
 import forward_diff
