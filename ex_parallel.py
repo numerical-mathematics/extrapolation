@@ -30,7 +30,7 @@ def set_NUM_WORKERS(nworkers):
         NUM_WORKERS = max(nworkers, 1)
 
 def error_norm(y1, y2, atol, rtol):
-    tol = atol + np.abs(np.maximum(y1,y2)*rtol)
+    tol = atol + np.maximum(np.abs(y1),np.abs(y2))*rtol
     return np.linalg.norm((y1-y2)/tol)/(len(y1)**0.5)
 
 '''''
@@ -1030,9 +1030,12 @@ def solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args,
                                                                          fe_seq, fe_tot, atol, rtol, seq, adaptative, symmetric)
         fe_tot += fe_tot_
         if(rejectStep):
-            h_new = h_int
+            h_new = 1*h_int
             #Use same order if step is rejected by the interpolation (do not use the k_new of the adapted order)
-            k_new = k  
+            k_new = 1*k  
+        elif(h_int<h_new):
+            h_new = 1*h_int
+            
 
     return (rejectStep, y, y_solution,f_yn, h, k, h_new, k_new, (fe_seq, fe_tot, je_tot))
 

@@ -75,8 +75,9 @@ def VDPOLEasyf(y,t):
     second_dim=1/epsilon*(((1-y[0]**2)*y[1])-y[0])
     return np.array([y[1],second_dim])
 
-def VDPOLEasyProblem():    
-    return TestProblemDefinition("VDPOLEasy", VDPOLEasyf, None, 0, np.array([2.,0]),np.arange(0,13,1.),1.,None)
+def VDPOLEasyProblem():
+    denseOutput = np.array([0.,1.,2.,3.,4.,5.,6.,6.4456913297,7.,8.,9.,10.,11.,12.])    
+    return TestProblemDefinition("VDPOLEasy", VDPOLEasyf, None, 0, np.array([2.,0]),denseOutput,1.,None)
     
 #ROBER problem
 
@@ -453,7 +454,7 @@ def comparisonTest():
 
     robustnesses=[3]#, 3, 5, 10, 100]
     smoothings = ['no']#,'semiimp']#,'gbs']
-    useGrads = [False, False]
+    useGrads = [False]#, False]
 
     def BD1983(t):
         #First value of the sequence not used
@@ -510,9 +511,9 @@ def comparisonTest():
                                 else:
 #                                     print("initial guess " + str(first))
 #                                     print("iterative "+ str(first))
-                                    print("freeze jac " + str(first))
+#                                     print("freeze jac " + str(first))
                                     aaa=(True and first)
-                                    ex_parallel.setfrezeejacobian(first)
+                                    ex_parallel.setfrezeejacobian(True)
 #                                     ex_parallel.setwork(True)
                                     ex_parallel.setaddinitialguess(False)
                                     ex_parallel.setiterative(True)

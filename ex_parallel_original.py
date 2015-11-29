@@ -16,7 +16,7 @@ def set_NUM_WORKERS(nworkers):
         NUM_WORKERS = max(nworkers, 1)
 
 def error_norm(y1, y2, atol, rtol):
-    tol = atol + np.abs(np.maximum(y1,y2)*rtol)
+    tol = atol + np.maximum(np.abs(y1),np.abs(y2))*rtol
     return np.linalg.norm((y1-y2)/tol)/(len(y1)**0.5)
 
 def adapt_step(method, func, tn_1, yn_1, args, y, y_hat, h, p, atol, rtol, pool,

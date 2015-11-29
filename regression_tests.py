@@ -318,48 +318,33 @@ def plotConvergence(allSteps, errorPerFunction, order):
 def doAllConvergenceTests():
     global plotConv
     plotConv=True
-#     orders = range(2,12,2)
-#     linearSteps = [1.5,1.25,1,0.5,0.1,0.07,0.05,0.03,0.01,0.007,0.005,0.002,0.001,0.0007,0.0005,0.0004,0.0003]
-#     allerrorPerStep = np.zeros((len(orders),len(linearSteps)))
-#     for i in orders:
-#         allerrorPerStep[i/2-1] = convergenceTest(tst.LinearProblem(),linearSteps,i)
-# #     np.savetxt("AllErrorPerStep.txt", allerrorPerStep)
+
+#     order = 4
+#     linearSteps = np.concatenate((np.linspace(0.5,0.2,4), np.linspace(0.19,0.04,7),np.linspace(0.039,0.02,7),
+#                                   np.linspace(0.019,0.005,10),np.linspace(0.0049,0.002,10),np.linspace(0.0019,0.001,10)))
+#     errorPerFunction = convergenceTest(tst.VDPOLEasyProblem(),linearSteps,order,True)
+#     np.savetxt("allerrorperstep_"+str(order)+"_nosmooth"+"_vdpol"+"_dense"+".txt", errorPerFunction)
 #     plt.show()
-    order = 8
-    linearSteps = np.concatenate((np.linspace(0.5,0.2,4), np.linspace(0.19,0.04,7),np.linspace(0.039,0.02,7),
-                                  np.linspace(0.019,0.005,10),np.linspace(0.0049,0.002,10),np.linspace(0.0019,0.001,10)))
-    errorPerFunction = convergenceTest(tst.LinearProblem(),linearSteps,order,True)
-    np.savetxt("allerrorperstep_"+str(order)+"_nosmooth"+"_dense2"+".txt", errorPerFunction)
-    plt.show()
+
     #For vdpol
 #     begend = np.array([[0,0],[0,10],[2,23],[1,8],[0,16]])
     #For linear
 #     begend = np.array([[0,5],[0,20],[0,15],[0,25],[0,0]])
     #For dense linear
-#     begend = np.array([[0,5],[0,20],[0,20],[0,0],[0,0]])
-# #     begend = np.array([[0,0],[0,0],[0,0],[0,0],[0,0]])
-#     orders = np.array([2,4,6,8])
-#     k=0
-#     for order in orders:
-#         errorPerFunction = np.loadtxt("allerrorperstep_"+str(order)+"_nosmooth"+"_dense"+".txt")
-#         allSteps = errorPerFunction[0]
-#         errorPerFunction= errorPerFunction[1:(len(labelsFunction)+1),begend[k,0]:(len(allSteps)-begend[k,1])]
-#         allSteps =  allSteps[begend[k,0]:(len(allSteps)-begend[k,1])]
-#         plotConvergence(allSteps, errorPerFunction, order)
-#         k+=1
-#     plt.show()
+    begend = np.array([[0,5],[0,5],[0,25],[0,0],[0,0]])
+#     begend = np.array([[0,0],[0,0],[0,0],[0,0],[0,0]])
+    orders = np.array([2,4])#,6,8])
+    k=0
+    for order in orders:
+        errorPerFunction = np.loadtxt("allerrorperstep_"+str(order)+"_nosmooth"+"_vdpol"+"_dense"+".txt")
+        allSteps = errorPerFunction[0]
+        errorPerFunction= errorPerFunction[1:(len(labelsFunction)+1),begend[k,0]:(len(allSteps)-begend[k,1])]
+        allSteps =  allSteps[begend[k,0]:(len(allSteps)-begend[k,1])]
+        plotConvergence(allSteps, errorPerFunction, order)
+        k+=1
+    plt.show()
 
-        
-#     convergenceTest(tst.LinearProblem(),[0.05,0.01,0.005,0.001,0.0005,0.0002,0.00015],2,True)
-#     convergenceTest(tst.LinearProblem(),[0.5,0.07,0.05,0.01,0.005,0.001,0.0009],4,True)
-#     convergenceTest(tst.LinearProblem(),[1,0.7,0.5,0.1,0.07,0.05,0.03,0.01,0.007],6,True)
-#     convergenceTest(tst.LinearProblem(),[1.7,1.5,1.25,1,0.75,0.5,0.1,0.07,0.05],8,True)
-    #TODO: investigate why with order 10 a singular matrix error is thrown.
-#     convergenceTest(tst.LinearProblem(),[2.3,2,1.7,1.5,1.25,1,0.75,0.5,0.1,0.07,0.05],10,True)
-#     plt.show()
     
-#     vdpolSteps=[0.5,0.000005]
-#     convergenceTest(tst.VDPOLEasyProblem(),vdpolSteps[:],8)
     
 def polynomial(coeff,x):
     sum=0
@@ -367,36 +352,67 @@ def polynomial(coeff,x):
         sum+=coeff[i]*x**i
     return np.array([sum])
 
+def polynomialder(coeff,x):
+    sum=0
+    for i in range(1,len(coeff)):
+        sum+=i*coeff[i]*x**(i-1)
+    return np.array([sum])
+
 def checkInterpolationPolynomial():
-    order=4
-    rndpoly = np.random.randn(order+1)
+    order=2
+    extraord=0
+    #Order for symmetric interpolation is +4
+    extraord=2
+    rndpoly = np.random.randn(order+1+extraord)
     print(rndpoly)
     steps = [0.0005,0.001,0.005,0.01,0.05,0.1,0.5,1]
+    steps = [0.01,0.02,0.04,0.05,0.07,0.08,0.1,0.2,0.5,0.7,0.9]
     errorPerStep = np.zeros(len(steps))
     errorIntPerStep = np.zeros(len(steps))
+    errorPerStepSym = np.zeros(len(steps))
+    errorIntPerStepSym = np.zeros(len(steps))
     seq=(lambda t: 4*t-2)
     t0=0
     k=0
     for H in steps:
         y0 = polynomial(rndpoly,t0)
-        Tkk = polynomial(rndpoly,H)
+        Tkk = polynomial(rndpoly,t0+H)
+        f_Tkk = polynomialder(rndpoly, t0+H)
         yj = (order+1)*[None]
+        f_yj = (order+1)*[None]
         hs = (order+1)*[None]
+        y_half = (order+1)*[None]
         for i in range(1,order+1):
             ni = seq(i)
             yj_ = np.zeros((ni+1, len(y0)), dtype=(type(y0[0])))
+            f_yj_ = np.zeros((ni+1, len(y0)), dtype=(type(y0[0])))
             for j in range(ni+1):
                 yj_[j]=polynomial(rndpoly,j*H/ni)
+                f_yj_[j]=polynomialder(rndpoly,j*H/ni)
+                
             yj[i]=yj_
+            f_yj[i]=f_yj_
+            y_half[i]=yj_[ni/2]
             hs[i]=H/ni
 
-        poly = ex_parallel.interpolate_nonsym(y0, Tkk, yj, hs, H, order, atol=1e-1,rtol=1e-1, seq=seq)
+        poly = ex_parallel.interpolate_nonsym(y0, Tkk, yj, hs, H, order, atol=1e-5,rtol=1e-5, seq=seq)
+        
+        
+        polysym = ex_parallel.interpolate_sym(y0, Tkk,f_Tkk, y_half, f_yj, hs, H, order, atol=1e-5,rtol=1e-5, seq=seq)
+         
+#         for x in np.linspace(0,H,20):
+#             res,errint,hint = polysym(x)
+#             print("approx: " +str(res)+" exact: " + str(polynomial(rndpoly,t0+H*x)))
         
         x=H/2;
         res,errint,hint = poly(x)
         errorIntPerStep[k]=errint
         resexact=polynomial(rndpoly,t0+H*x)
-        errorPerStep[k] = np.linalg.norm((res-resexact)/resexact)
+        errorPerStep[k] = np.linalg.norm((res-resexact))
+        
+        ressym,errintsym,hint = polysym(x)
+        errorIntPerStepSym[k]=errintsym
+        errorPerStepSym[k] = np.linalg.norm((ressym-resexact))
         k+=1
     
     print(steps)
@@ -405,24 +421,36 @@ def checkInterpolationPolynomial():
     coefficients = np.polyfit(np.log10(steps), np.log10(errorPerStep), 1)
     print("coefficients error " + str(coefficients))
     plt.plot(np.log10(steps),np.log10(errorPerStep), marker="x")
-    
+       
     print(steps)
     print(errorIntPerStep)
     fig = plt.figure()
     coefficientsint = np.polyfit(np.log10(steps), np.log10(errorIntPerStep), 1)
     print("coefficients error interpolation" + str(coefficientsint))
     plt.plot(np.log10(steps),np.log10(errorIntPerStep), marker="x")
+     
+#     print(steps)
+#     print(errorPerStepSym)
+#     fig = plt.figure()
+#     coefficients = np.polyfit(np.log10(steps), np.log10(errorPerStepSym), 1)
+#     print("coefficients error sym " + str(coefficients))
+#     plt.plot(np.log10(steps),np.log10(errorPerStepSym), marker="x")
+#       
+#     print(steps)
+#     print(errorIntPerStepSym)
+#     fig = plt.figure()
+#     coefficientsint = np.polyfit(np.log10(steps), np.log10(errorIntPerStepSym), 1)
+#     print("coefficients error sym interpolation" + str(coefficientsint))
+#     plt.plot(np.log10(steps),np.log10(errorIntPerStepSym), marker="x")
     plt.show()
-#     for x in np.linspace(0,H,6):
-#         res,errint,hint = poly(x)
-#         print("approx: " +str(res)+" exact: " + str(polynomial(rndpoly,t0+H*x)))
+
 
 if __name__ == "__main__":
 #     non_dense_tests()
 #     dense_tests()
 #     implicit_dense_tests()
-#     doAllConvergenceTests()
-    checkInterpolationPolynomial()
+    doAllConvergenceTests()
+#     checkInterpolationPolynomial()
     
 
 
