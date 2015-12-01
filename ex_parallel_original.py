@@ -490,7 +490,7 @@ def compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
     for kappa in range(2*k+1):
         T = np.zeros((k+1-int(skip/2), k+1 - int(skip/2)), dtype=(type(y_half[1])))
         T[:,1] = 1*dj_kappa[kappa, int(skip/2):]
-
+#         print("T1"+str(T[:,1]))
         for i in range(2, k+1-int(skip/2)):
             for j in range(i, k+1-int(skip/2)):
                 T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j)/(seq(j-i+1)))**2 - 1)
@@ -505,6 +505,8 @@ def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
     u = 2*k-3
     u_1 = u - 1
     ds = compute_ds(y_half, f_yj, hs, k, seq=seq)
+    print "ds->" + str(ds)
+
     
     a_u = (u+5)*[None]
     a_u_1 = (u_1+5)*[None]
@@ -562,7 +564,7 @@ def interpolate(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
 
     b_u = np.array([b1_u,b2_u,b3_u,b4_u])
     b_u_1 = np.array([b1_u_1,b2_u_1,b3_u_1,b4_u_1])
-
+    
     x = A_inv_u*b_u
     x = np.array(x)
 

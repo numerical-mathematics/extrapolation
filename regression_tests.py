@@ -207,6 +207,8 @@ def inputTuple(k,denseOutput,test,firstStep,robustness, order):
                      ,'full_output': True, 'h0': firstStep, 'mxstep': 10e8,
                      'adaptive':'fixed', 'p':order}
     
+    #In this optimal set-up remove smoothing step because it makes the algorithm loose one 
+    #convergence order (see pag. 135 theorem 9.1)
     midimplicitTuple = standardTuple.copy()
     midimplicitTuple.update({'smoothing': 'no','seq':None})
     midsemiimplicitTuple = standardTuple.copy()
@@ -214,12 +216,12 @@ def inputTuple(k,denseOutput,test,firstStep,robustness, order):
     eulersemiimplicitTuple = standardTuple.copy()
     eulersemiimplicitTuple.update({'smoothing': 'no','seq':(lambda t: 2*(2*t-1))})
     optimalTuples =[
-#         standardTuple
-#         ,
+        standardTuple
+        ,
 #         standardOldTuple
 #         ,
-#         midimplicitTuple
-#         ,
+        midimplicitTuple
+        ,
         midsemiimplicitTuple
         ,
         eulersemiimplicitTuple
@@ -227,12 +229,12 @@ def inputTuple(k,denseOutput,test,firstStep,robustness, order):
     return optimalTuples[k]
 
 labelsFunction=[
-#     "New Explicit Midpoint parl"
-#     ,
+    "New Explicit Midpoint parl"
+    ,
 #     "Old Explicit parl"
 #     ,
-#     "Implicit Midpoint parl"
-#     ,
+    "Implicit Midpoint parl"
+    ,
     "SemiImp Midpoint parl"
     ,
     "SemiImp Euler parl"
@@ -246,12 +248,12 @@ def convergenceTest(test, allSteps, order, dense=False):
     print("\n" + "order: " + str(order) + ", dense: " +str(dense))
     useOptimal = True
     solverFunctions = [
-#         ex_parallel.ex_midpoint_explicit_parallel
-#         ,
+        ex_parallel.ex_midpoint_explicit_parallel
+        ,
 #         ex_parallel_original.ex_midpoint_parallel
 #         ,
-#         ex_parallel.ex_midpoint_implicit_parallel
-#         ,
+        ex_parallel.ex_midpoint_implicit_parallel
+        ,
         ex_parallel.ex_midpoint_semi_implicit_parallel
         ,
         ex_parallel.ex_euler_semi_implicit_parallel
@@ -318,31 +320,42 @@ def plotConvergence(allSteps, errorPerFunction, order):
 def doAllConvergenceTests():
     global plotConv
     plotConv=True
-
-#     order = 4
-#     linearSteps = np.concatenate((np.linspace(0.5,0.2,4), np.linspace(0.19,0.04,7),np.linspace(0.039,0.02,7),
-#                                   np.linspace(0.019,0.005,10),np.linspace(0.0049,0.002,10),np.linspace(0.0019,0.001,10)))
-#     errorPerFunction = convergenceTest(tst.VDPOLEasyProblem(),linearSteps,order,True)
-#     np.savetxt("allerrorperstep_"+str(order)+"_nosmooth"+"_vdpol"+"_dense"+".txt", errorPerFunction)
-#     plt.show()
+ 
+    order = 4
+    #linear: 2,4
+    linearSteps = np.concatenate((np.linspace(0.5,0.2,4), np.linspace(0.19,0.04,7),np.linspace(0.039,0.02,7),
+                                  np.linspace(0.019,0.005,10),np.linspace(0.0049,0.002,10),np.linspace(0.0019,0.001,10)))
+    #vdpol: 2,4
+    linearSteps = np.concatenate((np.linspace(0.5,0.2,4), np.linspace(0.19,0.04,7),np.linspace(0.039,0.02,7),
+                                  np.linspace(0.019,0.005,10),np.linspace(0.0049,0.002,10)))
+    
+    #linear: 6 
+#     linearSteps = np.concatenate((np.linspace(0.7,0.2,3), np.linspace(0.19,0.04,7),np.linspace(0.039,0.02,7),
+#                                   np.linspace(0.019,0.005,10)))
+    #vdpol: 6,8 
+#     linearSteps = np.concatenate((np.linspace(1.5,0.75,5),np.linspace(0.7,0.2,5), np.linspace(0.19,0.04,7),
+#                                   np.linspace(0.039,0.02,7)))
+    errorPerFunction = convergenceTest(tst.VDPOLEasyProblem(),linearSteps,order,False)
+    np.savetxt("allerrorperstep_"+str(order)+"_nosmooth"+"_vdpol"+"_dense"+".txt", errorPerFunction)
+    plt.show()
 
     #For vdpol
 #     begend = np.array([[0,0],[0,10],[2,23],[1,8],[0,16]])
     #For linear
 #     begend = np.array([[0,5],[0,20],[0,15],[0,25],[0,0]])
     #For dense linear
-    begend = np.array([[0,5],[0,5],[0,25],[0,0],[0,0]])
-#     begend = np.array([[0,0],[0,0],[0,0],[0,0],[0,0]])
-    orders = np.array([2,4])#,6,8])
-    k=0
-    for order in orders:
-        errorPerFunction = np.loadtxt("allerrorperstep_"+str(order)+"_nosmooth"+"_vdpol"+"_dense"+".txt")
-        allSteps = errorPerFunction[0]
-        errorPerFunction= errorPerFunction[1:(len(labelsFunction)+1),begend[k,0]:(len(allSteps)-begend[k,1])]
-        allSteps =  allSteps[begend[k,0]:(len(allSteps)-begend[k,1])]
-        plotConvergence(allSteps, errorPerFunction, order)
-        k+=1
-    plt.show()
+#     begend = np.array([[0,5],[0,5],[0,25],[0,0],[0,0]])
+# #     begend = np.array([[0,0],[0,0],[0,0],[0,0],[0,0]])
+#     orders = np.array([2,4])#,6,8])
+#     k=0
+#     for order in orders:
+#         errorPerFunction = np.loadtxt("allerrorperstep_"+str(order)+"_nosmooth"+"_vdpol"+"_dense"+".txt")
+#         allSteps = errorPerFunction[0]
+#         errorPerFunction= errorPerFunction[1:(len(labelsFunction)+1),begend[k,0]:(len(allSteps)-begend[k,1])]
+#         allSteps =  allSteps[begend[k,0]:(len(allSteps)-begend[k,1])]
+#         plotConvergence(allSteps, errorPerFunction, order)
+#         k+=1
+#     plt.show()
 
     
     
@@ -350,23 +363,33 @@ def polynomial(coeff,x):
     sum=0
     for i in range(len(coeff)):
         sum+=coeff[i]*x**i
-    return np.array([sum])
+#     return np.array([sum])
+    return np.array([np.exp(-x)])
+    return np.array([np.cos(1.34*x)])
 
-def polynomialder(coeff,x):
+def polynomialder(coeff,x,orderder):
     sum=0
-    for i in range(1,len(coeff)):
-        sum+=i*coeff[i]*x**(i-1)
-    return np.array([sum])
+    for i in range(orderder,len(coeff)):
+        sum+=math.factorial(i)/math.factorial(i-orderder)*coeff[i]*x**(i-orderder)
+#     return np.array([sum])
+    return np.array([(-1)**orderder*np.exp(-x)])
+    if(np.mod(orderder,2)==1):
+        return np.array([(-1.)**((orderder+1)/2)*1.34**orderder*np.sin(1.34*x)])
+    else:
+        return np.array([(-1.)**(orderder/2)*1.34**orderder*np.cos(1.34*x)])
 
 def checkInterpolationPolynomial():
-    order=2
+    order=4
     extraord=0
     #Order for symmetric interpolation is +4
-    extraord=2
+#     extraord=4
     rndpoly = np.random.randn(order+1+extraord)
+    rndpoly = np.ones(order+1+extraord)
     print(rndpoly)
     steps = [0.0005,0.001,0.005,0.01,0.05,0.1,0.5,1]
-    steps = [0.01,0.02,0.04,0.05,0.07,0.08,0.1,0.2,0.5,0.7,0.9]
+    #for symmetric interpolation
+    steps = [0.5,0.55,0.6,0.65,0.8,0.9,1]
+#     steps = [0.04,0.06,0.08,0.1,0.2,0.3,0.35,0.4,0.5,0.6]
     errorPerStep = np.zeros(len(steps))
     errorIntPerStep = np.zeros(len(steps))
     errorPerStepSym = np.zeros(len(steps))
@@ -375,9 +398,10 @@ def checkInterpolationPolynomial():
     t0=0
     k=0
     for H in steps:
+#         H=1
         y0 = polynomial(rndpoly,t0)
         Tkk = polynomial(rndpoly,t0+H)
-        f_Tkk = polynomialder(rndpoly, t0+H)
+        f_Tkk = polynomialder(rndpoly, t0+H,1)
         yj = (order+1)*[None]
         f_yj = (order+1)*[None]
         hs = (order+1)*[None]
@@ -388,46 +412,63 @@ def checkInterpolationPolynomial():
             f_yj_ = np.zeros((ni+1, len(y0)), dtype=(type(y0[0])))
             for j in range(ni+1):
                 yj_[j]=polynomial(rndpoly,j*H/ni)
-                f_yj_[j]=polynomialder(rndpoly,j*H/ni)
+                f_yj_[j]=polynomialder(rndpoly,j*H/ni,1)
                 
             yj[i]=yj_
             f_yj[i]=f_yj_
             y_half[i]=yj_[ni/2]
             hs[i]=H/ni
+        
+        rs = np.zeros((order+1), dtype=(type(yj[1][0])))
+        for i in range(1,order+1):
+            rs[i]=polynomialder(rndpoly, H, i)
+            
+        ds = np.zeros((2*order+1), dtype=(type(y_half[1])))
+        for i in range(2*order+1):
+            ds[i]=polynomialder(rndpoly, H/2, i)
+        
+#         poly = ex_parallel.interpolate_nonsym(y0, Tkk, yj, hs, H, order, atol=1e-5,rtol=1e-5, seq=seq)
+        
+        
+        
+#         polysym = ex_parallel.interpolate_sym(y0, Tkk,f_Tkk, y_half, f_yj, hs, H, order, atol=1e-5,rtol=1e-5, seq=seq)
 
-        poly = ex_parallel.interpolate_nonsym(y0, Tkk, yj, hs, H, order, atol=1e-5,rtol=1e-5, seq=seq)
-        
-        
-        polysym = ex_parallel.interpolate_sym(y0, Tkk,f_Tkk, y_half, f_yj, hs, H, order, atol=1e-5,rtol=1e-5, seq=seq)
-         
-#         for x in np.linspace(0,H,20):
+#         for x in np.linspace(0,H,10):
 #             res,errint,hint = polysym(x)
-#             print("approx: " +str(res)+" exact: " + str(polynomial(rndpoly,t0+H*x)))
-        
-        x=H/2;
-        res,errint,hint = poly(x)
-        errorIntPerStep[k]=errint
-        resexact=polynomial(rndpoly,t0+H*x)
-        errorPerStep[k] = np.linalg.norm((res-resexact))
-        
-        ressym,errintsym,hint = polysym(x)
-        errorIntPerStepSym[k]=errintsym
-        errorPerStepSym[k] = np.linalg.norm((ressym-resexact))
+#             print("error: " +str(res-polynomial(rndpoly,t0+H*x)))
+#             print("errorint: " +str(errint))
+#         x=H/5;
+#         
+#         res,errint,hint = polysym(x)
+#         resexact=polynomial(rndpoly,t0+H*x)
+#         errorIntPerStep[k]=np.linalg.norm((errint-resexact))
+#         errorPerStep[k] = np.linalg.norm((res-resexact))
+        dsapp = ex_parallel.compute_ds(y_half, f_yj, hs, order, seq=seq)
+#         rsapp = ex_parallel.compute_rs(yj, hs, order, seq=seq)
+        der=2
+        print("exact->" + str(ds))
+        print("approx->" + str(dsapp))
+        errorPerStep[k] = np.linalg.norm((ds[der]-dsapp[der]))
+#         errorPerStep[k] = np.linalg.norm((ds[der]-dsapp[der]))
+                
+#         ressym,errintsym,hint = polysym(x)
+#         errorIntPerStepSym[k]=errintsym
+#         errorPerStepSym[k] = np.linalg.norm((ressym-resexact))
         k+=1
-    
+      
     print(steps)
-    print(errorPerStep)
+    print "error"+str(errorPerStep)
     fig = plt.figure()
     coefficients = np.polyfit(np.log10(steps), np.log10(errorPerStep), 1)
     print("coefficients error " + str(coefficients))
     plt.plot(np.log10(steps),np.log10(errorPerStep), marker="x")
-       
-    print(steps)
-    print(errorIntPerStep)
-    fig = plt.figure()
-    coefficientsint = np.polyfit(np.log10(steps), np.log10(errorIntPerStep), 1)
-    print("coefficients error interpolation" + str(coefficientsint))
-    plt.plot(np.log10(steps),np.log10(errorIntPerStep), marker="x")
+          
+#     print(steps)
+#     print "error int: " + str(errorIntPerStep)
+#     fig = plt.figure()
+#     coefficientsint = np.polyfit(np.log10(steps), np.log10(errorIntPerStep), 1)
+#     print("coefficients error interpolation" + str(coefficientsint))
+#     plt.plot(np.log10(steps),np.log10(errorIntPerStep), marker="x")
      
 #     print(steps)
 #     print(errorPerStepSym)
@@ -435,7 +476,7 @@ def checkInterpolationPolynomial():
 #     coefficients = np.polyfit(np.log10(steps), np.log10(errorPerStepSym), 1)
 #     print("coefficients error sym " + str(coefficients))
 #     plt.plot(np.log10(steps),np.log10(errorPerStepSym), marker="x")
-#       
+#         
 #     print(steps)
 #     print(errorIntPerStepSym)
 #     fig = plt.figure()
@@ -449,8 +490,8 @@ if __name__ == "__main__":
 #     non_dense_tests()
 #     dense_tests()
 #     implicit_dense_tests()
-    doAllConvergenceTests()
-#     checkInterpolationPolynomial()
+#     doAllConvergenceTests()
+    checkInterpolationPolynomial()
     
 
 

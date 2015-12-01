@@ -641,10 +641,12 @@ def centered_finite_diff(j, f_yj, hj):
     dj = (max_order+1)*[None]
     dj[1] = 1*f_yj[nj/2]
     dj[2] = (f_yj[nj/2+1] - f_yj[nj/2-1])/(2*hj)
+#     print "j->" + str(j)
     for order in range(2,max_order):
+#         print "kappa->" + str(order)
         coeff = [1] + [coeff[j] + coeff[j+1] for j in range(len(coeff)-1)] + [1]
         index = [nj/2 + order - 2*i for i in range(order+1)]
-
+#         print "index->" + str(index)
         sum_ = 0
         for i in range(order+1):
             sum_ += ((-1)**i)*coeff[i]*f_yj[index[i]]
@@ -685,8 +687,13 @@ def compute_rs(yj, hs, k, seq=(lambda t: 4*t-2)):
         numextrap = k+1-kappa-lam
         T = np.zeros((numextrap+1, numextrap+1), dtype=(type(yj[1][0])))
         T[:,1] = 1*dj_kappa[kappa, (kappa+lam-1):]
-        
+#         print("T1"+str(T[:,1]))
+
         fill_extrapolation_table(T,numextrap,seq,symmetric=False)
+        
+        for i in range(2, numextrap+1):
+            for j in range(i, numextrap+1):
+                T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j+lam+kappa-1)/(seq(j-i+1+lam+kappa-1))) - 1)
 
         rs[kappa] = 1*T[numextrap,numextrap] 
 
@@ -710,9 +717,15 @@ def compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
         numextrap = k-int(skip/2)
         T = np.zeros((numextrap+1, numextrap+1), dtype=(type(y_half[1])))
         T[:,1] = 1*dj_kappa[kappa, int(skip/2):]
+#         print("T1"+str(T[:,1]))
         
-        fill_extrapolation_table(T,numextrap,seq,symmetric=True)
-
+#         fill_extrapolation_table(T,numextrap,seq,symmetric=True)
+        
+        for i in range(2, k+1-int(skip/2)):
+            for j in range(i, k+1-int(skip/2)):
+                T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j+int(skip/2))/(seq(j-i+1+int(skip/2))))**2 - 1)
+        
+#         ds[kappa] = 1*T[1,1]
         ds[kappa] = 1*T[numextrap,numextrap] 
         if (kappa != 0):
             skip +=1
@@ -730,6 +743,8 @@ def getPolynomial(a_u,a_u_1,H,degree,pol_shift,atol,rtol):
             res_u_1 += a_u_1[i]*((t-pol_shift)**i)
         
         errint = error_norm(res, res_u_1, atol, rtol)
+#         errint=np.abs(res-res_u_1)
+#         errint = res_u_1
         h_int = H*((1/errint)**(1/degree))
         
         return (res, errint, h_int)
@@ -740,6 +755,7 @@ def interpolate_nonsym(y0, Tkk, yj, hs, H, k, atol, rtol,
         seq=(lambda t: 4*t-2)):
     u = k
     u_1 = u - 1
+#     print("rs exact -> " + str(rs))
     rs = compute_rs(yj, hs, k, seq=seq)
 #     print("rs -> " + str(rs))
     
@@ -754,7 +770,6 @@ def interpolate_nonsym(y0, Tkk, yj, hs, H, k, atol, rtol,
         sumcoeff+=(-1)**i*a_u[i]
 
     a_u[u] = 1/(-1)**u*(y0-a_u[0]-sumcoeff)
-#     print(a_u)
     
     a_u_1[0:u_1]=1*a_u[0:u_1];
     a_u_1[u_1]=1/(-1)**u_1*(y0-a_u_1[0]-sumcoeff+(-1)**u_1*a_u[u_1])
@@ -766,7 +781,9 @@ def interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
         seq=(lambda t: 4*t-2)):
     u = 2*k-3
     u_1 = u - 1
+#     print "ds exact->" + str(ds)
     ds = compute_ds(y_half, f_yj, hs, k, seq=seq)
+#     print "ds->" + str(ds)
     
     a_u = (u+5)*[None]
     a_u_1 = (u_1+5)*[None]
@@ -775,7 +792,7 @@ def interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
         a_u[i] = (H**i)*ds[i]/math.factorial(i)
 
     a_u_1[0:u_1+1] = 1*a_u[0:u_1+1]   
-    
+
     def A_inv(u):
         return (2**(u-2))*np.matrix(
                 [[(-2*(3 + u))*(-1)**u,   -(-1)**u,     2*(3 + u),   -1],
@@ -790,36 +807,42 @@ def interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
     A_inv_u_1 = A_inv(u_1)
 
     b1_u = 1*y0
-    for i in range(u+1):
+    b1_u_1 = 1*y0
+    for i in range(u_1+1):
         b1_u -= a_u[i]/(-2)**i
+        b1_u_1 -= a_u_1[i]/(-2)**i
     
-    b1_u_1 = np.zeros(len(y0),dtype=(type(y0[0])));
-    b1_u_1[0:u_1+1] = 1*b1_u[0:u_1+1]
+    b1_u -= a_u[u]/(-2)**u
+
 
     b2_u = H*f_yj[1][0]
-    for i in range(1, u+1):
+    b2_u_1 = H*f_yj[1][0]
+    for i in range(1, u_1+1):
         b2_u -= i*a_u[i]/(-2)**(i-1)
+        b2_u_1 -= i*a_u_1[i]/(-2)**(i-1)
 
-    b2_u_1 = np.zeros(len(y0),dtype=(type(y0[0])));
-    b2_u_1[0:u_1+1] = 1*b2_u[0:u_1+1]
-
+    b2_u -= u*a_u[u]/(-2)**(u-1)
+        
+        
     b3_u = 1*Tkk
-    for i in range(u+1):
+    b3_u_1 = 1*Tkk
+    for i in range(u_1+1):
         b3_u -= a_u[i]/(2**i)
+        b3_u_1 -= a_u_1[i]/(2**i)
 
-    b3_u_1 = np.zeros(len(y0),dtype=(type(y0[0])));
-    b3_u_1[0:u_1+1] = 1*b3_u[0:u_1+1]
+    b3_u -= a_u[u]/(2**u)
 
     b4_u = H*f_Tkk
-    for i in range(1, u+1):
+    b4_u_1 = H*f_Tkk
+    for i in range(1, u_1+1):
         b4_u -= i*a_u[i]/(2**(i-1))
+        b4_u_1 -= i*a_u_1[i]/(2**(i-1))
 
-    b4_u_1 = np.zeros(len(y0),dtype=(type(y0[0])));
-    b4_u_1[0:u_1+1] = 1*b4_u[0:u_1+1]
-
+    b4_u -= u*a_u[u]/(2**(u-1))
+        
     b_u = np.array([b1_u,b2_u,b3_u,b4_u])
     b_u_1 = np.array([b1_u_1,b2_u_1,b3_u_1,b4_u_1])
-
+    
     x = A_inv_u*b_u
     x = np.array(x)
 
@@ -1027,12 +1050,13 @@ def solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args,
         rejectStep, y_solution, h_int, fe_tot_ = interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half, f_yj,yj, y0, 
                                                                          fe_seq, fe_tot, atol, rtol, seq, adaptative, symmetric)
         fe_tot += fe_tot_
-        if(rejectStep):
-            h_new = 1*h_int
-            #Use same order if step is rejected by the interpolation (do not use the k_new of the adapted order)
-            k_new = 1*k  
-        elif(h_int<h_new):
-            h_new = 1*h_int
+        if(not adaptative=="fixed"):
+            if(rejectStep):
+                h_new = 1*h_int
+                #Use same order if step is rejected by the interpolation (do not use the k_new of the adapted order)
+                k_new = 1*k  
+            elif((h_int is not None) and h_int<h_new):
+                h_new = 1*h_int
             
 
     return (rejectStep, y, y_solution,f_yn, h, k, h_new, k_new, (fe_seq, fe_tot, je_tot))
@@ -1062,7 +1086,7 @@ def interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half,
     
     #Calculate interpolating polynomial
     if(symmetric):
-#         poly = interpolate_nonsym(y0, Tkk, f_Tkk, y_half, yj, hs, h, k, atol,rtol, seq)
+#         poly = interpolate_nonsym(y0, Tkk, yj, hs, h, k, atol,rtol, seq)
         poly = interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k, atol,rtol, seq)
     else:
         poly = interpolate_nonsym(y0, Tkk, yj, hs, h, k, atol,rtol, seq)
