@@ -367,7 +367,7 @@ def getReferenceFile(problemName):
     return "reference_" + problemName + ".txt"
       
 
-def inputTuple(k,denseOutput,test,rtol,atol,firstStep,robustness,smoothing,seq,useGrad, useOptimal):    
+def inputTuple(k,denseOutput,test,rtol,atol,firstStep,robustness,smoothing,seq,useOptimal):    
     '''
     Gets the input tuple to pass to the solver with all the parameters passed to this function.
     
@@ -377,14 +377,14 @@ def inputTuple(k,denseOutput,test,rtol,atol,firstStep,robustness,smoothing,seq,u
     '''
     standardTuple = {'func': test.RHSFunction, 'grad': test.RHSGradient, 'y0': test.initialValue, 't': denseOutput
                      ,'full_output': True, 'rtol': rtol, 'atol': atol, 'h0': firstStep, 'mxstep': 10e8, 'robustness': robustness,
-                     'smoothing': smoothing,'seq':seq,'useGradient':useGrad}#, 'nworkers': 1}    
+                     'smoothing': smoothing,'seq':seq}#, 'nworkers': 1}    
     
     standardOldTuple = {'func': test.RHSFunction, 'y0': test.initialValue, 't': denseOutput
                      ,'full_output': True, 'rtol': rtol, 'atol': atol, 'h0': firstStep, 'mxstep': 10e8}
     
     if(useOptimal):
         midimplicitTuple = standardTuple.copy()
-        midimplicitTuple.update({'smoothing': 'gbs','seq':None})
+        midimplicitTuple.update({'smoothing': 'gbs','seq':(lambda t: 2*(2*t-1))})
         midsemiimplicitTuple = standardTuple.copy()
         midsemiimplicitTuple.update({'smoothing': 'semiimp' ,'seq':(lambda t: 2*(2*t-1))})
         eulersemiimplicitTuple = standardTuple.copy()
@@ -509,6 +509,7 @@ def comparisonTest():
 #                                     print("initial guess " + str(first))
 #                                     print("iterative "+ str(first))
 #                                     print("freeze jac " + str(first))
+                                    ex_parallel.setusegradient(useGrad)
                                     aaa=(True and first)
                                     ex_parallel.setfrezeejacobian(True)
                                     ex_parallel.setwork(True)
@@ -516,13 +517,9 @@ def comparisonTest():
                                     ex_parallel.setiterative(True)
                                     if(first):
                                         first=False
-                                    functionTuple=inputTuple(k,denseOutput, test,rtol,atol,firstStep,robustness,smoothing,seq,useGrad, useOptimal)
+                                    functionTuple=inputTuple(k,denseOutput, test,rtol,atol,firstStep,robustness,smoothing,seq,useOptimal)
 #                                     yappi.start()
                                     ys, infodict = solverFunction(**functionTuple)
-                                #Code to get all vaps from problem calculated and plot them
-#                                     allvaps = ex_parallel.getallvaps()
-#                                     ex_parallel.setallvaps()
-#                                     ploteigenvalues(allvaps, test.problemName, tol[i])
                                 #Code to see bottleneck in the code
 #                                     yappi.get_func_stats().print_all()
 #                                     yappi.clear_stats()                                    
