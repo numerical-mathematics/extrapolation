@@ -10,9 +10,9 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import math
 from compare_test import kdv_func, kdv_init
-from pyparsing import countedArray
 from numpy import meshgrid
 import fnbruss
+import yappi
 
 
 '''
@@ -333,7 +333,7 @@ def getAllTests():
     (uncomment those that want to be used)
     '''
     tests = []
-    tests.append(VDPOLProblem())
+#     tests.append(VDPOLProblem())
 #     tests.append(VDPOLMildProblem())
 #     tests.append(VDPOLEasyProblem())
 #     tests.append(ROBERProblem())
@@ -341,7 +341,7 @@ def getAllTests():
 #     tests.append(HIRESProblem())
 #     tests.append(KDVProblem())
 #     tests.append(E5Problem())
-#     tests.append(BRUSS2DProblem())
+    tests.append(BRUSS2DProblem())
 #     tests.append(LinearProblem())
     
     return tests
@@ -398,8 +398,8 @@ def inputTuple(k,denseOutput,test,rtol,atol,firstStep,robustness,smoothing,seq,u
 #             ,
 #             midimplicitTuple
 #             ,
-            midsemiimplicitTuple
-            ,
+#             midsemiimplicitTuple
+#             ,
             eulersemiimplicitTuple
             ,
             standardTuple
@@ -418,8 +418,8 @@ def comparisonTest():
     Obs: if useOptimal is True, the seq and smoothing parameters are set to the optimal values
     (see inputTuple(...))
     '''
-    dense=True
-    tol = [1.e-4,1.e-5,1.e-7,1.e-8]#,1.e-10,1.e-12]#,1.e-13,1.e-15]
+    dense=False
+    tol = [1.e-4]#,1.e-5,1.e-7,1.e-8]#,1.e-10,1.e-12]#,1.e-13,1.e-15]
     resultDict={}
     useOptimal = True
     solverFunctions = [
@@ -429,11 +429,11 @@ def comparisonTest():
 #         ,
 #         ex_parallel.ex_midpoint_implicit_parallel
 #         ,
-        ex_parallel.ex_midpoint_semi_implicit_parallel
-        ,
+#         ex_parallel.ex_midpoint_semi_implicit_parallel
+#         ,
         ex_parallel.ex_euler_semi_implicit_parallel
-        ,
-        integrate.odeint
+#         ,
+#         integrate.odeint
         ]
     labelsFunction=[
 #         "New Explicit parl"
@@ -442,11 +442,11 @@ def comparisonTest():
 #         ,
 #         "Implicit"
 #         ,
-        "SemiImp Midpoint"
-        ,
+#         "SemiImp Midpoint"
+#         ,
         "Semi Eul"
-        ,
-        "Scipy int"
+#         ,
+#         "Scipy int"
         ]
 
     robustnesses=[3]#, 3, 5, 10, 100]
@@ -510,15 +510,14 @@ def comparisonTest():
 #                                     print("iterative "+ str(first))
 #                                     print("freeze jac " + str(first))
                                     aaa=(True and first)
-                                    ex_parallel.setfrezeejacobian(False)
-#                                     ex_parallel.setwork(True)
+                                    ex_parallel.setfrezeejacobian(True)
+                                    ex_parallel.setwork(True)
                                     ex_parallel.setaddinitialguess(False)
-                                    ex_parallel.setiterative(False)
+                                    ex_parallel.setiterative(True)
                                     if(first):
                                         first=False
                                     functionTuple=inputTuple(k,denseOutput, test,rtol,atol,firstStep,robustness,smoothing,seq,useGrad, useOptimal)
 #                                     yappi.start()
-#                                     print(functionTuple)
                                     ys, infodict = solverFunction(**functionTuple)
                                 #Code to get all vaps from problem calculated and plot them
 #                                     allvaps = ex_parallel.getallvaps()
@@ -691,7 +690,7 @@ if __name__ == "__main__":
     #If exact solution hasn't been yet calculated uncomment first line
 #     storeTestsExactSolutions()
     resultDict, labels = comparisonTest()
-    plotResults(resultDict, labels)
+#     plotResults(resultDict, labels)
     print "done"
     
     

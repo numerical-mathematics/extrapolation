@@ -8,7 +8,13 @@ import warnings
 import scipy
 import time
 import forward_diff
- 
+
+'''
+IMPORTANT: this code is based basically based on two references.
+    ref I: Solving Ordinary Differential Equations I: Nonstiff Problems by Hairer, Norsett and Wanner
+    ref II: Solving Ordinary Differntial Equations II: Stiff and Differential-Algebraic Problems by Hairer and Wanner
+'''
+
 warnings.filterwarnings('ignore')
 
 #TODO: remove use grad (if passed use always)
@@ -18,6 +24,12 @@ NUM_WORKERS = None
 
 
 def set_NUM_WORKERS(nworkers):
+    '''
+    Set number of parallel workers to be used to parallelize solver's operations
+    (if None it is set to the number of processors of computer). 
+    
+    @param nworkers (int): number of parallel workers
+    '''
     global NUM_WORKERS
     if nworkers == None:
         try:
@@ -28,29 +40,61 @@ def set_NUM_WORKERS(nworkers):
         NUM_WORKERS = max(nworkers, 1)
 
 def error_norm(y1, y2, atol, rtol):
+    '''
+    Error norm/measure between y1, y2.
+    Based on II.4.11 (ref I).
+    
+    @param y1 (array): first value
+    @param y2 (array): second value
+    @param atol (float): absolute tolerance required
+    @param rtol (float): relative tolerance required
+    '''
     tol = atol + np.maximum(np.abs(y1),np.abs(y2))*rtol
     return np.linalg.norm((y1-y2)/tol)/(len(y1)**0.5)
 
 '''''
-BEG: ODE numerical methods formulas (explicit and implicit)
+BEGINNING: ODE numerical methods formulas and one step solvers(explicit, implicit and semi-implicit).
 
-Methods structure:
-def method_implicit/explicit(f,previousValue/previousValues,previousTime,step)
-    @param f: derivative of u(t) (ODE RHS, f(u,t))
-    @param previousValues: previous solution values (two previous values) 
-    used to obtain the next point (using two previous values because midpoint explicit
-    method needs the previous two points, otherwise the t_n-2 value can remain unused)
-    @param previousTime: time at which previous solution is found
-    @param step: step length
-    
-    @return: implicit -> return a function to find the root of,
-    explicit -> return the next estimated solution value and the f evaluation
+Obs: semi-implicit is also called in the reference books as linearly implicit.
+
+Methods' common structure:
+def method_implicit/explicit/semi-implicit(f, grad, previousValues, previousTime,f_previousValue, step, args)
+    @param f (callable f(y,t,args)): derivative of u(t) (ODE RHS, f(u,t))
+    @param grad (callable grad(y,t,args)): Jacobian of f.
+    @param previousValues (2-tuple) : previous solution values (two previous values, at t_n-2 and t_n-1) 
+            used to obtain the next point (using two previous values because midpoint explicit
+            method needs the previous two points, otherwise the t_n-2 value can remain unused)
+    @param previousTime (float): time at which previous solution is found
+    @param f_previousValue (array): function evaluation at the previousValue (at t_n-1), so that it can be
+            reused if it was already calculated for other purposes (Jacobian estimation or dense output interpolation)
+    @param step (float): step length
+    @param args (tuple): extra arguments
+    @param extra arguments to be passed to some of the methods:
+        @param J00 (2D array): (only for semi-implicit) Jacobian estimation at the previous stage value
+                (at each extrapolation stage different number of steps are taken, depending on the
+                step sequence chosen).
+        
+    @return (yj, f_yj, fe_tot, je_tot):
+        @return yj (array): solution calculated at previousTime+step
+        @return f_yj (array): function evaluation value at previousValue, previousTime
+        @return fe_tot (int): number of function evaluations done in this method
+        @return je_tot (int): number of Jacobian evaluations done in this method
 '''''
 
 def solve_implicit_step(zero_f, zero_grad, estimatedValueExplicit):
     '''
+    Find the root of the zero_f function using as initial approximation estimatedValueExplicit.
+    This zero_f root is the next step solution.
     
-    @param zero_f: function to find the root of (estimation of next step)
+    @param zero_f (callable zero_f(y,t,args)): function to find the root of (estimation of next step)
+    @param zero_grad (callable zero_grad(y,t,args)): Jacobian of zero_f.
+    @param estimatedValueExplicit (array): estimated value of the zero_f function to use as initial value
+            for the root solver
+    
+    @return (yj, fe_tot, je_tot):
+        @return yj (array): solution calculated at previousTime+step (root of the zero_f)
+        @return fe_tot (int): number of function evaluations done in this method
+        @return je_tot (int): number of Jacobian evaluations done in this method 
     '''
     #TODO: Problem -> fsolve doesn't seem to work well with xtol parameter
     #TODO: pass to the zero finder solver the tolerance required to the overall problem 
@@ -78,24 +122,20 @@ def solve_implicit_step(zero_f, zero_grad, estimatedValueExplicit):
 #     return (optObject.x, optObject.nfev)
 
 
-def Rosenbrock_midpoint_implicit(f, grad, previousValues, previousTime,f_previousValue, step, args, J00):
+def midpoint_semiimplicit(f, grad, previousValues, previousTime,f_previousValue, step, args, J00):
     """
     Creates midpoint function method formula u_n+1=u_n+h*f(
     
-    @param f: derivative of u(t) (ODE RHS, f(u,t))
-    @param previousValue: previous solution value used to obtain of next point
-    @param previousTime: time at which previous solution is found
-    @param step: step length
+    !!!IMPORTANT TODO: Use the same framework as euler_semiimplicit when it comes to solving the system (iteratively or exactly)
+    and whether the jacobian is sparse or not. Do not copy code, share it for both midpoint and euler!
+
     
-    @return implicit method's solution
     """
     
     previousPreviousValue, previousValue = previousValues
-    
-    I = np.identity(len(previousValue), dtype=float)
-   
+       
     if(previousPreviousValue is None):
-        return Rosenbrock_euler_implicit(f, grad, previousValues, previousTime,f_previousValue, step, args, J00)
+        return euler_semiimplicit(f, grad, previousValues, previousTime,f_previousValue, step, args, J00)
     
     if(f_previousValue is None):
         f_yj = f(*(previousValue,previousTime)+args)
@@ -103,7 +143,7 @@ def Rosenbrock_midpoint_implicit(f, grad, previousValues, previousTime,f_previou
     else:
         f_yj = f_previousValue
         fe_tot=0
-    
+        
     x = previousValue + np.linalg.solve(I-step*J00,np.dot(-(I+step*J00),(previousValue-previousPreviousValue)) + 2*step*f_yj)
     
     return (x, f_yj, fe_tot, 0)
@@ -124,7 +164,19 @@ def setaddinitialguess(initialguess):
     global addinitialguess
     addinitialguess=initialguess
 
-def Rosenbrock_euler_implicit(f, grad, previousValues, previousTime, f_previousValue,step, args, J00):
+I=0
+Isparse=0
+
+def initializeIdentity(N):
+    '''
+    
+    '''
+    global Isparse, I
+    Isparse = scipy.sparse.identity(N, dtype = float, format = 'csr')
+    I = np.identity(N, dtype=float)
+
+
+def euler_semiimplicit(f, grad, previousValues, previousTime, f_previousValue,step, args, J00):
     """
     Creates midpoint function method formula u_n+1=u_n+h*f(
     
@@ -161,11 +213,9 @@ def Rosenbrock_euler_implicit(f, grad, previousValues, previousTime, f_previousV
     #Choose system solver: 
     #http://scicomp.stackexchange.com/questions/3262/how-to-choose-a-method-for-solving-linear-equations
     if(isSparseMatrix(J00)):
-        Isparse = scipy.sparse.identity(len(previousValue), dtype = float, format = 'csr')
         if(useIterative):
             #The algorithm terminates when either the relative or the absolute residual is below tol.
             #Therefore we use the minimum tolerance (more restrictive value)
-#             print(min_tol)
             sol, info= scipy.sparse.linalg.gmres(Isparse-step*J00, step*f_yj, tol=min_tol,x0=xval, maxiter=100)                             
             if info >0:
                 print("Info: maximum iterations reached for sparse system solver (GMRES).")
@@ -174,8 +224,6 @@ def Rosenbrock_euler_implicit(f, grad, previousValues, previousTime, f_previousV
             
         x = previousValue + sol
     else:
-        #TODO: move I to a global variable
-        I = np.identity(len(previousValue), dtype=float)
         #TODO: choose either exact solver or iterative solver for dense non-analytical jacobian
         #Iterative is better for larger systems.
         if(not useIterative):
@@ -369,6 +417,9 @@ def extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full
     set_NUM_WORKERS(nworkers)  
     pool = mp.Pool(NUM_WORKERS)
 
+    #Initialize identity matrices with problem's size (needed for semiimplicit methods)
+    initializeIdentity(len(y0))
+    
     assert len(t) > 1, ("the array t must be of length at least 2, " + 
     "the initial value time should be the first element of t and the last " +
     "element of t the final time")
@@ -405,13 +456,10 @@ def extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full
                 atol, rtol, pool, smoothing, symmetric, seq, adaptative, rejectStep, previousStepSolution)
         #previousStepSolution is used for Jacobian updating
         previousStepSolution=(yn,f_yn)
-#         print(h)
-#         print(rejectStep)
-#         print(t_curr)
+
         #Store values if step is not rejected
         if(not rejectStep):
             yn = 1*y_temp
-
             #ysolution includes all intermediate solutions in interval
             if(len(ysolution)!=0):
                 ys[t_index:(t_index+len(ysolution))] = ysolution
@@ -465,6 +513,7 @@ def extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full
         return ys
 
 def balance_load(k, seq=(lambda t: 2*t)):
+#     return [(i,seq(i)) for i in range(k, 0, -1)]
     if k <= NUM_WORKERS:
         k_nj_lst = [[(i,seq(i))] for i in range(k, 0, -1)]
     else:
@@ -546,7 +595,7 @@ def getJacobian(func, args, yn, tn, grad, methodargs, rejectPreviousStep, previo
             fe_tot += 1
             J00,fe_tot_ = forward_diff.Jacobian(func_at_tn,yn, f_yn, args)
             fe_tot += fe_tot_
-            je_tot=0
+            je_tot=1
             methodargs['J00'] =J00 
             previousJ00 = J00
         else:            
@@ -581,7 +630,8 @@ def compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h,
     jobs = [(method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj, smoothing) for k_nj in k_nj_lst]
 
     results = pool.map(compute_stages, jobs, chunksize=1)
-#     res = compute_stages(jobs[0])
+#     res = compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj_lst, smoothing))
+    
     #At this stage fe_tot has only counted the function evaluations for the jacobian estimation
     fe_seq = 1*fe_tot
     fe_tot_stage_max=0
@@ -609,11 +659,11 @@ def compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h,
             fe_tot_stage_max = fe_tot_stage 
     
     fe_seq += fe_tot_stage_max
-    fill_extrapolation_table(T,k,seq, symmetric)
+    fill_extrapolation_table(T, k, 0, seq, symmetric)
     
     return (T, fe_seq, fe_tot, je_tot, yn, y_half, f_yj, yj, f_yn, hs)
 
-def fill_extrapolation_table(T,k,seq, symmetric):
+def fill_extrapolation_table(T, k, j_initshift, seq, symmetric):
     '''''
     Fill extrapolation table using the first column values 
     (calculated through parallel computation)
@@ -629,9 +679,9 @@ def fill_extrapolation_table(T,k,seq, symmetric):
     for i in range(2, k+1):
         for j in range(i, k+1):
             if(symmetric):
-                T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j)/seq(j-i+1))**2 - 1)
+                T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j+j_initshift)/seq(j+j_initshift-i+1))**2 - 1)
             else:
-                T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j)/seq(j-i+1)) - 1)        
+                T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j+j_initshift)/seq(j+j_initshift-i+1)) - 1)        
             
 def centered_finite_diff(j, f_yj, hj):
     # Called by interpolate_sym
@@ -641,12 +691,10 @@ def centered_finite_diff(j, f_yj, hj):
     dj = (max_order+1)*[None]
     dj[1] = 1*f_yj[nj/2]
     dj[2] = (f_yj[nj/2+1] - f_yj[nj/2-1])/(2*hj)
-#     print "j->" + str(j)
+
     for order in range(2,max_order):
-#         print "kappa->" + str(order)
         coeff = [1] + [coeff[j] + coeff[j+1] for j in range(len(coeff)-1)] + [1]
         index = [nj/2 + order - 2*i for i in range(order+1)]
-#         print "index->" + str(index)
         sum_ = 0
         for i in range(order+1):
             sum_ += ((-1)**i)*coeff[i]*f_yj[index[i]]
@@ -661,6 +709,7 @@ def backward_finite_diff(j, yj, hj,lam):
     coeff = [1,1]
     dj = (max_order+1)*[None]
     dj[1] = (yj[nj] - yj[nj-1])/hj
+    
     for order in range(2,max_order+1):
         coeff = [1] + [coeff[j] + coeff[j+1] for j in range(len(coeff)-1)] + [1]
         index = [nj - i for i in range(order+1)]
@@ -687,13 +736,8 @@ def compute_rs(yj, hs, k, seq=(lambda t: 4*t-2)):
         numextrap = k+1-kappa-lam
         T = np.zeros((numextrap+1, numextrap+1), dtype=(type(yj[1][0])))
         T[:,1] = 1*dj_kappa[kappa, (kappa+lam-1):]
-#         print("T1"+str(T[:,1]))
 
-        fill_extrapolation_table(T,numextrap,seq,symmetric=False)
-        
-        for i in range(2, numextrap+1):
-            for j in range(i, numextrap+1):
-                T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j+lam+kappa-1)/(seq(j-i+1+lam+kappa-1))) - 1)
+        fill_extrapolation_table(T, numextrap, lam+kappa-1, seq, symmetric=False)
 
         rs[kappa] = 1*T[numextrap,numextrap] 
 
@@ -717,15 +761,9 @@ def compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
         numextrap = k-int(skip/2)
         T = np.zeros((numextrap+1, numextrap+1), dtype=(type(y_half[1])))
         T[:,1] = 1*dj_kappa[kappa, int(skip/2):]
-#         print("T1"+str(T[:,1]))
         
-#         fill_extrapolation_table(T,numextrap,seq,symmetric=True)
+        fill_extrapolation_table(T, numextrap, int(skip/2), seq, symmetric=True)
         
-        for i in range(2, k+1-int(skip/2)):
-            for j in range(i, k+1-int(skip/2)):
-                T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j+int(skip/2))/(seq(j-i+1+int(skip/2))))**2 - 1)
-        
-#         ds[kappa] = 1*T[1,1]
         ds[kappa] = 1*T[numextrap,numextrap] 
         if (kappa != 0):
             skip +=1
@@ -743,8 +781,7 @@ def getPolynomial(a_u,a_u_1,H,degree,pol_shift,atol,rtol):
             res_u_1 += a_u_1[i]*((t-pol_shift)**i)
         
         errint = error_norm(res, res_u_1, atol, rtol)
-#         errint=np.abs(res-res_u_1)
-#         errint = res_u_1
+
         h_int = H*((1/errint)**(1/degree))
         
         return (res, errint, h_int)
@@ -755,9 +792,8 @@ def interpolate_nonsym(y0, Tkk, yj, hs, H, k, atol, rtol,
         seq=(lambda t: 4*t-2)):
     u = k
     u_1 = u - 1
-#     print("rs exact -> " + str(rs))
+
     rs = compute_rs(yj, hs, k, seq=seq)
-#     print("rs -> " + str(rs))
     
     #a_u are the coefficients for the interpolation polynomial
     a_u = (u+1)*[None]
@@ -781,9 +817,8 @@ def interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
         seq=(lambda t: 4*t-2)):
     u = 2*k-3
     u_1 = u - 1
-#     print "ds exact->" + str(ds)
+
     ds = compute_ds(y_half, f_yj, hs, k, seq=seq)
-#     print "ds->" + str(ds)
     
     a_u = (u+5)*[None]
     a_u_1 = (u_1+5)*[None]
@@ -915,6 +950,7 @@ def getDenseAndSequence(t_final, t, t_index, seq, symmetric):
     
     return (dense,seq)
 
+#TODO: should be always true for implicit and semiimplicit (they use the Jacobian)
 addwork=True
 def setwork(count):
     global addwork
@@ -957,8 +993,8 @@ def estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative):
     if(adaptative=="fixed"):
         return (False, T[k,k], h, k)
     sizeODE=0
-#     if(addwork):
-#         sizeODE = len(T[k,k])
+    if(addwork):
+        sizeODE = len(T[k,k])
     #Define work function (to minimize)      
     def A_k(k):
         """
@@ -1160,8 +1196,11 @@ def ex_midpoint_explicit_parallel(func, grad, y0, t, args=(), full_output=0, rto
             Dictionary containing additional output information
             KEY         MEANING
             'fe_seq'    cumulative number of sequential derivative evaluations
-            'fe_tot'    cumulative number of total derivative evaluations
-            'nstp'      cumulative number of successful time steps
+            'nfe'       cumulative number of total derivative evaluations
+            'nst'       cumulative number of successful time steps
+            'nje'       cumulative number of either Jacobian evaluations (when 
+                        analytic Jacobian is provided) or Jacobian estimations
+                        (when no analytic Jacobian is provided)
             'h_avg'     average step size if adaptive == "order" (None otherwise)
             'k_avg'     average extrapolation order if adaptive == "order" 
                         ... (None otherwise)
@@ -1220,7 +1259,7 @@ def ex_midpoint_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0
         atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'no', seq=None, useGradient=False, p=4,
         nworkers=None, adaptative="order"):
     
-    method = Rosenbrock_midpoint_implicit
+    method = midpoint_semiimplicit
     
     k=p//2
     
@@ -1248,7 +1287,7 @@ def ex_euler_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0, r
         atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'no', seq=None, useGradient=False,p=4,
         nworkers=None, adaptative="order"):
     
-    method = Rosenbrock_euler_implicit
+    method = euler_semiimplicit
     
     global useGrad
     useGrad = useGradient

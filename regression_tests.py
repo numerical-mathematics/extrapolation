@@ -153,8 +153,10 @@ def dense_tests():
     y0 = exact_1(t0)
     y_ref = exact_1([[2.5],[5],[7.5],[10]])
     err = regression_tst(f_1, y0, t, y_ref)
-    err_ref_1 = np.array([ 4.3573323310e-04,   2.0155849793e-04,   6.1571235657e-06,
-         1.3514865737e-06,   9.9131327408e-08,   1.9365386445e-08]) 
+#     err_ref_1 = np.array([ 1.2796005275e-03,   1.4160078828e-05,   1.1154717428e-07,
+#          6.6923205526e-10,   2.5033682435e-11,   5.4255003010e-12]) 
+    err_ref_1 = np.array([ 2.2697561311e-04,   3.6305440285e-06,   1.7854500150e-08,
+         1.4878051858e-10,   8.2506014083e-13,   3.7806089516e-14]) 
     check(err, err_ref_1, "Test 1 dense")
     print err
       
@@ -164,8 +166,10 @@ def dense_tests():
     y0 = exact_2(t0)
     y_ref = exact_2([[2.5],[5],[7.5],[10]])
     err = regression_tst(f_2, y0, t, y_ref)
-    err_ref_2 = np.array([  5.1994929145e-03,   8.1213665526e-05,   1.8579393108e-06,
-         1.2171334245e-06,   4.1389667376e-08,   9.7372577540e-08])
+#     err_ref_2 = np.array([ 1.4763869532e-03,   5.9302773357e-05,   1.9116074302e-07,
+#          1.4820318333e-09,   2.3923358893e-11,   2.1980051033e-12])
+    err_ref_2 = np.array([ 8.6281275173e-03,   4.2260119052e-05,   2.0133275617e-07,
+         1.3289745257e-08,   1.4089408878e-11,   8.0126766780e-13])
     check(err, err_ref_2, "Test 2 dense")
     print err
   
@@ -175,8 +179,10 @@ def dense_tests():
     y0 = exact_3(t0)
     y_ref = exact_3(np.array([[2.5],[5],[7.5],[10]]))
     err = regression_tst(f_3, y0, t, y_ref)
-    err_ref_3 = np.array([ 3.8670623384e-07,   2.4122935757e-07,   1.2818328551e-07,
-         2.9523589375e-08,   4.7034490983e-10,   3.4956885841e-11]) 
+#     err_ref_3 = np.array([ 5.4288121430e-05,   7.3657652413e-07,   4.7892864282e-09,
+#          8.3632503120e-11,   1.3985673220e-10,   2.3489431842e-13])
+    err_ref_3 = np.array([ 2.8345482579e-07,   3.2544276407e-08,   1.0885477193e-09,
+         2.2655600411e-11,   2.3303828160e-12,   2.9323027554e-15]) 
     check(err, err_ref_3, "Test 3 dense")
     print err
  
@@ -186,8 +192,10 @@ def dense_tests():
     y0 = exact_4(t0)
     y_ref = exact_4(np.array([[2.5],[5],[7.5],[10]]))
     err = regression_tst(f_4, y0, t, y_ref)
-    err_ref_4 = np.array([  1.0309663893e-02,   6.2166423103e-05,   4.2554994818e-07,
-         3.1358489245e-09,   4.3910896661e-11,   7.6981520979e-12]) 
+#     err_ref_4 = np.array([  1.6218737110e-02,   2.5189774159e-05,   8.2681493532e-07,
+#          7.8329039603e-10,   3.2782336939e-11,   7.4040697301e-12])
+    err_ref_4 = np.array([  9.1087394836e-03,   6.3372652119e-05,   4.5009753539e-07,
+         3.3429592395e-09,   2.7282702289e-11,   2.6032343126e-13]) 
     check(err, err_ref_4, "Test 4 dense")
     print err
     
@@ -379,7 +387,7 @@ def polynomialder(coeff,x,orderder):
         return np.array([(-1.)**(orderder/2)*1.34**orderder*np.cos(1.34*x)])
 
 def checkInterpolationPolynomial():
-    order=4
+    order=2
     extraord=0
     #Order for symmetric interpolation is +4
 #     extraord=4
@@ -388,7 +396,7 @@ def checkInterpolationPolynomial():
     print(rndpoly)
     steps = [0.0005,0.001,0.005,0.01,0.05,0.1,0.5,1]
     #for symmetric interpolation
-    steps = [0.5,0.55,0.6,0.65,0.8,0.9,1]
+    steps = [0.5,0.55,0.6,0.65,0.7,0.8,0.85,0.9,0.95,1,1.05,1.1,1.15]
 #     steps = [0.04,0.06,0.08,0.1,0.2,0.3,0.35,0.4,0.5,0.6]
     errorPerStep = np.zeros(len(steps))
     errorIntPerStep = np.zeros(len(steps))
@@ -427,42 +435,43 @@ def checkInterpolationPolynomial():
         for i in range(2*order+1):
             ds[i]=polynomialder(rndpoly, H/2, i)
         
-#         poly = ex_parallel.interpolate_nonsym(y0, Tkk, yj, hs, H, order, atol=1e-5,rtol=1e-5, seq=seq)
+        poly = ex_parallel.interpolate_nonsym(y0, Tkk, yj, hs, H, order, atol=1e-5,rtol=1e-5, seq=seq)        
         
-        
-        
-#         polysym = ex_parallel.interpolate_sym(y0, Tkk,f_Tkk, y_half, f_yj, hs, H, order, atol=1e-5,rtol=1e-5, seq=seq)
+        polysym = ex_parallel.interpolate_sym(y0, Tkk,f_Tkk, y_half, f_yj, hs, H, order, atol=1e-5,rtol=1e-5, seq=seq)
 
 #         for x in np.linspace(0,H,10):
 #             res,errint,hint = polysym(x)
 #             print("error: " +str(res-polynomial(rndpoly,t0+H*x)))
 #             print("errorint: " +str(errint))
-#         x=H/5;
-#         
-#         res,errint,hint = polysym(x)
-#         resexact=polynomial(rndpoly,t0+H*x)
-#         errorIntPerStep[k]=np.linalg.norm((errint-resexact))
+        
+        x=H/5;
+         
+        res,errint,hint = poly(x)
+        resexact=polynomial(rndpoly,t0+H*x)
+#         errorIntPerStep[k]=np.linalg.norm((errint))
 #         errorPerStep[k] = np.linalg.norm((res-resexact))
-        dsapp = ex_parallel.compute_ds(y_half, f_yj, hs, order, seq=seq)
-#         rsapp = ex_parallel.compute_rs(yj, hs, order, seq=seq)
-        der=2
-        print("exact->" + str(ds))
-        print("approx->" + str(dsapp))
-        errorPerStep[k] = np.linalg.norm((ds[der]-dsapp[der]))
+
+        ressym,errintsym,hint = polysym(x)
+        errorIntPerStepSym[k]=np.linalg.norm(errintsym)
+        errorPerStepSym[k] = np.linalg.norm((ressym-resexact))
+
+#         dsapp = ex_parallel.compute_ds(y_half, f_yj, hs, order, seq=seq)
+# #         rsapp = ex_parallel.compute_rs(yj, hs, order, seq=seq)
+#         der=2
+#         print("exact->" + str(ds))
+#         print("approx->" + str(dsapp))
+#         errorPerStep[k] = np.linalg.norm((ds[der]-dsapp[der]))
 #         errorPerStep[k] = np.linalg.norm((ds[der]-dsapp[der]))
                 
-#         ressym,errintsym,hint = polysym(x)
-#         errorIntPerStepSym[k]=errintsym
-#         errorPerStepSym[k] = np.linalg.norm((ressym-resexact))
         k+=1
       
-    print(steps)
-    print "error"+str(errorPerStep)
-    fig = plt.figure()
-    coefficients = np.polyfit(np.log10(steps), np.log10(errorPerStep), 1)
-    print("coefficients error " + str(coefficients))
-    plt.plot(np.log10(steps),np.log10(errorPerStep), marker="x")
-          
+#     print(steps)
+#     print "error"+str(errorPerStep)
+#     fig = plt.figure()
+#     coefficients = np.polyfit(np.log10(steps), np.log10(errorPerStep), 1)
+#     print("coefficients error " + str(coefficients))
+#     plt.plot(np.log10(steps),np.log10(errorPerStep), marker="x")
+#           
 #     print(steps)
 #     print "error int: " + str(errorIntPerStep)
 #     fig = plt.figure()
@@ -470,28 +479,29 @@ def checkInterpolationPolynomial():
 #     print("coefficients error interpolation" + str(coefficientsint))
 #     plt.plot(np.log10(steps),np.log10(errorIntPerStep), marker="x")
      
-#     print(steps)
-#     print(errorPerStepSym)
-#     fig = plt.figure()
-#     coefficients = np.polyfit(np.log10(steps), np.log10(errorPerStepSym), 1)
-#     print("coefficients error sym " + str(coefficients))
-#     plt.plot(np.log10(steps),np.log10(errorPerStepSym), marker="x")
-#         
-#     print(steps)
-#     print(errorIntPerStepSym)
-#     fig = plt.figure()
-#     coefficientsint = np.polyfit(np.log10(steps), np.log10(errorIntPerStepSym), 1)
-#     print("coefficients error sym interpolation" + str(coefficientsint))
-#     plt.plot(np.log10(steps),np.log10(errorIntPerStepSym), marker="x")
+    print(steps)
+    print(errorPerStepSym)
+    fig = plt.figure()
+    coefficients = np.polyfit(np.log10(steps), np.log10(errorPerStepSym), 1)
+    print("coefficients error sym " + str(coefficients))
+    plt.plot(np.log10(steps),np.log10(errorPerStepSym), marker="x")
+         
+    print(steps)
+    print(errorIntPerStepSym)
+    fig = plt.figure()
+    coefficientsint = np.polyfit(np.log10(steps), np.log10(errorIntPerStepSym), 1)
+    print("coefficients error sym interpolation" + str(coefficientsint))
+    plt.plot(np.log10(steps),np.log10(errorIntPerStepSym), marker="x")
+
     plt.show()
 
 
 if __name__ == "__main__":
 #     non_dense_tests()
-#     dense_tests()
+    dense_tests()
 #     implicit_dense_tests()
 #     doAllConvergenceTests()
-    checkInterpolationPolynomial()
+#     checkInterpolationPolynomial()
     
 
 
