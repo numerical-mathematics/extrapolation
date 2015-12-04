@@ -84,75 +84,47 @@ def non_dense_tests():
     y0 = exact_1(t0)
     y_ref = exact_1(tf)
     err = regression_tst(f_1, y0, [t0, tf], y_ref)
-<<<<<<< HEAD
     err_ref_1 = np.array([  2.1630698948e-03,   1.9757059466e-05,   1.3907151930e-07,
          1.1075581382e-09,   9.3295927483e-12,   1.1965242901e-13]) 
     check(err, err_ref_1, "Test 1: linear ODE")
     print err
-  
-=======
-    err_ref_1 = np.array([1.02154130e-03, 1.22710679e-05, 9.25784586e-08, 7.71182340e-10, 4.91119065e-12, 4.44094761e-14]) 
-    check(err, err_ref_1, "Test 1: linear ODE")
-    print err
  
->>>>>>> master
+
     # Test 2
     t0, tf = 0, 10
     y0 = exact_2(t0)
     y_ref = exact_2(tf)
     err = regression_tst(f_2, y0, [t0, tf], y_ref)
-<<<<<<< HEAD
     err_ref_2 = np.array([4.9732202037e-03,   2.0319706692e-05,   4.3446608751e-07,
          2.6994205605e-09,   4.5295951528e-11,   1.6383672339e-12])
     check(err, err_ref_2, "Test 2")
     print err
     
-=======
-    err_ref_2 = np.array([8.54505911e-02, 2.48291275e-04, 8.17836269e-07, 2.85969698e-09, 2.54201200e-11, 9.10317032e-13])
-    check(err, err_ref_2, "Test 2")
-    print err
- 
->>>>>>> master
     # Test 3
     t0, tf = 0, 10
     y0 = exact_3(t0)
     y_ref = exact_3(tf)
     err = regression_tst(f_3, y0, [t0, tf], y_ref)
-<<<<<<< HEAD
     err_ref_3 = np.array([8.0615031844e-07,   1.3156476857e-07,   2.3068719262e-09,
          2.1587147846e-11,   1.7617503487e-13,   1.6048333136e-15]) 
     check(err, err_ref_3, "Test 3")
     print err
-    
-=======
-    err_ref_3 = np.array([1.93968837e-05, 9.48240508e-08, 1.21300220e-09, 2.83645194e-10, 1.74748516e-13, 5.88438882e-15]) 
-    check(err, err_ref_3, "Test 3")
-    print err
- 
->>>>>>> master
+
     # Test 4
     t0, tf = 0.5, 10
     y0 = exact_4(t0)
     y_ref = exact_4(tf)
     err = regression_tst(f_4, y0, [t0, tf], y_ref)
-<<<<<<< HEAD
     err_ref_4 = np.array([9.9765055429e-03,   5.5735241863e-05,   3.4917465397e-07,
          2.7457698162e-09,   2.1222716857e-11,   4.4841830265e-14]) 
     check(err, err_ref_4, "Test 4")
     print err
-      
-=======
-    err_ref_4 = np.array([6.77863684e-03, 9.50343703e-05, 4.90535263e-07, 3.36128205e-09, 2.47615358e-11, 2.92147596e-13]) 
-    check(err, err_ref_4, "Test 4")
-    print err
-  
->>>>>>> master
+
     # Test 5
     t0, tf = 0, 0.08
     y0 = fnbod.init_fnbod(2400)
     y_ref = np.loadtxt("reference.txt")
     err = regression_tst(f_5, y0, [t0, tf], y_ref)
-<<<<<<< HEAD
     err_ref_5 = np.array([ 5.7624705654e-01,   2.0529390615e-01,   1.4130955311e-02,
          7.9667511556e-06,   1.7720280179e-07,   5.0404934818e-09]) 
     check(err, err_ref_5, "Test 5")
@@ -177,29 +149,6 @@ def non_dense_tests():
 #     print err
      
     print("All tests passed")
-=======
-    err_ref_5 = np.array([4.6785364959e-01, 8.0415058627e-02, 1.6090309508e-03, 1.0235932826e-05, 1.0988144963e-07, 1.1568408676e-09]) 
-    check(err, err_ref_5, "Test 5")
-    print err
- 
-    # Test 6
-    t0, tf = 0, 0.003
-    y0 = kdv_init(t0)
-    y_ref = np.loadtxt("reference_kdv.txt")
-    err = regression_tst(kdv_func, y0, [t0, tf], y_ref, solout=kdv_solout)
-    err_ref_6 = np.array([1.20373187e-05, 7.98230720e-08, 1.63759715e-10, 1.75095038e-12, 3.66764576e-12, 1.69146958e-12]) 
-    check(err, err_ref_6, "Test 6")
-    print err
- 
-    # Test 7
-    t0, tf = 0, 3.
-    y0 = burgers_init(t0)
-    y_ref = np.loadtxt("reference_burgers.txt")
-    err = regression_tst(burgers_func, y0, [t0, tf], y_ref, solout=burgers_solout, tol_boundary=(0,4))
-    err_ref_7 = np.array([6.92934673e-09, 4.45755379e-11, 6.26721092e-13, 2.49897416e-14]) 
-    check(err, err_ref_7, "Test 7")
-    print err
->>>>>>> master
 
 
 def dense_tests():
@@ -210,14 +159,11 @@ def dense_tests():
     y0 = exact_1(t0)
     y_ref = exact_1([[2.5],[5],[7.5],[10]])
     err = regression_tst(f_1, y0, t, y_ref)
-<<<<<<< HEAD
 #     err_ref_1 = np.array([ 1.2796005275e-03,   1.4160078828e-05,   1.1154717428e-07,
 #          6.6923205526e-10,   2.5033682435e-11,   5.4255003010e-12]) 
     err_ref_1 = np.array([ 4.0388541531e-04,   3.6069536594e-06,   1.7350073446e-08,
          2.9149161935e-10,   8.3688477982e-13,   2.0974333704e-13]) 
-=======
-    err_ref_1 = np.array([1.45770475e-04, 1.14841518e-06, 1.54196490e-06, 3.88285196e-06, 1.26814157e-07, 1.88666778e-08]) 
->>>>>>> master
+
     check(err, err_ref_1, "Test 1 dense")
     print err
       
@@ -227,7 +173,6 @@ def dense_tests():
     y0 = exact_2(t0)
     y_ref = exact_2([[2.5],[5],[7.5],[10]])
     err = regression_tst(f_2, y0, t, y_ref)
-<<<<<<< HEAD
 #     err_ref_2 = np.array([ 1.4763869532e-03,   5.9302773357e-05,   1.9116074302e-07,
 #          1.4820318333e-09,   2.3923358893e-11,   2.1980051033e-12])
     err_ref_2 = np.array([ 2.6556611408e-03,   5.6819363991e-04,   1.0109797259e-06,
@@ -247,21 +192,6 @@ def dense_tests():
          1.0636289556e-11,   8.6409834669e-14,   4.7465438790e-14]) 
     check(err, err_ref_3, "Test 3 dense")
     print err
-=======
-    err_ref_2 = np.array([3.17429818e-04, 4.86595063e-05, 1.10295116e-05, 1.99391509e-06, 2.11069640e-07, 9.94570884e-08])
-    check(err, err_ref_2, "Test 2 dense")
-    print err
-  
-    # Test 3 dense
-    t0=0
-    t = [t0,2.5,5,7.5,10]
-    y0 = exact_3(t0)
-    y_ref = exact_3(np.array([[2.5],[5],[7.5],[10]]))
-    err = regression_tst(f_3, y0, t, y_ref)
-    err_ref_3 = np.array([8.99830265e-06, 2.02137818e-06, 4.63896854e-08, 2.05977138e-08, 2.36656866e-09, 1.44506569e-09]) 
-    check(err, err_ref_3, "Test 3 dense")
-    print err
->>>>>>> master
  
     # Test 4 dense
     t0 = 0.5
@@ -269,7 +199,6 @@ def dense_tests():
     y0 = exact_4(t0)
     y_ref = exact_4(np.array([[2.5],[5],[7.5],[10]]))
     err = regression_tst(f_4, y0, t, y_ref)
-<<<<<<< HEAD
 #     err_ref_4 = np.array([  1.6218737110e-02,   2.5189774159e-05,   8.2681493532e-07,
 #          7.8329039603e-10,   3.2782336939e-11,   7.4040697301e-12])
     err_ref_4 = np.array([  1.1139882478e-02,   5.8477866642e-05,   3.9084471181e-07,
@@ -573,27 +502,11 @@ def checkInterpolationPolynomial():
 
     plt.show()
 
-=======
-    err_ref_4 = np.array([4.43565713e-03,   9.09774798e-05, 6.04212715e-07, 2.39230449e-09, 5.32280637e-11, 6.44359887e-11]) 
-    check(err, err_ref_4, "Test 4 dense")
-    print err
-    
-    #TODO: add tests 5, 6 and 7 for dense output
-
->>>>>>> master
-
 if __name__ == "__main__":
     non_dense_tests()
     dense_tests()
-<<<<<<< HEAD
 #     implicit_dense_tests()
 #     doAllConvergenceTests()
 #     checkInterpolationPolynomial()
     
 
-
-
-
-=======
-    
->>>>>>> master
