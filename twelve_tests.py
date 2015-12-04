@@ -418,7 +418,7 @@ def comparisonTest():
     Obs: if useOptimal is True, the seq and smoothing parameters are set to the optimal values
     (see inputTuple(...))
     '''
-    dense=False
+    dense=True
     tol = [1.e-4]#,1.e-5,1.e-7,1.e-8]#,1.e-10,1.e-12]#,1.e-13,1.e-15]
     resultDict={}
     useOptimal = True
