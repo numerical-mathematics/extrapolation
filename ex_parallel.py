@@ -203,9 +203,9 @@ def euler_semiimplicit(f, grad, previousValues, previousTime, f_previousValue,st
 #     print("euler_beg " + str(os.getpid()) + '\n')
 #     print(str(time.time()) + '\n')
     
-    min_tol=1e-4
-    useIterative=True
-    addinitialguess=False
+#     min_tol=1e-4
+#     useIterative=True
+#     addinitialguess=False
     
     
     previousPreviousValue, previousValue = previousValues
