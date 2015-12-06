@@ -174,23 +174,15 @@ def setaddinitialguess(initialguess):
     global addinitialguess
     addinitialguess=initialguess
 
-# I=0
-# Isparse=0
-# 
-# def initializeIdentity(N):
-#     '''
-#     Initialize identity matrix (avoids initializing the identity
-#     at every integration step taken)
-#     
-#     @param N (int): size of the problem
-#     
-#     '''
-#     global Isparse, I
-#     Isparse = scipy.sparse.identity(N, dtype = float, format = 'csr')
-#     I = np.identity(N, dtype=float)
 
+def calculateMatrix(I,J00,step):
+#     s1,s2=J00.shape
+#     print("beg "+ str(os.getpid()))
+    aux=I-step*J00
+#     print("end "+ str(os.getpid()))
+    return aux
 
-def euler_semiimplicit(f, grad, previousValues, previousTime, f_previousValue,step, args, J00):
+def euler_semiimplicit(f, grad, previousValues, previousTime, f_previousValue,step, args, J00, I):
     '''
     Calculates solution at previousTime+step doing one step with a euler semiimplicit formula (linearly implicit euler)
     Based on IV.9.25 (ref II).
@@ -233,7 +225,7 @@ def euler_semiimplicit(f, grad, previousValues, previousTime, f_previousValue,st
     #Choose system solver: 
     #http://scicomp.stackexchange.com/questions/3262/how-to-choose-a-method-for-solving-linear-equations
     if(isSparseMatrix(J00)):
-        Isparse = scipy.sparse.identity(len(previousValue), dtype = float, format = 'csr')
+#         Isparse = scipy.sparse.identity(len(previousValue), dtype = float, format = 'csr')
         if(useIterative):
             #The algorithm terminates when either the relative or the absolute residual is below tol.
             #Therefore we use the minimum tolerance (more restrictive value)
@@ -245,13 +237,13 @@ def euler_semiimplicit(f, grad, previousValues, previousTime, f_previousValue,st
             
         x = previousValue + sol
     else:
-        I = np.identity(len(previousValue), dtype=float)
+#         I = np.identity(len(previousValue), dtype=float)
         #TODO: choose either exact solver or iterative solver for dense non-analytical jacobian
         #Iterative is better for larger systems.
         if(not useIterative):
             sol = np.linalg.solve(I-step*J00, step*f_yj)
         else:
-            sol, info= scipy.sparse.linalg.gmres(I-step*J00, step*f_yj, tol=min_tol,x0=xval, maxiter=100)                             
+            sol, info= scipy.sparse.linalg.gmres(calculateMatrix(I,J00,step), step*f_yj, tol=min_tol,x0=xval, maxiter=100)                             
         x = previousValue + sol
 #     print("euler_end " + str(os.getpid()) + '\n')
 #     print(str(time.time()) + '\n')
@@ -464,8 +456,6 @@ def extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full
     set_NUM_WORKERS(nworkers)  
     pool = mp.Pool(NUM_WORKERS)
 
-    #Initialize identity matrices with problem's size (needed for semiimplicit methods)
-#     initializeIdentity(len(y0))
     
     assert len(t) > 1, ("the array t must be of length at least 2, " + 
     "the initial value time should be the first element of t and the last " +
@@ -1516,8 +1506,10 @@ def ex_euler_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0, r
     
     method = euler_semiimplicit
     
-    methodargs={}
-    methodargs["J00"]=None
+    methodargs = {}
+    methodargs["J00"] = None
+    methodargs["I"] = np.identity(len(y0), dtype=float)
+
 
     return extrapolation_parallel(method, methodargs, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
