@@ -152,15 +152,6 @@ def midpoint_semiimplicit(f, grad, previousValues, previousTime,f_previousValue,
     
     return (x, f_yj, fe_tot, 0)
 
-def isSparseMatrix(J):
-    '''
-    Check if matrix J is in sparse format
-    
-    @param J (sparse matrix or 2D-array): matrix to check 
-    @return True if J is in sparse format
-    '''
-    return (isinstance(J, scipy.sparse.csr_matrix) or isinstance(J, scipy.sparse.coo_matrix)
-            or isinstance(J, scipy.sparse.csc_matrix) or isinstance(J, scipy.sparse.dia_matrix))
 
 # min_tol = 1e-5
 # useIterative=True
@@ -178,11 +169,11 @@ def setaddinitialguess(initialguess):
 def calculateMatrix(I,J00,step):
 #     s1,s2=J00.shape
 #     print("beg "+ str(os.getpid()))
-    aux=I-step*J00
+#     aux=I-step*J00
 #     print("end "+ str(os.getpid()))
-    return aux
+    return I-step*J00
 
-def euler_semiimplicit(f, grad, previousValues, previousTime, f_previousValue,step, args, J00, I):
+def euler_semiimplicit(f, grad, previousValues, previousTime, f_previousValue,step, args, J00, I, Isparse):
     '''
     Calculates solution at previousTime+step doing one step with a euler semiimplicit formula (linearly implicit euler)
     Based on IV.9.25 (ref II).
@@ -224,16 +215,16 @@ def euler_semiimplicit(f, grad, previousValues, previousTime, f_previousValue,st
     # at the beginning of the ODE solving 
     #Choose system solver: 
     #http://scicomp.stackexchange.com/questions/3262/how-to-choose-a-method-for-solving-linear-equations
-    if(isSparseMatrix(J00)):
+    if(scipy.sparse.issparse(J00)):
 #         Isparse = scipy.sparse.identity(len(previousValue), dtype = float, format = 'csr')
         if(useIterative):
             #The algorithm terminates when either the relative or the absolute residual is below tol.
             #Therefore we use the minimum tolerance (more restrictive value)
-            sol, info= scipy.sparse.linalg.gmres(Isparse-step*J00, step*f_yj, tol=min_tol,x0=xval, maxiter=100)                             
+            sol, info= scipy.sparse.linalg.gmres(calculateMatrix(Isparse,J00,step), step*f_yj, tol=min_tol,x0=xval, maxiter=100)                             
             if info >0:
                 print("Info: maximum iterations reached for sparse system solver (GMRES).")
         else:
-            sol = scipy.sparse.linalg.spsolve(Isparse-step*J00, step*f_yj)
+            sol = scipy.sparse.linalg.spsolve(calculateMatrix(Isparse,J00,step), step*f_yj)
             
         x = previousValue + sol
     else:
@@ -241,7 +232,7 @@ def euler_semiimplicit(f, grad, previousValues, previousTime, f_previousValue,st
         #TODO: choose either exact solver or iterative solver for dense non-analytical jacobian
         #Iterative is better for larger systems.
         if(not useIterative):
-            sol = np.linalg.solve(I-step*J00, step*f_yj)
+            sol = np.linalg.solve(calculateMatrix(I,J00,step), step*f_yj)
         else:
             sol, info= scipy.sparse.linalg.gmres(calculateMatrix(I,J00,step), step*f_yj, tol=min_tol,x0=xval, maxiter=100)                             
         x = previousValue + sol
@@ -734,9 +725,8 @@ def compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h,
     f_yn, fe_tot, je_tot = getJacobian(func, args, yn, tn, grad, methodargs, rejectPreviousStep, previousStepSolution)
     
     jobs = [(method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj, smoothing) for k_nj in k_nj_lst]
-#     print("init")
     results = pool.map(compute_stages, jobs, chunksize=1)
-#     print("ending")
+
 #     res = compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj_lst, smoothing))
     
     #At this stage fe_tot has only counted the function evaluations for the jacobian estimation
@@ -799,7 +789,23 @@ def fill_extrapolation_table(T, k, j_initshift, seq, symmetric):
                 T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j+j_initshift)/seq(j+j_initshift-i+1)) - 1)        
             
 def centered_finite_diff(j, f_yj, hj):
-    # Called by interpolate_sym
+    '''
+    Computes through the centered differentiation formula different order derivatives of y for a given 
+    extrapolation step (for every T{1,j}). In other words, it calculates II.9.39 ref I (step 1) for all kappa
+    for a fixed j (for a fixed extrapolation step).
+    
+    Used for interpolate_sym.
+    
+    @param j (int): which extrapolation inner-stage is used  
+    @param f_yj (2D array): array with all the function evaluations of all the intermediate solution 
+            values obtained to calculate each T_{j,1}. 
+    @param hj (array): inner step taken in the j-th extrapolation step, H/nj (II.9.1 ref I).
+    
+    @return dj (2D array): array containing for each kappa=1...2j the kappa-th derivative of y estimated
+        using the j-th extrapolation step values
+
+    '''
+
     max_order = 2*j
     nj = len(f_yj) - 1
     coeff = [1,1]
@@ -818,12 +824,27 @@ def centered_finite_diff(j, f_yj, hj):
     return dj
 
 def backward_finite_diff(j, yj, hj,lam):
-    # Called by interpolate_sym
+    '''
+    Computes through the backward differentiation formula different order derivatives of y for a given 
+    extrapolation step (for every T{1,j}). In other words, it calculates VI.5.43 ref II (step 1) for all kappa
+    for a fixed j (for a fixed extrapolation step).
+    
+    Used for interpolate_nonsym.
+    
+    @param j (int): which extrapolation inner-stage is used  
+    @param yj (2D array): array with all the intermediate solution values obtained to calculate each T_{j,1}. 
+    @param hj (array): inner step taken in the j-th extrapolation step, H/nj (II.9.1 ref I).
+    @param lam (int): either 0 or 1, check definition and use in ref II pg 439
+    
+    @return rj (2D array): array containing for each kappa=1...j-lam the kappa-th derivative of y estimated
+        using the j-th extrapolation step values
+
+    '''
     max_order = j-lam
     nj = len(yj) - 1
     coeff = [1,1]
-    dj = (max_order+1)*[None]
-    dj[1] = (yj[nj] - yj[nj-1])/hj
+    rj = (max_order+1)*[None]
+    rj[1] = (yj[nj] - yj[nj-1])/hj
     
     for order in range(2,max_order+1):
         coeff = [1] + [coeff[j] + coeff[j+1] for j in range(len(coeff)-1)] + [1]
@@ -832,12 +853,37 @@ def backward_finite_diff(j, yj, hj,lam):
         sum_ = 0
         for i in range(order+1):
             sum_ += ((-1)**i)*coeff[i]*yj[index[i]]
-        dj[order] = sum_ /hj**order 
+        rj[order] = sum_ /hj**order 
 
-    return dj
+    return rj
 
 def compute_rs(yj, hs, k, seq=(lambda t: 4*t-2)):
-    # Called by interpolate_sym
+    '''
+    Computes through the backward differentiation formula and using extrapolation, different order derivatives
+    of y. In other words, it delegates VI.5.43 ref II (step 1) to backward_finite_diff(.) function and here it 
+    performs the extrapolation of the derivatives. It follows VI.5.44 ref II (step 2).
+    
+    Used for interpolate_nonsym.
+    
+    Obs: compared to the reference, k and kappa are interchanged in this code, to maintain the same notation as 
+    ref I (see compute_ds function)
+    
+    Contains a parameter to be chosen: lam={0,1}.
+    TODO: check if it works properly with lam=1
+    TODO: once this is checked set to lam=1, as it requires less work and the order of interpolation is enough
+    given the global error committed. Theorem VI.5.7 ref II (interpolation error).
+    
+    @param yj (3D array): array containing for each extrapolation value (1...k) an array with all the intermediate solution 
+            values obtained to calculate each T_{i,1}. 
+    @param hs (array): array containing for each extrapolation value (1...k) the inner step taken, H/nj (II.9.1 ref I) 
+    @param k (int): order of extrapolation to take in this step (determines the number of extrapolations performed
+            to achieve a better integration output, equivalent to the size of the extrapolation tableau).    
+    @param seq (callable(i), int i>=1): the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
+
+    @return rs (2D array): array containing for each kappa=1...k the kappa-th derivative of y 
+            (extrapolated k-kappa-lam times)
+
+    '''
     lam=0
     dj_kappa = np.zeros((k+1-lam, k+1), dtype=(type(yj[1][0])))
     rs = np.zeros((k+1), dtype=(type(yj[1][0])))
@@ -859,7 +905,26 @@ def compute_rs(yj, hs, k, seq=(lambda t: 4*t-2)):
     return rs 
 
 def compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
-    # Called by interpolate_sym
+    '''
+    Computes through the centered differentiation formula and using extrapolation, different order derivatives
+    of y. In other words, it delegates II.9.39 ref I (step 1) to backward_finite_diff(.) function and here it 
+    performs the extrapolation of the derivatives. It follows II.9 step 2 ref I.
+    
+    Used for interpolate_sym.
+    
+    @param y_half (2D array): array containing for each extrapolation value (1...k) an array with the intermediate (at half
+            the integration interval) solution value.
+    @param f_yj (3D array): array containing for each extrapolation value (1...k) an array with all the function evaluations
+            done at the intermediate solution values.
+    @param hs (array): array containing for each extrapolation value (1...k) the inner step taken, H/nj (II.9.1 ref I) 
+    @param k (int): order of extrapolation to take in this step (determines the number of extrapolations performed
+            to achieve a better integration output, equivalent to the size of the extrapolation tableau).    
+    @param seq (callable(i), int i>=1): the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
+
+    @return ds (2D array): array containing for each kappa=0...2k the kappa-th derivative of y 
+            (extrapolated k-l times where l see definition at II.9 step 2 ref I)
+
+    '''
     dj_kappa = np.zeros((2*k+1, k+1), dtype=(type(y_half[1])))
     ds = np.zeros((2*k+1), dtype=(type(y_half[1])))
     
@@ -886,7 +951,38 @@ def compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
     return ds 
 
 def getPolynomial(a_u,a_u_1,H,degree,pol_shift,atol,rtol):
+    '''
+    Get interpolation polynomial with a_u coefficients and adjust variable to problem with pol_shift.
+    It returns a polynomial that returns for every theta in (0,1) the interpolation value at x0+theta*H.
+    See theorem II.9.5 ref I and theorem VI.5.7 ref II.
+    
+    @param a_u (array): coefficients of the interpolation polynomial
+    @param a_u_1 (array): coefficients of the interpolation polynomial of one degree less (for error estimation)
+    @param H (float): step taken by solver (coefficients a_u and a_u_1 were calculated on (0,1) interval)
+    @param degree (int): degree of polynomial a_u (should match len(a_u)-1)
+    @param pol_shift (float): variable change that was made to calculate a_u and a_u_1, i.e. x-pol_shift,
+            because coefficients a_u and a_u_1 were calculated on (0-pol_shift,1-pol_shift) interval.
+    @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
+            determine the error control performed by the solver. See  function error_norm(y1, y2, atol, rtol).
+    
+    @return poly (callable(t)): interpolation polynomial (see definition of poly(t) function)
+    '''
+    
     def poly (t):
+        '''
+        Interpolation polynomial
+        
+        @param t(float): value in interval (0,1) 
+        
+        @return (res, errint, h_int):
+            @return res (float): interpolation result at x0+theta*H, P(theta).
+                    See theorem II.9.5 ref I and theorem VI.5.7 ref II.
+            @return errint (float): estimated interpolation error (uses the one degree less polynomial to 
+                    estimate the interpolation error). See II.9.45 ref I.
+            @return h_int (float): suggested next step (in case of rejected interpolation).
+                    See formula after II.9.45 ref I. 
+        
+        '''
         res = 1*a_u[0] 
         for i in range(1, len(a_u)):
             res += a_u[i]*((t-pol_shift)**i)
@@ -905,6 +1001,30 @@ def getPolynomial(a_u,a_u_1,H,degree,pol_shift,atol,rtol):
 
 def interpolate_nonsym(y0, Tkk, yj, hs, H, k, atol, rtol,
         seq=(lambda t: 4*t-2)):
+    '''
+    Non symmetrical formula (for example used for euler's method) to interpolate dense output values. It
+    calculates a polynomial to interpolate any value from t0 (time at y0) to t0+H (time at Tkk). Based on
+    Dense Output, VI.5 pg 438-439.
+    
+    Returns a polynomial that fulfills the conditions at VI.5.44 (step 3). To take into account: this coefficients
+    were calculated for the shifted polynomial with x -> x-1.
+    
+    @param y0 (float): solution of ODE at the previous step, at t0
+    @param Tkk (float): solution of ODE once the step was taken, at t0+H 
+    @param yj (3D array): array containing for each extrapolation value (1...k) an array with all the intermediate solution 
+            values obtained to calculate each T_{i,1}. 
+    @param hs (array): array containing for each extrapolation value (1...k) the inner step taken, H/nj (II.9.1 ref I) 
+    @param H (float): integration step to take (the output, without interpolation, will be calculated at t_curr+h)
+            This value matches with the value H in ref I and ref II. 
+    @param k (int): order of extrapolation to take in this step (determines the number of extrapolations performed
+            to achieve a better integration output, equivalent to the size of the extrapolation tableau).
+    @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
+            determine the error control performed by the solver. See  function error_norm(y1, y2, atol, rtol).    
+    @param seq (callable(i), int i>=1): the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
+
+    @return poly (callable(t)): interpolation polynomial (see definition of poly(t) function in getPolynomial(.))
+
+    '''
     u = k
     u_1 = u - 1
 
@@ -930,6 +1050,33 @@ def interpolate_nonsym(y0, Tkk, yj, hs, H, k, atol, rtol,
 
 def interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
         seq=(lambda t: 4*t-2)):
+    '''
+    Symmetrical formula (for example used for midpoint's method) to interpolate dense output values. It
+    calculates a polynomial to interpolate any value from t0 (time at y0) to t0+H (time at Tkk). Based on
+    Dense Output for the GBS Method, II.9 pg 237-239.
+    
+    Returns a polynomial that fulfills the conditions at II.9.40 (step 3). To take into account: this coefficients
+    were calculated for the shifted polynomial with x -> x-1/2.
+    
+    @param y0 (float): solution of ODE at the previous step, at t0
+    @param Tkk (float): solution of ODE once the step was taken, at t0+H 
+    @param f_Tkk (float): function evaluation at Tkk, t0+H
+    @param y_half (2D array): array containing for each extrapolation value (1...k) an array with the intermediate (at half
+            the integration interval) solution value.
+    @param f_yj (3D array): array containing for each extrapolation value (1...k) an array with all the function evaluations
+            done at the intermediate solution values.
+    @param hs (array): array containing for each extrapolation value (1...k) the inner step taken, H/nj (II.9.1 ref I) 
+    @param H (float): integration step to take (the output, without interpolation, will be calculated at t_curr+h)
+            This value matches with the value H in ref I and ref II. 
+    @param k (int): order of extrapolation to take in this step (determines the number of extrapolations performed
+            to achieve a better integration output, equivalent to the size of the extrapolation tableau).
+    @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
+            determine the error control performed by the solver. See  function error_norm(y1, y2, atol, rtol).    
+    @param seq (callable(i), int i>=1): the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
+
+    @return poly (callable(t)): interpolation polynomial (see definition of poly(t) function in getPolynomial(.))
+
+    '''
     u = 2*k-3
     u_1 = u - 1
 
@@ -1279,7 +1426,7 @@ def interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half,
             (all values at index<t_index have already been computed).
     @param h (float): integration step to take (the output, without interpolation, will be calculated at t_curr+h)
             This value matches with the value H in ref I and ref II.
-    @param hs (array): array containing for each extrapolation value (1...k) the inner step taken, H/nj (ref I)
+    @param hs (array): array containing for each extrapolation value (1...k) the inner step taken, H/nj (II.9.1 ref I)
     @param y_half (2D array): array containing for each extrapolation value (1...k) an array with the intermediate (at half
             the integration interval) solution value.
     @param f_yj (3D array): array containing for each extrapolation value (1...k) an array with all the function evaluations
@@ -1509,6 +1656,8 @@ def ex_euler_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0, r
     methodargs = {}
     methodargs["J00"] = None
     methodargs["I"] = np.identity(len(y0), dtype=float)
+    methodargs["Isparse"] = np.identity(len(y0), dtype=float)
+
 
 
     return extrapolation_parallel(method, methodargs, func, grad, y0, t, args=args,
