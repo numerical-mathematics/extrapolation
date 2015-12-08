@@ -1,3 +1,5 @@
+all: fnbod.so fnbruss.so
+
 fnbod.so: fnbod.f
 	f2py -c fnbod.f -m fnbod
 
