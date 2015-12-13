@@ -11,6 +11,7 @@ import time
 import subprocess
 from scipy.integrate import ode
 from scipy.integrate import complex_ode
+import scipy.integrate
 
 import ex_parallel as ex_p
 import fnbod
@@ -70,6 +71,12 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6
     dop853_yerr = np.zeros(len(tol))
     dop853_nstp = np.zeros(len(tol))
     
+    adams_runtime = np.zeros(len(tol))
+    adams_fe_seq = np.zeros(len(tol))
+    adams_fe_tot = np.zeros(len(tol))
+    adams_yerr = np.zeros(len(tol))
+    adams_nstp = np.zeros(len(tol))
+    
     def func2(t,y):
         return func(y,t)
 
@@ -79,10 +86,13 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6
         # run Python extrapolation code 
         print 'running Python Extrap'
         start_time = time.time()
-        y, infodict = ex_p.ex_midpoint_parallel(func, y0, [t0, tf], atol=tol[i], rtol=tol[i], mxstep=nsteps, adaptive="order", full_output=True)
+        y, infodict = ex_p.ex_midpoint_explicit_parallel(func, None, y0, [t0, tf], atol=tol[i], rtol=tol[i], mxstep=nsteps, adaptative="order", full_output=True)
         py_runtime[i] = time.time() - start_time
+        print"y"+str(y[-1])
         y[-1] = solout(y[-1])
-        py_fe_seq[i], py_fe_tot[i], py_nstp[i] = infodict['fe_seq'], infodict['fe_tot'], infodict['nstp']
+        print"ysol"+str(y[-1])
+        py_fe_seq[i], py_fe_tot[i], py_nstp[i] = infodict['fe_seq'], infodict['nfe'], infodict['nst']
+        print"yref"+str(y_ref)
         py_yerr[i] = relative_error(y[-1], y_ref)
         print 'Runtime: ', py_runtime[i], ' s   Error: ', py_yerr[i], '   fe_seq: ', py_fe_seq[i], '   fe_tot: ', py_fe_tot[i], '   nstp: ', py_nstp[i]
         print ''
@@ -118,6 +128,21 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6
         dop853_yerr[i] = relative_error(y, y_ref)
         print 'Runtime: ', dop853_runtime[i], ' s   Error: ', dop853_yerr[i], '   fe_seq: ', dop853_fe_seq[i], '   fe_tot: ', dop853_fe_tot[i], '   nstp: ', dop853_nstp[i]
         print ''
+        
+        # run adams extrapolation code 
+        #Can only run for real problems (non complex values)
+#         print 'running adams Extrap'
+#         start_time = time.time()
+#         y, infodict = scipy.integrate.odeint(func, y0, [t0, tf],Dfun=None,mxstep=10000000, atol=tol[i], rtol=tol[i], full_output=True)
+#         adams_runtime[i] = time.time() - start_time
+#         print"y"+str(y[-1])
+#         y[-1] = solout(y[-1])
+#         print"ysol"+str(y[-1])
+#         adams_fe_tot[i], adams_nstp[i] = infodict['nfe'], infodict['nst']
+#         print"yref"+str(y_ref)
+#         adams_yerr[i] = relative_error(y[-1], y_ref)
+#         print 'Runtime: ', adams_runtime[i], ' s   Error: ', adams_yerr[i], '   fe_seq: ', adams_fe_seq[i], '   fe_tot: ', adams_fe_tot[i], '   nstp: ', adams_nstp[i]
+#         print ''
 
         if run_odex_code:
             # run Fortran DOP853
@@ -174,6 +199,7 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6
     py_line,   = plt.loglog(py_yerr, py_runtime, "s-")
     dopri5_line, = plt.loglog(dopri5_yerr, dopri5_runtime, "s-")
     dop853_line, = plt.loglog(dop853_yerr, dop853_runtime, "s-")
+#     adams_line,   = plt.loglog(adams_yerr, adams_runtime, "s-")
     if run_odex_code:
         f_dop853_line, = plt.loglog(f_dop853_yerr, f_dop853_runtime, "s-")
         odex_line, = plt.loglog(odex_yerr, odex_runtime, "s-")
@@ -183,6 +209,7 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6
     plt.xlabel('Error')
     plt.ylabel('Wall clock time (seconds)')
     plt.title(problem_name)
+    plt.show()
     plt.savefig('images/' + problem_name + '_err_vs_time.png')
     plt.close()
 
