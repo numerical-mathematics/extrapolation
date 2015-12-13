@@ -15,17 +15,9 @@ IMPORTANT: this code is based basically based on two references.
     ref II: Solving Ordinary Differntial Equations II: Stiff and Differential-Algebraic Problems by Hairer and Wanner
 '''
 
-warnings.filterwarnings('ignore')
-
-#TODO: remove use grad (if passed use always)
-useGrad = False
-
+#This global variable does not limit multiprocessing performance
+#as it is used always in the sequential part of the code.
 NUM_WORKERS = None
-
-def setusegradient(useGradient):
-    global useGrad
-    useGrad = useGradient
-
 
 def set_NUM_WORKERS(nworkers):
     '''
@@ -43,7 +35,7 @@ def set_NUM_WORKERS(nworkers):
     else: 
         NUM_WORKERS = max(nworkers, 1)
 
-def error_norm(y1, y2, atol, rtol):
+def _error_norm(y1, y2, atol, rtol):
     '''
     Error norm/measure between y1, y2.
     Based on II.4.11 (ref I).
@@ -57,7 +49,7 @@ def error_norm(y1, y2, atol, rtol):
     return np.linalg.norm((y1-y2)/tol)/(len(y1)**0.5)
 
 '''''
-BEGINNING: ODE numerical methods formulas and one step solvers(explicit, implicit and semi-implicit).
+BEGINNING BLOCK 1: ODE numerical methods formulas and one step solvers(explicit, implicit and semi-implicit).
 
 Obs: semi-implicit is also called in the reference books as linearly implicit.
 
@@ -73,6 +65,8 @@ def method_implicit/explicit/semi-implicit(f, grad, previousValues, previousTime
             reused if it was already calculated for other purposes (Jacobian estimation or dense output interpolation)
     @param step (float): step length
     @param args (tuple): extra arguments
+    @param addSolverParam (dict): extra arguments needed to define completely the solver's behavior.
+            Should not be empty, for more information see _getAdditionalSolverParameters(..) function.
     @param extra arguments to be passed to some of the methods:
         @param J00 (2D array): (only for semi-implicit) Jacobian estimation at the previous stage value
                 (at each extrapolation stage different number of steps are taken, depending on the
@@ -85,15 +79,17 @@ def method_implicit/explicit/semi-implicit(f, grad, previousValues, previousTime
         @return je_tot (int): number of Jacobian evaluations done in this method
 '''''
 
-def solve_implicit_step(zero_f, zero_grad, estimatedValueExplicit):
+def _solve_implicit_step(zero_f, zero_grad, estimatedValueExplicit, addSolverParam):
     '''
     Find the root of the zero_f function using as initial approximation estimatedValueExplicit.
-    This zero_f root is the next step solution. The solve_implicit_step solves one step of an implicit method.
+    This zero_f root is the next step solution. The _solve_implicit_step solves one step of an implicit method.
     
     @param zero_f (callable zero_f(y,t,args)): function to find the root of (estimation of next step)
     @param zero_grad (callable zero_grad(y,t,args)): Jacobian of zero_f.
     @param estimatedValueExplicit (array): estimated value of the zero_f function to use as initial value
             for the root solver
+    @param addSolverParam (dict): extra arguments needed to define completely the solver's behavior.
+            Should not be empty, for more information see _getAdditionalSolverParameters(..) function.
     
     @return (yj, fe_tot, je_tot):
         @return yj (array): solution calculated at previousTime+step (root of the zero_f)
@@ -104,11 +100,13 @@ def solve_implicit_step(zero_f, zero_grad, estimatedValueExplicit):
     #TODO: pass to the zero finder solver the tolerance required to the overall problem 
     # by doing this the error by the solver doesn't limit the global error of the ODE's solution
     
-    global useGrad
-    if(not useGrad):
-        zero_grad=None
+    if(not addSolverParam['initialGuess']):
+        xval=None
+    else:
+        xval = estimatedValueExplicit
     
-    x, infodict, ier, mesg = optimize.fsolve(zero_f,estimatedValueExplicit, fprime = zero_grad, full_output = True,xtol=1e-15)
+    x, infodict, ier, mesg = optimize.fsolve(zero_f,xval, 
+            fprime = zero_grad, full_output = True, xtol=addSolverParam['min_tol'])
 #     print ("jac ev: " + str(infodict["njev"]))
 #     print ("func ev: " + str(infodict["nfev"]))
     #TODO change solver so it doesn't do the 2 extra unnnecessary function evaluations
@@ -126,20 +124,18 @@ def solve_implicit_step(zero_f, zero_grad, estimatedValueExplicit):
 #     return (optObject.x, optObject.nfev)
 
 
-def midpoint_semiimplicit(f, grad, previousValues, previousTime,f_previousValue, step, args, J00):
+def _midpoint_semiimplicit(f, grad, previousValues, previousTime,f_previousValue, step, args, addSolverParam, J00):
     '''
     Calculates solution at previousTime+step doing one step with a midpoint semiimplicit formula (linearly implicit midpoint)
     Based on IV.9.16a-b (ref II).
     
-    !!!IMPORTANT TODO: Use the same framework as euler_semiimplicit when it comes to solving the system (iteratively or exactly)
-    and whether the jacobian is sparse or not. Do not copy code, share it for both midpoint and euler!
-    
     '''
     
     previousPreviousValue, previousValue = previousValues
+    je_tot=0
        
     if(previousPreviousValue is None):
-        return euler_semiimplicit(f, grad, previousValues, previousTime,f_previousValue, step, args, J00)
+        return _euler_semiimplicit(f, grad, previousValues, previousTime,f_previousValue, step, args, addSolverParam, J00)
     
     if(f_previousValue is None):
         f_yj = f(*(previousValue,previousTime)+args)
@@ -147,33 +143,52 @@ def midpoint_semiimplicit(f, grad, previousValues, previousTime,f_previousValue,
     else:
         f_yj = f_previousValue
         fe_tot=0
-        
-    x = previousValue + np.linalg.solve(I-step*J00,np.dot(-(I+step*J00),(previousValue-previousPreviousValue)) + 2*step*f_yj)
     
-    return (x, f_yj, fe_tot, 0)
+    if(not addSolverParam['initialGuess']):
+        xval=None
+    else:
+        xval, f_yj, fe_tot_,je_tot=_euler_explicit(f, grad, previousValues, previousTime, f_yj, step, args, addSolverParam)
+        fe_tot += fe_tot_
 
-
-# min_tol = 1e-5
-# useIterative=True
-def setiterative(iterative):
-    global useIterative
-    useIterative= iterative
+    b = np.dot(-(I+step*J00),(previousValue-previousPreviousValue)) + 2*step*f_yj
     
-# addinitialguess=True
+    if(scipy.sparse.issparse(J00)):
+        A=_calculateMatrix(Isparse,J00,step)
+        if(addSolverParam['iterative']):
+            sol, info= scipy.sparse.linalg.gmres(A, b, tol=addSolverParam['min_tol'],x0=xval, maxiter=100)                             
+            if info >0:
+                print("Info: maximum iterations reached for sparse system solver (GMRES).")
+        else:
+            sol = scipy.sparse.linalg.spsolve(A, b)
+            
+    else:
+        A=_calculateMatrix(I,J00,step)
+        if(not addSolverParam['iterative']):
+            sol = np.linalg.solve(A, b)
+        else:
+            sol, info= scipy.sparse.linalg.gmres(A, b, tol=addSolverParam['min_tol'],x0=xval, maxiter=100)    
+            
+    x = previousValue + sol
+    
+    return (x, f_yj, fe_tot, je_tot)
 
-def setaddinitialguess(initialguess):
-    global addinitialguess
-    addinitialguess=initialguess
 
-
-def calculateMatrix(I,J00,step):
-#     s1,s2=J00.shape
-#     print("beg "+ str(os.getpid()))
-#     aux=I-step*J00
-#     print("end "+ str(os.getpid()))
+def _calculateMatrix(I,J00,step):
+    '''
+    Calculates matrix needed for semi implicit methods.
+    
+    TODO: this part of code takes a long time.
+    
+    @param I (2D array): identity matrix
+    @param J00 (2D array): Jacobian matrix
+    @param step (float): step length
+    
+    @return I-step*J00 (matrix).
+    '''
+    
     return I-step*J00
 
-def euler_semiimplicit(f, grad, previousValues, previousTime, f_previousValue,step, args, J00, I, Isparse):
+def _euler_semiimplicit(f, grad, previousValues, previousTime, f_previousValue,step, args, addSolverParam, J00, I, Isparse):
     '''
     Calculates solution at previousTime+step doing one step with a euler semiimplicit formula (linearly implicit euler)
     Based on IV.9.25 (ref II).
@@ -182,14 +197,8 @@ def euler_semiimplicit(f, grad, previousValues, previousTime, f_previousValue,st
         -Whether the Jacobian (J00) is sparse or not
         -Whether the linear solver should be iterative (gmres) or exact
     
+    IMPORTANT: changes in this function will be probably also wanted in midpoint_semiimplicit code (beware!).
     '''
-#     print("euler_beg " + str(os.getpid()) + '\n')
-#     print(str(time.time()) + '\n')
-    
-#     min_tol=1e-4
-#     useIterative=True
-#     addinitialguess=False
-    
     
     previousPreviousValue, previousValue = previousValues
     je_tot=0
@@ -200,48 +209,48 @@ def euler_semiimplicit(f, grad, previousValues, previousTime, f_previousValue,st
         f_yj = f_previousValue
         fe_tot=0
         
-    if(not addinitialguess):
+    if(not addSolverParam['initialGuess']):
         xval=None
     else:
         # The option of doing an explicit step doesn't seem to be effective (maybe because with
         # extrapolation we are taking too big steps for the explicit solver to be close to the solution).
-        # Doing the euler_explicit doesn't cost extra function evaluations
+        # Doing the _euler_explicit doesn't cost extra function evaluations
         # This idea came from the lsode solver.
-#         xval, f_yj, fe_tot_,je_tot=euler_explicit(f, grad, previousValues, previousTime, f_yj, step, args)
+        # TODO: This should be tested more extensively
+#         xval, f_yj, fe_tot_,je_tot=_euler_explicit(f, grad, previousValues, previousTime, f_yj, step, args, addSolverParam)
 #         fe_tot += fe_tot_
         xval = previousValue
+    
+    b=step*f_yj
     
     #TODO: change this checking of the sparsity type of the matrix only once
     # at the beginning of the ODE solving 
     #Choose system solver: 
     #http://scicomp.stackexchange.com/questions/3262/how-to-choose-a-method-for-solving-linear-equations
     if(scipy.sparse.issparse(J00)):
-#         Isparse = scipy.sparse.identity(len(previousValue), dtype = float, format = 'csr')
-        if(useIterative):
-            #The algorithm terminates when either the relative or the absolute residual is below tol.
-            #Therefore we use the minimum tolerance (more restrictive value)
-            sol, info= scipy.sparse.linalg.gmres(calculateMatrix(Isparse,J00,step), step*f_yj, tol=min_tol,x0=xval, maxiter=100)                             
+        A=_calculateMatrix(Isparse,J00,step)
+        if(addSolverParam['iterative']):
+            #TODO: choose an appropiate maxiter parameter to distribute work between taking more steps and having a
+            #more accurate solution
+            sol, info= scipy.sparse.linalg.gmres(A, b, tol=addSolverParam['min_tol'],x0=xval, maxiter=100)                             
             if info >0:
                 print("Info: maximum iterations reached for sparse system solver (GMRES).")
         else:
-            sol = scipy.sparse.linalg.spsolve(calculateMatrix(Isparse,J00,step), step*f_yj)
+            sol = scipy.sparse.linalg.spsolve(A, b)
             
-        x = previousValue + sol
     else:
-#         I = np.identity(len(previousValue), dtype=float)
-        #TODO: choose either exact solver or iterative solver for dense non-analytical jacobian
-        #Iterative is better for larger systems.
-        if(not useIterative):
-            sol = np.linalg.solve(calculateMatrix(I,J00,step), step*f_yj)
+        A=_calculateMatrix(I,J00,step)
+        if(not addSolverParam['iterative']):
+            sol = np.linalg.solve(A, b)
         else:
-            sol, info= scipy.sparse.linalg.gmres(calculateMatrix(I,J00,step), step*f_yj, tol=min_tol,x0=xval, maxiter=100)                             
-        x = previousValue + sol
-#     print("euler_end " + str(os.getpid()) + '\n')
-#     print(str(time.time()) + '\n')
+            sol, info= scipy.sparse.linalg.gmres(A, b, tol=addSolverParam['min_tol'],x0=xval, maxiter=100)                             
+    
+    x = previousValue + sol
+
     return (x, f_yj, fe_tot, je_tot)
 
 
-def midpoint_implicit(f, grad, previousValues, previousTime,f_previousValue, step, args):
+def _midpoint_implicit(f, grad, previousValues, previousTime,f_previousValue, step, args, addSolverParam):
     '''
     Calculates solution at previousTime+step doing one step with a midpoint implicit
     Based on IV.9.2 (ref II).
@@ -256,24 +265,24 @@ def midpoint_implicit(f, grad, previousValues, previousTime,f_previousValue, ste
         return np.matrix(np.identity(len(x), dtype=float) - step*grad(x,previousTime+step/2))
 
     #Estimation of the value as the starting point for the zero solver 
-    estimatedValueExplicit, f_yj, fe_tot, je_tot=euler_explicit(f, grad, previousValues, previousTime,f_previousValue, step, args)
+    estimatedValueExplicit, f_yj, fe_tot, je_tot=_euler_explicit(f, grad, previousValues, previousTime,f_previousValue, step, args, addSolverParam)
     
     if(grad is None):
         zero_grad=None
         
-    x, fe_tot_, je_tot_ = solve_implicit_step(zero_func, zero_grad, estimatedValueExplicit)
+    x, fe_tot_, je_tot_ = _solve_implicit_step(zero_func, zero_grad, estimatedValueExplicit, addSolverParam)
     fe_tot +=fe_tot_
     je_tot += je_tot_
     
     #TODO: see it this extra function can be done only if interpolating polynomial is calculated (looks complicated)
-    #This can't follow the midpoint_explicit approach because in midpoint_implicit we are doing function evaluations
+    #This can't follow the _midpoint_explicit approach because in _midpoint_implicit we are doing function evaluations
     #at previousTime+step/2
     f_yj= f(*(previousValue,previousTime)+args)
     fe_tot += 1
     return (x, f_yj, fe_tot, je_tot)
 
 
-def midpoint_explicit(f, grad, previousValues, previousTime,f_previousValue, step, args):
+def _midpoint_explicit(f, grad, previousValues, previousTime,f_previousValue, step, args, addSolverParam):
     '''
     Calculates solution at previousTime+step doing one step with a midpoint explicit
     Based on II.9.13b (ref I).
@@ -282,13 +291,13 @@ def midpoint_explicit(f, grad, previousValues, previousTime,f_previousValue, ste
     
     previousPreviousValue, previousValue = previousValues
     if(previousPreviousValue is None):
-        return euler_explicit(f, grad, previousValues, previousTime, f_previousValue,step, args)
+        return _euler_explicit(f, grad, previousValues, previousTime, f_previousValue,step, args, addSolverParam)
     
     f_yj = f(*(previousValue, previousTime)+args)
     fe_tot=1
     return (previousPreviousValue + (2*step)*f_yj, f_yj, fe_tot,0)
 
-def euler_explicit(f, grad, previousValues, previousTime,f_previousValue, step, args):
+def _euler_explicit(f, grad, previousValues, previousTime,f_previousValue, step, args, addSolverParam):
     '''
     Calculates solution at previousTime+step doing one step with a euler explicit
     Based on II.9.13a (ref I).
@@ -308,10 +317,10 @@ def euler_explicit(f, grad, previousValues, previousTime,f_previousValue, step, 
 
 
 '''''
-END: ODE numerical methods formulas (explicit, implicit and semi-implicit)
+END BLOCK 1: ODE numerical methods formulas (explicit, implicit and semi-implicit)
 '''''
 
-def compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj_lst, smoothing)):
+def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj_lst, smoothing, addSolverParam)):
     '''
     Compute extrapolation tableau values with the order specified and number of steps specified in k_nj_lst.
     It calculates the T_{k,1} values for the k's in k_nj_lst.  
@@ -332,6 +341,8 @@ def compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj_
         -'no': no smoothing step performed
         -'gbs': three point smoothing step (based on GBS method), II.9.13c ref I and IV.9.9 ref II.
         -'semiimp': two point smoothing step (for semiimplicit midpoint), IV.9.16c ref II.
+    @param addSolverParam (dict): extra arguments needed to define completely the solver's behavior.
+        Should not be empty, for more information see _getAdditionalSolverParameters(..) function.
     
     @return list of tuples. Each value is represents all information regarding one value of the extrapolation tableau
     first column of values T_{k,1}. the list contains:
@@ -344,8 +355,6 @@ def compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj_
         @return fe_tot (int): number of total function evaluations done to calculate this T
         @return je_tot (int): number of total jacobian evaluations done to calculate this T
     '''
-#     print("compute_stg_beg " + str(os.getpid()) + '\n')
-#     print(str(time.time()) + '\n')
     res = []
     for (k,nj) in k_nj_lst:
         fe_tot=0
@@ -356,11 +365,11 @@ def compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj_
         Y[0] = yn
         step = h/nj
 
-        Y[1], f_yj[0], fe_tot_, je_tot_ = method(func, grad, (None, Y[0]), tn, f_yn, step, args, **methodargs)
+        Y[1], f_yj[0], fe_tot_, je_tot_ = method(func, grad, (None, Y[0]), tn, f_yn, step, args, addSolverParam, **methodargs)
         fe_tot += fe_tot_
         je_tot += je_tot_
         for j in range(2,nj+1):
-            Y[j], f_yj[j-1], fe_tot_ , je_tot_= method(func, grad, (Y[j-2], Y[j-1]), tn + (j-1)*(h/nj), None, step, args, **methodargs)
+            Y[j], f_yj[j-1], fe_tot_ , je_tot_= method(func, grad, (Y[j-2], Y[j-1]), tn + (j-1)*(h/nj), None, step, args, addSolverParam, **methodargs)
             fe_tot += fe_tot_
             je_tot += je_tot_
         
@@ -373,7 +382,7 @@ def compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj_
             #TODO: this f_yj_unused can be used in the case of interpolation, it should be adequately saved in
             #f_yj so function evaluations are not repeated. Careful: only in the case of symmetric interpolation this 
             #value is currently recalculated (because is needed).
-            nextStepSolution, f_yj_unused, fe_tot_, je_tot_ = method(func, grad, (Y[nj-1], Y[nj]), tn + h, None, step, args, **methodargs)
+            nextStepSolution, f_yj_unused, fe_tot_, je_tot_ = method(func, grad, (Y[nj-1], Y[nj]), tn + h, None, step, args, addSolverParam, **methodargs)
             fe_tot += fe_tot_
             je_tot += je_tot_
             if(smoothing == 'gbs'):
@@ -381,15 +390,12 @@ def compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj_
             elif(smoothing == 'semiimp'):
                 Tj1 = 1/2*(Y[nj-1]+nextStepSolution)
         res += [(k, nj, Tj1, y_half, f_yj,Y, fe_tot, je_tot)]
-    
-#     print("compute_stg_end " + str(os.getpid()) + '\n')
-#     print(str(time.time()) + '\n')
 
     return res
 
-def extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full_output=False,
+def __extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full_output=False,
         rtol=1.0e-8, atol=1.0e-8, h0=0.5, mxstep=10e4, robustness_factor=2, p=4,
-        nworkers=None, smoothing='no', symmetric=True, seq=None, adaptative="order"):   
+        nworkers=None, smoothing='no', symmetric=True, seq=None, adaptative="order", addSolverParam={}):   
     '''
     Solves the system of IVPs dy/dt = func(y, t0, ...) with parallel extrapolation. 
     
@@ -404,7 +410,7 @@ def extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full
     @param args (tuple): extra arguments to pass to function.
     @param full_output (bool): true if user wants a dictionary of optional outputs as the second output.
     @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
-            determine the error control performed by the solver. See  function error_norm(y1, y2, atol, rtol).
+            determine the error control performed by the solver. See  function _error_norm(y1, y2, atol, rtol).
     @param h0 (float):the step size to be attempted on the first step.
     @param mxstep (int): maximum number of (internally defined) steps allowed for each
             integration point in t. Defaults to 10e4
@@ -423,6 +429,8 @@ def extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full
     @param adaptive (string): specifies the strategy of integration. Can take three values:
         - "fixed" = use fixed step size and order strategy.
         - "order" or any other string = use adaptive step size and adaptive order strategy (recommended).
+    @param addSolverParam (dict): extra arguments needed to define completely the solver's behavior.
+            Should not be empty, for more information see _getAdditionalSolverParameters(..) function.
 
     @return: 
         @return ys (2D-array, shape (len(t), len(y0))): array containing the value of y for each desired time in t, with 
@@ -439,9 +447,6 @@ def extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full
             'k_avg'     average extrapolation order
 
     '''
-    
-    global min_tol
-    min_tol = min(atol,rtol)
     
     #Initialize pool of workers to parallelize extrapolation table calculations
     set_NUM_WORKERS(nworkers)  
@@ -479,9 +484,9 @@ def extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full
 
     #Iterate until you reach final time
     while t_curr < t_max:
-        rejectStep, y_temp, ysolution,f_yn, h, k, h_new, k_new, (fe_seq_, fe_tot_, je_tot_) = solve_one_step(
+        rejectStep, y_temp, ysolution,f_yn, h, k, h_new, k_new, (fe_seq_, fe_tot_, je_tot_) = _solve_one_step(
                 method, methodargs, func, grad, t_curr, t, t_index, yn, args, h, k, 
-                atol, rtol, pool, smoothing, symmetric, seq, adaptative, rejectStep, previousStepSolution)
+                atol, rtol, pool, smoothing, symmetric, seq, adaptative, rejectStep, previousStepSolution,addSolverParam)
         #previousStepSolution is used for Jacobian updating
         previousStepSolution=(yn,f_yn)
 
@@ -540,7 +545,7 @@ def extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full
     else:
         return ys
 
-def balance_load(k, seq=(lambda t: 2*t)):
+def _balance_load(k, seq=(lambda t: 2*t)):
     '''
     Distributes the work load for the different processors. The tasks to be parallelized are the calculation
     of each T_{j,1} for j=1...k. As the number of steps (and thus the work load) is determined for each j (seq(j))
@@ -578,7 +583,7 @@ def balance_load(k, seq=(lambda t: 2*t)):
      
     return k_nj_lst
 
-def updateJ00(previousJ00,func, yn, tn, yn_1, f_yn_1, args):
+def _updateJ00(previousJ00,func, yn, tn, yn_1, f_yn_1, args):
     '''
     Updates the previous Jacobian estimation without doing just one extra function evaluation
     (which will be reused for next step calculations). It uses the update formula suggested for
@@ -608,19 +613,16 @@ def updateJ00(previousJ00,func, yn, tn, yn_1, f_yn_1, args):
     updatedJ00 = previousJ00 +np.outer((incf_yn-np.dot(previousJ00,incyn))/np.linalg.norm(incyn, 2),incyn)
     return (updatedJ00,f_yn)
 
-def setfrezeejacobian(first):
-    global freeze
-    freeze = first
-    
-freeze = False
 previousJ00 = 0
-def getJacobian(func, args, yn, tn, grad, methodargs, rejectPreviousStep, previousStepSolution): 
+def _getJacobian(func, args, yn, tn, grad, methodargs, rejectPreviousStep, previousStepSolution,addSolverParam): 
     '''
     Obtains the Jacobian approximation at yn,tn of func. Different possibilities:
         - If grad (analytical Jacobian) is available grad is used to obtain the Jacobian at yn,tn
         - Otherwise (if not freeze) the Jacobian is estimated with a forward difference formula (see forward_diff.Jacobian)
         - Otherwise (if freeze) the last Jacobian approximation is used (unless the previous step was rejected).
             This freezing idea was taken from LSODE solver.
+    
+    freeze is a parameter in dictionary addSolverParam with the name freezeJac
     
     @param func (callable(y,t,args)):RHS of the ODE
     @param args (tuple): extra arguments for func
@@ -642,16 +644,17 @@ def getJacobian(func, args, yn, tn, grad, methodargs, rejectPreviousStep, previo
     je_tot=0
     fe_tot=0
     f_yn=None
+    #methodargs is an empty dictionary if a Jacobian estimation/evaluation is needed (semi implicit methods)
     if(not methodargs=={}):
         def func_at_tn(y, args):
             return func(*(y,tn)+args)
-        if(not useGrad or grad is None):
+        if(grad is None):
             
             global previousJ00
-            if(freeze and not rejectPreviousStep):
+            if(addSolverParam['freezeJac'] and not rejectPreviousStep):
                 #TODO: update J00 Broyden-style
                 yn_1, f_yn_1 = previousStepSolution
-                updatedJ00, f_yn = updateJ00(previousJ00,func, yn, tn, yn_1, f_yn_1, args)
+                updatedJ00, f_yn = _updateJ00(previousJ00,func, yn, tn, yn_1, f_yn_1, args)
                 methodargs['J00']=updatedJ00
                 return (f_yn, fe_tot,je_tot)
     
@@ -669,8 +672,8 @@ def getJacobian(func, args, yn, tn, grad, methodargs, rejectPreviousStep, previo
             methodargs['J00'] =J00 
     return (f_yn, fe_tot,je_tot) 
 
-def compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h, k, pool, 
-                            rejectPreviousStep,previousStepSolution, seq=(lambda t: 2*t), smoothing='no', symmetric = True):
+def _compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h, k, pool, 
+                            rejectPreviousStep,previousStepSolution, seq, smoothing, symmetric, addSolverParam):
     '''
     Computes the extrapolation tableau for a given big step, order and step sequence. It parallelizes the computation
     of each T_{1,i} taking all the inner steps necessary and then extrapolates the final value at tn+h.
@@ -699,6 +702,8 @@ def compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h,
         -'semiimp': two point smoothing step (for semiimplicit midpoint), IV.9.16c ref II. 
     @param symmetric (bool): whether the method to solve one step is symmetric (midpoint/trapezoidal)
             or non-symmetric (euler).
+    @param addSolverParam (dict): extra arguments needed to define completely the solver's behavior.
+            Should not be empty, for more information see _getAdditionalSolverParameters(..) function.
     
     @return (T, y_half, f_yj, yj, f_yn, hs,(fe_seq, fe_tot, je_tot)):
         @return T (2D array): filled extrapolation tableau (size k) with all the T_{i,j} values in the lower 
@@ -720,14 +725,14 @@ def compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h,
 
     '''
     T = np.zeros((k+1,k+1, len(yn)), dtype=(type(yn[0])))
-    k_nj_lst = balance_load(k, seq=seq)
+    k_nj_lst = _balance_load(k, seq=seq)
     
-    f_yn, fe_tot, je_tot = getJacobian(func, args, yn, tn, grad, methodargs, rejectPreviousStep, previousStepSolution)
+    f_yn, fe_tot, je_tot = _getJacobian(func, args, yn, tn, grad, methodargs, rejectPreviousStep, previousStepSolution,addSolverParam)
     
-    jobs = [(method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj, smoothing) for k_nj in k_nj_lst]
-    results = pool.map(compute_stages, jobs, chunksize=1)
+    jobs = [(method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj, smoothing, addSolverParam) for k_nj in k_nj_lst]
+    results = pool.map(_compute_stages, jobs, chunksize=1)
 
-#     res = compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj_lst, smoothing))
+#     res = _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj_lst, smoothing))
     
     #At this stage fe_tot has only counted the function evaluations for the jacobian estimation
     #(which are not parallelized)
@@ -757,11 +762,11 @@ def compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h,
             fe_tot_stage_max = fe_tot_stage 
     
     fe_seq += fe_tot_stage_max
-    fill_extrapolation_table(T, k, 0, seq, symmetric)
+    _fill_extrapolation_table(T, k, 0, seq, symmetric)
     
     return (T, y_half, f_yj, yj, f_yn, hs,(fe_seq, fe_tot, je_tot))
 
-def fill_extrapolation_table(T, k, j_initshift, seq, symmetric):
+def _fill_extrapolation_table(T, k, j_initshift, seq, symmetric):
     '''
     Fill extrapolation table using the first column values T_{i,1}. This function obtains the rest
     of values T_{i,j} (lower triangular values). 
@@ -788,13 +793,13 @@ def fill_extrapolation_table(T, k, j_initshift, seq, symmetric):
             else:
                 T[j,i] = T[j,i-1] + (T[j,i-1] - T[j-1,i-1])/((seq(j+j_initshift)/seq(j+j_initshift-i+1)) - 1)        
             
-def centered_finite_diff(j, f_yj, hj):
+def _centered_finite_diff(j, f_yj, hj):
     '''
     Computes through the centered differentiation formula different order derivatives of y for a given 
     extrapolation step (for every T{1,j}). In other words, it calculates II.9.39 ref I (step 1) for all kappa
     for a fixed j (for a fixed extrapolation step).
     
-    Used for interpolate_sym.
+    Used for _interpolate_sym.
     
     @param j (int): which extrapolation inner-stage is used  
     @param f_yj (2D array): array with all the function evaluations of all the intermediate solution 
@@ -823,13 +828,13 @@ def centered_finite_diff(j, f_yj, hj):
 
     return dj
 
-def backward_finite_diff(j, yj, hj,lam):
+def _backward_finite_diff(j, yj, hj,lam):
     '''
     Computes through the backward differentiation formula different order derivatives of y for a given 
     extrapolation step (for every T{1,j}). In other words, it calculates VI.5.43 ref II (step 1) for all kappa
     for a fixed j (for a fixed extrapolation step).
     
-    Used for interpolate_nonsym.
+    Used for _interpolate_nonsym.
     
     @param j (int): which extrapolation inner-stage is used  
     @param yj (2D array): array with all the intermediate solution values obtained to calculate each T_{j,1}. 
@@ -857,16 +862,16 @@ def backward_finite_diff(j, yj, hj,lam):
 
     return rj
 
-def compute_rs(yj, hs, k, seq=(lambda t: 4*t-2)):
+def _compute_rs(yj, hs, k, seq=(lambda t: 4*t-2)):
     '''
     Computes through the backward differentiation formula and using extrapolation, different order derivatives
-    of y. In other words, it delegates VI.5.43 ref II (step 1) to backward_finite_diff(.) function and here it 
+    of y. In other words, it delegates VI.5.43 ref II (step 1) to _backward_finite_diff(.) function and here it 
     performs the extrapolation of the derivatives. It follows VI.5.44 ref II (step 2).
     
-    Used for interpolate_nonsym.
+    Used for _interpolate_nonsym.
     
     Obs: compared to the reference, k and kappa are interchanged in this code, to maintain the same notation as 
-    ref I (see compute_ds function)
+    ref I (see _compute_ds function)
     
     Contains a parameter to be chosen: lam={0,1}.
     TODO: check if it works properly with lam=1
@@ -889,7 +894,7 @@ def compute_rs(yj, hs, k, seq=(lambda t: 4*t-2)):
     rs = np.zeros((k+1), dtype=(type(yj[1][0])))
     
     for j in range(1+lam,k+1):
-        dj_ = backward_finite_diff(j,yj[j], hs[j],lam)
+        dj_ = _backward_finite_diff(j,yj[j], hs[j],lam)
         for kappa in range(1,j+1-lam):    
             dj_kappa[kappa,j] = 1*dj_[kappa]
     
@@ -898,19 +903,19 @@ def compute_rs(yj, hs, k, seq=(lambda t: 4*t-2)):
         T = np.zeros((numextrap+1, numextrap+1), dtype=(type(yj[1][0])))
         T[:,1] = 1*dj_kappa[kappa, (kappa+lam-1):]
 
-        fill_extrapolation_table(T, numextrap, lam+kappa-1, seq, symmetric=False)
+        _fill_extrapolation_table(T, numextrap, lam+kappa-1, seq, symmetric=False)
 
         rs[kappa] = 1*T[numextrap,numextrap] 
 
     return rs 
 
-def compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
+def _compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
     '''
     Computes through the centered differentiation formula and using extrapolation, different order derivatives
-    of y. In other words, it delegates II.9.39 ref I (step 1) to backward_finite_diff(.) function and here it 
+    of y. In other words, it delegates II.9.39 ref I (step 1) to _backward_finite_diff(.) function and here it 
     performs the extrapolation of the derivatives. It follows II.9 step 2 ref I.
     
-    Used for interpolate_sym.
+    Used for _interpolate_sym.
     
     @param y_half (2D array): array containing for each extrapolation value (1...k) an array with the intermediate (at half
             the integration interval) solution value.
@@ -930,7 +935,7 @@ def compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
     
     for j in range(1,k+1):
         dj_kappa[0,j] = 1*y_half[j]
-        dj_ = centered_finite_diff(j,f_yj[j], hs[j])
+        dj_ = _centered_finite_diff(j,f_yj[j], hs[j])
         for kappa in range(1,2*j+1):    
             dj_kappa[kappa,j] = 1*dj_[kappa]
     
@@ -942,7 +947,7 @@ def compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
         T = np.zeros((numextrap+1, numextrap+1), dtype=(type(y_half[1])))
         T[:,1] = 1*dj_kappa[kappa, int(skip/2):]
         
-        fill_extrapolation_table(T, numextrap, int(skip/2), seq, symmetric=True)
+        _fill_extrapolation_table(T, numextrap, int(skip/2), seq, symmetric=True)
         
         ds[kappa] = 1*T[numextrap,numextrap] 
         if (kappa != 0):
@@ -950,7 +955,7 @@ def compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
 
     return ds 
 
-def getPolynomial(a_u,a_u_1,H,degree,pol_shift,atol,rtol):
+def _getPolynomial(a_u,a_u_1,H,degree,pol_shift,atol,rtol):
     '''
     Get interpolation polynomial with a_u coefficients and adjust variable to problem with pol_shift.
     It returns a polynomial that returns for every theta in (0,1) the interpolation value at x0+theta*H.
@@ -963,7 +968,7 @@ def getPolynomial(a_u,a_u_1,H,degree,pol_shift,atol,rtol):
     @param pol_shift (float): variable change that was made to calculate a_u and a_u_1, i.e. x-pol_shift,
             because coefficients a_u and a_u_1 were calculated on (0-pol_shift,1-pol_shift) interval.
     @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
-            determine the error control performed by the solver. See  function error_norm(y1, y2, atol, rtol).
+            determine the error control performed by the solver. See  function _error_norm(y1, y2, atol, rtol).
     
     @return poly (callable(t)): interpolation polynomial (see definition of poly(t) function)
     '''
@@ -991,7 +996,7 @@ def getPolynomial(a_u,a_u_1,H,degree,pol_shift,atol,rtol):
         for i in range(1, len(a_u_1)):
             res_u_1 += a_u_1[i]*((t-pol_shift)**i)
         
-        errint = error_norm(res, res_u_1, atol, rtol)
+        errint = _error_norm(res, res_u_1, atol, rtol)
 
         h_int = H*((1/errint)**(1/degree))
         
@@ -999,7 +1004,7 @@ def getPolynomial(a_u,a_u_1,H,degree,pol_shift,atol,rtol):
 
     return poly
 
-def interpolate_nonsym(y0, Tkk, yj, hs, H, k, atol, rtol,
+def _interpolate_nonsym(y0, Tkk, yj, hs, H, k, atol, rtol,
         seq=(lambda t: 4*t-2)):
     '''
     Non symmetrical formula (for example used for euler's method) to interpolate dense output values. It
@@ -1019,16 +1024,16 @@ def interpolate_nonsym(y0, Tkk, yj, hs, H, k, atol, rtol,
     @param k (int): order of extrapolation to take in this step (determines the number of extrapolations performed
             to achieve a better integration output, equivalent to the size of the extrapolation tableau).
     @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
-            determine the error control performed by the solver. See  function error_norm(y1, y2, atol, rtol).    
+            determine the error control performed by the solver. See  function _error_norm(y1, y2, atol, rtol).    
     @param seq (callable(i), int i>=1): the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
 
-    @return poly (callable(t)): interpolation polynomial (see definition of poly(t) function in getPolynomial(.))
+    @return poly (callable(t)): interpolation polynomial (see definition of poly(t) function in _getPolynomial(.))
 
     '''
     u = k
     u_1 = u - 1
 
-    rs = compute_rs(yj, hs, k, seq=seq)
+    rs = _compute_rs(yj, hs, k, seq=seq)
     
     #a_u are the coefficients for the interpolation polynomial
     a_u = (u+1)*[None]
@@ -1045,10 +1050,10 @@ def interpolate_nonsym(y0, Tkk, yj, hs, H, k, atol, rtol,
     a_u_1[0:u_1]=1*a_u[0:u_1];
     a_u_1[u_1]=1/(-1)**u_1*(y0-a_u_1[0]-sumcoeff+(-1)**u_1*a_u[u_1])
     
-    return getPolynomial(a_u,a_u_1,H,u,1,atol,rtol)
+    return _getPolynomial(a_u,a_u_1,H,u,1,atol,rtol)
     
 
-def interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
+def _interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
         seq=(lambda t: 4*t-2)):
     '''
     Symmetrical formula (for example used for midpoint's method) to interpolate dense output values. It
@@ -1071,16 +1076,16 @@ def interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
     @param k (int): order of extrapolation to take in this step (determines the number of extrapolations performed
             to achieve a better integration output, equivalent to the size of the extrapolation tableau).
     @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
-            determine the error control performed by the solver. See  function error_norm(y1, y2, atol, rtol).    
+            determine the error control performed by the solver. See  function _error_norm(y1, y2, atol, rtol).    
     @param seq (callable(i), int i>=1): the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
 
-    @return poly (callable(t)): interpolation polynomial (see definition of poly(t) function in getPolynomial(.))
+    @return poly (callable(t)): interpolation polynomial (see definition of poly(t) function in _getPolynomial(.))
 
     '''
     u = 2*k-3
     u_1 = u - 1
 
-    ds = compute_ds(y_half, f_yj, hs, k, seq=seq)
+    ds = _compute_ds(y_half, f_yj, hs, k, seq=seq)
     
     a_u = (u+5)*[None]
     a_u_1 = (u_1+5)*[None]
@@ -1159,10 +1164,10 @@ def interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
     # polynomial of degree u+4 defined on [0,1] and centered about 1/2
     # also returns the interpolation error (errint). If errint > 10, then reject
     # step 
-    return getPolynomial(a_u,a_u_1,H,u+4,0.5,atol,rtol)
+    return _getPolynomial(a_u,a_u_1,H,u+4,0.5,atol,rtol)
     
 
-def getDenseAndSequence(t_final, t, t_index, seq, symmetric):
+def _getDenseAndSequence(t_final, t, t_index, seq, symmetric):
     '''
     Returns whether dense output is needed because an intermediate solution
     is wanted at this step. Also chooses the step sequence to use for this step. The step sequence
@@ -1196,13 +1201,8 @@ def getDenseAndSequence(t_final, t, t_index, seq, symmetric):
         
     return (dense,seq)
 
-#TODO: should be always true for implicit and semiimplicit (they use the Jacobian)
-addwork=True
-def setwork(count):
-    global addwork
-    addwork=count
 
-def estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative): 
+def _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative, addSolverParam): 
     '''
     Estimates next step and order, and whether to reject step, from the results
     obtained by the solver and the tolerance asked
@@ -1224,6 +1224,8 @@ def estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative):
         Specifies the strategy of integration. Can take two values:
         -- "fixed"  = use fixed step size and fixed order strategy.
         -- "order" = use adaptive step size and adaptive order strategy.
+    @param addSolverParam (dict): extra arguments needed to define completely the solver's behavior.
+        Should not be empty, for more information see _getAdditionalSolverParameters(..) function.
     
     @return
         @return rejectStep : whether to reject the step and the solution obtained
@@ -1236,9 +1238,11 @@ def estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative):
     
     if(adaptative=="fixed"):
         return (False, T[k,k], h, k)
+    
     sizeODE=0
-    if(addwork):
+    if(addSolverParam['addWork']):
         sizeODE = len(T[k,k])
+        
     #Define work function (to minimize)      
     def A_k(k):
         """
@@ -1255,9 +1259,9 @@ def estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative):
     W_k = lambda Ak, Hk: Ak/Hk
     
      # compute the error and work function for the stages k-2, k-1 and k
-    err_k_2 = error_norm(T[k-2,k-3], T[k-2,k-2], atol, rtol)
-    err_k_1 = error_norm(T[k-1,k-2], T[k-1,k-1], atol, rtol)
-    err_k   = error_norm(T[k,k-1],   T[k,k],     atol, rtol)
+    err_k_2 = _error_norm(T[k-2,k-3], T[k-2,k-2], atol, rtol)
+    err_k_1 = _error_norm(T[k-1,k-2], T[k-1,k-1], atol, rtol)
+    err_k   = _error_norm(T[k,k-1],   T[k,k],     atol, rtol)
     h_k_2   = H_k(h, k-2, err_k_2)
     h_k_1   = H_k(h, k-1, err_k_1)
     h_k     = H_k(h, k,   err_k)
@@ -1307,8 +1311,8 @@ def estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative):
     return (rejectStep, y, h_new, k_new)
 
 
-def solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args, h, k, atol, rtol, 
-                   pool, smoothing, symmetric, seq, adaptative, rejectPreviousStep, previousStepSolution):
+def _solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args, h, k, atol, rtol, 
+                   pool, smoothing, symmetric, seq, adaptative, rejectPreviousStep, previousStepSolution, addSolverParam):
     '''
     Solves one 'big' H step of the ODE (with all its inner H/nj steps and the extrapolation). In other words, 
     solve one full stage of the problem (one step of parallel extrapolation) and interpolates all the dense 
@@ -1332,7 +1336,7 @@ def solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args,
     @param k (int): order of extrapolation to take in this step (determines the number of extrapolations performed
             to achieve a better integration output, equivalent to the size of the extrapolation tableau).
     @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
-            determine the error control performed by the solver. See  function error_norm(y1, y2, atol, rtol).
+            determine the error control performed by the solver. See  function _error_norm(y1, y2, atol, rtol).
     @param pool: multiprocessing pool of workers (with as many workers as processors) that will parallelize the
             calculation of each of the initial values of the extrapolation tableau (T_{i,1} i=1...k).
     @param smoothing (string): specifies if a smoothing step should be performed:
@@ -1347,7 +1351,9 @@ def solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args,
         - "order" or any other string = use adaptive step size and adaptive order strategy (recommended).
     @param rejectPreviousStep (bool): whether previously taken step was rejected or not 
     @param previousStepSolution (2-tuple): tuple containing the solution at the previous step (tn-1) and its
-            function evaluation, (yn_1, f_yn_1) 
+            function evaluation, (yn_1, f_yn_1)
+    @param addSolverParam (dict): extra arguments needed to define completely the solver's behavior.
+            Should not be empty, for more information see _getAdditionalSolverParameters(..) function.
     
     @return (rejectStep, y, y_solution,f_yn, h, k, h_new, k_new, (fe_seq, fe_tot, je_tot)):
         @return rejectStep (bool): whether this step should be rejected or not. True when this step was not successful
@@ -1370,7 +1376,7 @@ def solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args,
     
     '''
     
-    dense, seq = getDenseAndSequence(t_curr+h, t, t_index, seq, symmetric)
+    dense, seq = _getDenseAndSequence(t_curr+h, t, t_index, seq, symmetric)
     
     #Limit k, order of extrapolation
     #If order and step are fixed, do not limit order
@@ -1379,15 +1385,15 @@ def solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args,
         k_min = 3
         k = min(k_max, max(k_min, k))
 
-    T, y_half, f_yj,yj, f_yn, hs, (fe_seq, fe_tot, je_tot) = compute_extrapolation_table(method, methodargs, func, grad, 
-                t_curr, yn, args, h, k, pool, rejectPreviousStep, previousStepSolution, seq, smoothing, symmetric)
+    T, y_half, f_yj,yj, f_yn, hs, (fe_seq, fe_tot, je_tot) = _compute_extrapolation_table(method, methodargs, func, grad, 
+                t_curr, yn, args, h, k, pool, rejectPreviousStep, previousStepSolution, seq, smoothing, symmetric,addSolverParam)
     
-    rejectStep, y, h_new, k_new = estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative)
+    rejectStep, y, h_new, k_new = _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative, addSolverParam)
     
     y_solution=[]
     if((not rejectStep) & dense):
         #TODO: see if grad (gradient function) can be used for the interpolating
-        rejectStep, y_solution, h_int, (fe_tot_, fe_seq_) = interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half, f_yj,yj, yn, 
+        rejectStep, y_solution, h_int, (fe_tot_, fe_seq_) = _interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half, f_yj,yj, yn, 
                                                                          atol, rtol, seq, adaptative, symmetric)
         fe_tot += fe_tot_
         fe_seq += fe_seq_
@@ -1404,7 +1410,7 @@ def solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args,
     return (rejectStep, y, y_solution,f_yn, h, k, h_new, k_new, (fe_seq, fe_tot, je_tot))
 
 
-def interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half, f_yj,yj, yn,
+def _interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half, f_yj,yj, yn,
                             atol, rtol, seq, adaptative, symmetric):
     '''
     This function calculates all the intermediate solutions asked as dense output (in parameter t) that fall in this
@@ -1435,7 +1441,7 @@ def interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half,
             values obtained to calculate each T_{i,1}.
     @param yn (array): solution at the beggining of the step
     @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
-            determine the error control performed by the solver. See  function error_norm(y1, y2, atol, rtol). 
+            determine the error control performed by the solver. See  function _error_norm(y1, y2, atol, rtol). 
     @param seq (callable(i), int i>=1): the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
     @param adaptive (string): specifies the strategy of integration. Can take three values:
         - "fixed" = use fixed step size and order strategy.
@@ -1478,11 +1484,11 @@ def interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half,
     
     #Calculate interpolating polynomial
     if(symmetric):
-#         poly = interpolate_nonsym(y0, Tkk, yj, hs, h, k, atol,rtol, seq)
-        poly = interpolate_sym(yn, Tkk, f_Tkk, y_half, f_yj, hs, h, k, atol,rtol, seq)
+#         poly = _interpolate_nonsym(y0, Tkk, yj, hs, h, k, atol,rtol, seq)
+        poly = _interpolate_sym(yn, Tkk, f_Tkk, y_half, f_yj, hs, h, k, atol,rtol, seq)
     else:
-        poly = interpolate_nonsym(yn, Tkk, yj, hs, h, k, atol,rtol, seq)
-#         poly = interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k, atol,rtol, seq)
+        poly = _interpolate_nonsym(yn, Tkk, yj, hs, h, k, atol,rtol, seq)
+#         poly = _interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k, atol,rtol, seq)
 
     y_solution=[]
     old_index = t_index
@@ -1510,9 +1516,58 @@ def interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half,
     rejectStep=False
     return (rejectStep, y_solution, h_int, (fe_tot, fe_seq))
 
+def _getAdditionalSolverParameters(N,atol,rtol,addWork):
+    '''
+    Set additional parameters that change slightly the behavior of the solver.
+    See each parameter use to understand their behavior.
+    
+    
+    @param N (int): size of the ODE system
+    @param atol (float): absolute tolerance required
+    @param rtol (float): relative tolerance required
+    @param addWork (bool): whether to add extra work to the work estimation used to compute
+            next step to take. Should only be True when some form of Jacobian estimation
+            or evaluation is performed.
+            
+    #TODO: currently addWork value is overridden
+            
+    @return addSolverParam (dict):
+             KEY            MEANING
+            'min_tol'      minimum tolerance, see BLOCK 1 functions, used in implicit and semi implicit methods
+            'addWork'      add extra work to work estimation, see _estimate_next_step_and_order(..)
+            'freezeJac'    whether to freeze Jacobian estimation, see _getJacobian(..)
+            'iterative'    whether system solver should be iterative or exact, 
+                                see BLOCK 1 functions, used in semi implicit methods
+            'initialGuess' 
+
+    '''
+    
+    addSolverParam = {}
+    
+    # Some algorithms that this solver uses terminate when some objective function is under some tolerance.
+    # Then, we use the minimum tolerance (more restrictive value) as the required tolerance for such algorithm
+    addSolverParam['min_tol'] = min(atol,rtol)
+    #TODO: this value should be set to addWork, but it seems that setting it to True
+    # for the semi implicit methods (as pg 140, SODEX paragraph, IV.9 ref II suggests)
+    # makes the solver perform much worse (try with BRUSS-2D problem)
+    addSolverParam['addWork'] = False
+    
+    addSolverParam['initialGuess'] = False
+    
+    #TODO: check this 15 threshold to see it's viability
+    #as it was chosen empirically with not enough examples
+    if(N>15):
+        addSolverParam['freezeJac'] = True
+        addSolverParam['iterative'] = True
+    else:
+        addSolverParam['freezeJac'] = False
+        addSolverParam['iterative'] = False
+    
+    return addSolverParam
+
 '''
-BEGINNING: General extrapolation solvers' functions. These functions can be used to solve any ODE.
-These are the user interface functions.
+BEGINNING BLOCK 2: General extrapolation solvers' functions. These functions can be used to solve any ODE.
+These are recommended to use for developing and testing purposes
     
 Each function solves the system of IVPs dy/dt = func(y, t0, ...) with parallel extrapolation.
 
@@ -1530,7 +1585,7 @@ All this functions have the same structure, and their names explicitly say the t
     @param args (tuple): extra arguments to pass to function.
     @param full_output (bool): true if user wants a dictionary of optional outputs as the second output.
     @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
-            determine the error control performed by the solver. See  function error_norm(y1, y2, atol, rtol).
+            determine the error control performed by the solver. See  function _error_norm(y1, y2, atol, rtol).
     @param h0 (float):the step size to be attempted on the first step.
     @param mxstep (int): maximum number of (internally defined) steps allowed for each
             integration point in t. Defaults to 10e4
@@ -1545,7 +1600,7 @@ All this functions have the same structure, and their names explicitly say the t
         the the number of workers is set to the number of CPUs on the running machine.
     @param seq (callable(i), int i>=1): the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
         The step number sequence can be changed forcefully in some cases for interpolation purposes.
-        See getDenseAndSequence(.) function.
+        See _getDenseAndSequence(.) function.
     @param adaptive (string): specifies the strategy of integration. Can take three values:
         - "fixed" = use fixed step size and order strategy.
         - "order" or any other string = use adaptive step size and adaptive order strategy (recommended).
@@ -1580,13 +1635,16 @@ def ex_midpoint_explicit_parallel(func, grad, y0, t, args=(), full_output=0, rto
     
     '''
     
-    method = midpoint_explicit
+    method = _midpoint_explicit
+    
+    addSolverParam = _getAdditionalSolverParameters(len(y0), atol, rtol, addWork=False)
     
     k=p//2
 
-    return extrapolation_parallel(method,  {}, func, grad, y0, t, args=args,
+    return __extrapolation_parallel(method,  {}, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptative=adaptative)
+         p=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptative=adaptative,
+         addSolverParam=addSolverParam)
 
 
 
@@ -1598,13 +1656,16 @@ def ex_midpoint_implicit_parallel(func, grad, y0, t, args=(), full_output=0, rto
     
     '''
     
-    method = midpoint_implicit
+    method = _midpoint_implicit
     
     k=p//2
+    
+    addSolverParam = _getAdditionalSolverParameters(len(y0), atol, rtol, addWork=True)
 
-    return extrapolation_parallel(method, {}, func, grad, y0, t, args=args,
+    return __extrapolation_parallel(method, {}, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptative=adaptative)
+         p=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptative=adaptative,
+         addSolverParam=addSolverParam)
 
 
 def ex_midpoint_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
@@ -1615,16 +1676,23 @@ def ex_midpoint_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0
     
     '''
     
-    method = midpoint_semiimplicit
+    method = _midpoint_semiimplicit
     
     k=p//2
     
-    methodargs={}
-    methodargs["J00"]=None
+    addSolverParam = _getAdditionalSolverParameters(len(y0), atol, rtol, addWork=True)
+    
+    methodargs = {}
+    methodargs["J00"] = None
+    #TODO see if code can be reused into using only one of the matrices
+    #(if performance is not worse)
+    methodargs["I"] = np.identity(len(y0), dtype=float)
+    methodargs["Isparse"] = np.identity(len(y0), dtype=float)  
 
-    return extrapolation_parallel(method, methodargs, func, grad, y0, t, args=args,
+    return __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=k, nworkers=nworkers, smoothing=smoothing, symmetric = True, seq=seq, adaptative=adaptative)
+         p=k, nworkers=nworkers, smoothing=smoothing, symmetric = True, seq=seq, adaptative=adaptative,
+         addSolverParam=addSolverParam)
 
 
 def ex_euler_explicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
@@ -1636,11 +1704,14 @@ def ex_euler_explicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1
     #TODO: this method hasn't been properly tested and optimized (sequence is not known as optimal)
     '''
     
-    method = euler_explicit
+    method = _euler_explicit
+    
+    addSolverParam = _getAdditionalSolverParameters(len(y0), atol, rtol, addWork=False)
 
-    return extrapolation_parallel(method, {}, func, grad, y0, t, args=args,
+    return __extrapolation_parallel(method, {}, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=p, nworkers=nworkers, smoothing=smoothing, symmetric = False, seq=seq, adaptative=adaptative)
+         p=p, nworkers=nworkers, smoothing=smoothing, symmetric = False, seq=seq, adaptative=adaptative,
+         addSolverParam=addSolverParam)
     
     
 def ex_euler_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
@@ -1651,20 +1722,96 @@ def ex_euler_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0, r
     
     '''
     
-    method = euler_semiimplicit
+    method = _euler_semiimplicit
+    
+    addSolverParam = _getAdditionalSolverParameters(len(y0), atol, rtol, addWork=True)
     
     methodargs = {}
     methodargs["J00"] = None
+    #TODO see if code can be reused into using only one of the matrices
+    #(if performance is not worse)
+    
+    #The identity matrices are created here so that they can be reused (and are not 
+    #recalculated), and also because global variables cause problems with multiprocessing
+    #(processes would lock on the I or Isparse global variable)
     methodargs["I"] = np.identity(len(y0), dtype=float)
-    methodargs["Isparse"] = np.identity(len(y0), dtype=float)
+    methodargs["Isparse"] = np.identity(len(y0), dtype=float)  
 
-
-
-    return extrapolation_parallel(method, methodargs, func, grad, y0, t, args=args,
+    return __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=p, nworkers=nworkers, smoothing=smoothing, symmetric = False, seq=seq, adaptative=adaptative)
+         p=p, nworkers=nworkers, smoothing=smoothing, symmetric = False, seq=seq, adaptative=adaptative,
+         addSolverParam=addSolverParam)
 
 '''
-END: General extrapolation solvers' functions. These functions can be used to solve any ODE.
+END BLOCK 2: General extrapolation solvers' functions. These functions can be used to solve any ODE.
 These are the user interface functions.
 '''
+    
+'''
+USER INTERFACE Main Function: ODE solver based on extrapolation methods based on II.9 ref I (non stiff problems) and 
+IV.9 ref II (stiff problems)
+
+General function similar to BLOCK 2 functions, with less parameters, thus for a general user. To develop and test use
+BLOCK 2 functions as those functions have more parameters to be chosen (if this functions is used such 
+parameters are set to the 'optimal').
+
+(method, func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
+        atol=1.0e-8, h0=0.5, mxstep=10e4, p=4)
+        
+    @param method (string): which method does the user want to use. Options:
+        -'midpoint explicit': non-stiff solver
+        -'midpoint implicit': stiff solver
+        -'midpoint semi implicit': stiff solver
+        -'euler explicit': non-stiff solver
+        -other strings: 'euler semi implicit' stiff solver
+    @param func (callable(y, t,args)): computes the derivative of y at t (i.e. the right hand side of the IVP).
+    @param grad (callable(y,t,args)): computes analytically the Jacobian of the func function parameter.
+    @param y0 (array): initial condition on y (can be a vector).
+    @param t (array): a sequence of time points for which to solve for y. The initial value point should be the first 
+            element of this sequence. And the last one the final time.
+    @param args (tuple): extra arguments to pass to function.
+    @param full_output (bool): true if user wants a dictionary of optional outputs as the second output.
+    @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
+            determine the error control performed by the solver. See  function _error_norm(y1, y2, atol, rtol).
+    @param h0 (float):the step size to be attempted on the first step.
+    @param mxstep (int): maximum number of (internally defined) steps allowed for each
+            integration point in t. Defaults to 10e4
+    @param p (int): the order of extrapolation if order is fixed, or the starting order otherwise.
+
+    @return: 
+        @return ys (2D-array, shape (len(t), len(y0))): array containing the value of y for each desired time in t, with 
+            the initial value y0 in the first row.
+        @return infodict (dict): only returned if full_output == True. Dictionary containing additional output information
+             KEY        MEANING
+            'fe_seq'    cumulative number of sequential derivative evaluations
+            'nfe'       cumulative number of total derivative evaluations
+            'nst'       cumulative number of successful time steps
+            'nje'       cumulative number of either Jacobian evaluations (when 
+                        analytic Jacobian is provided) or Jacobian estimations
+                        (when no analytic Jacobian is provided)
+            'h_avg'     average step size
+            'k_avg'     average extrapolation order
+
+'''
+
+def extrapolation_parallel(method, func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
+        atol=1.0e-8, h0=0.5, mxstep=10e4, p=4):
+        
+        if(method == 'midpoint explicit'):
+            return  ex_midpoint_explicit_parallel(func, grad, y0, t, args=args,
+                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p)
+        elif(method == 'midpoint implicit'):
+            return ex_midpoint_implicit_parallel(func, grad, y0, t, args=args,
+                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p)
+        elif(method == 'midpoint semi implicit'):
+            return ex_midpoint_semi_implicit_parallel(func, grad, y0, t, args=args,
+                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p)
+        elif(method == 'euler explicit'):
+            return ex_euler_explicit_parallel(func, grad, y0, t, args=args,
+                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p)
+        
+        return ex_euler_semi_implicit_parallel(func, grad, y0, t, args=args,
+                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p)
+            
+            
+    
