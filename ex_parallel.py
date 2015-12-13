@@ -79,14 +79,14 @@ def method_implicit/explicit/semi-implicit(f, grad, previousValues, previousTime
         @return je_tot (int): number of Jacobian evaluations done in this method
 '''''
 
-def _solve_implicit_step(zero_f, zero_grad, estimatedValueExplicit, addSolverParam):
+def _solve_implicit_step(zero_f, zero_grad, estimatedValue, addSolverParam):
     '''
     Find the root of the zero_f function using as initial approximation estimatedValueExplicit.
     This zero_f root is the next step solution. The _solve_implicit_step solves one step of an implicit method.
     
     @param zero_f (callable zero_f(y,t,args)): function to find the root of (estimation of next step)
     @param zero_grad (callable zero_grad(y,t,args)): Jacobian of zero_f.
-    @param estimatedValueExplicit (array): estimated value of the zero_f function to use as initial value
+    @param estimatedValue (array): estimated value of the zero_f function to use as initial value
             for the root solver
     @param addSolverParam (dict): extra arguments needed to define completely the solver's behavior.
             Should not be empty, for more information see _getAdditionalSolverParameters(..) function.
@@ -99,13 +99,9 @@ def _solve_implicit_step(zero_f, zero_grad, estimatedValueExplicit, addSolverPar
     #TODO: Problem -> fsolve doesn't seem to work well with xtol parameter
     #TODO: pass to the zero finder solver the tolerance required to the overall problem 
     # by doing this the error by the solver doesn't limit the global error of the ODE's solution
+
     
-    if(not addSolverParam['initialGuess']):
-        xval=None
-    else:
-        xval = estimatedValueExplicit
-    
-    x, infodict, ier, mesg = optimize.fsolve(zero_f,xval, 
+    x, infodict, ier, mesg = optimize.fsolve(zero_f,estimatedValue, 
             fprime = zero_grad, full_output = True, xtol=addSolverParam['min_tol'])
 #     print ("jac ev: " + str(infodict["njev"]))
 #     print ("func ev: " + str(infodict["nfev"]))
@@ -124,7 +120,7 @@ def _solve_implicit_step(zero_f, zero_grad, estimatedValueExplicit, addSolverPar
 #     return (optObject.x, optObject.nfev)
 
 
-def _midpoint_semiimplicit(f, grad, previousValues, previousTime,f_previousValue, step, args, addSolverParam, J00):
+def _midpoint_semiimplicit(f, grad, previousValues, previousTime,f_previousValue, step, args, addSolverParam, J00, I, Isparse):
     '''
     Calculates solution at previousTime+step doing one step with a midpoint semiimplicit formula (linearly implicit midpoint)
     Based on IV.9.16a-b (ref II).
@@ -135,7 +131,7 @@ def _midpoint_semiimplicit(f, grad, previousValues, previousTime,f_previousValue
     je_tot=0
        
     if(previousPreviousValue is None):
-        return _euler_semiimplicit(f, grad, previousValues, previousTime,f_previousValue, step, args, addSolverParam, J00)
+        return _euler_semiimplicit(f, grad, previousValues, previousTime,f_previousValue, step, args, addSolverParam, J00, I, Isparse)
     
     if(f_previousValue is None):
         f_yj = f(*(previousValue,previousTime)+args)
@@ -264,17 +260,23 @@ def _midpoint_implicit(f, grad, previousValues, previousTime,f_previousValue, st
     def zero_grad(x):
         return np.matrix(np.identity(len(x), dtype=float) - step*grad(x,previousTime+step/2))
 
-    #Estimation of the value as the starting point for the zero solver 
-    estimatedValueExplicit, f_yj, fe_tot, je_tot=_euler_explicit(f, grad, previousValues, previousTime,f_previousValue, step, args, addSolverParam)
     
     if(grad is None):
         zero_grad=None
         
-    x, fe_tot_, je_tot_ = _solve_implicit_step(zero_func, zero_grad, estimatedValueExplicit, addSolverParam)
+    if(not addSolverParam['initialGuess']):
+        estimatedValue = previousValue
+        fe_tot = 0
+        je_tot = 0
+    else:
+        #Estimation of the value as the starting point for the zero solver 
+        estimatedValue, f_yj, fe_tot, je_tot=_euler_explicit(f, grad, previousValues, previousTime,f_previousValue, step, args, addSolverParam)
+        
+    x, fe_tot_, je_tot_ = _solve_implicit_step(zero_func, zero_grad, estimatedValue, addSolverParam)
     fe_tot +=fe_tot_
     je_tot += je_tot_
     
-    #TODO: see it this extra function can be done only if interpolating polynomial is calculated (looks complicated)
+    #TODO: see if this extra function can be done only if interpolating polynomial is calculated (looks complicated)
     #This can't follow the _midpoint_explicit approach because in _midpoint_implicit we are doing function evaluations
     #at previousTime+step/2
     f_yj= f(*(previousValue,previousTime)+args)
@@ -1777,6 +1779,8 @@ parameters are set to the 'optimal').
     @param mxstep (int): maximum number of (internally defined) steps allowed for each
             integration point in t. Defaults to 10e4
     @param p (int): the order of extrapolation if order is fixed, or the starting order otherwise.
+    @param nworkers (int): the number of workers working in parallel. If nworkers==None, then 
+            the the number of workers is set to the number of CPUs on the running machine.
 
     @return: 
         @return ys (2D-array, shape (len(t), len(y0))): array containing the value of y for each desired time in t, with 
@@ -1795,23 +1799,23 @@ parameters are set to the 'optimal').
 '''
 
 def extrapolation_parallel(method, func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
-        atol=1.0e-8, h0=0.5, mxstep=10e4, p=4):
+        atol=1.0e-8, h0=0.5, mxstep=10e4, p=4, nworkers=None):
         
         if(method == 'midpoint explicit'):
             return  ex_midpoint_explicit_parallel(func, grad, y0, t, args=args,
-                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p)
+                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, nworkers=nworkers)
         elif(method == 'midpoint implicit'):
             return ex_midpoint_implicit_parallel(func, grad, y0, t, args=args,
-                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p)
+                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, nworkers=nworkers)
         elif(method == 'midpoint semi implicit'):
             return ex_midpoint_semi_implicit_parallel(func, grad, y0, t, args=args,
-                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p)
+                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, nworkers=nworkers)
         elif(method == 'euler explicit'):
             return ex_euler_explicit_parallel(func, grad, y0, t, args=args,
-                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p)
+                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, nworkers=nworkers)
         
         return ex_euler_semi_implicit_parallel(func, grad, y0, t, args=args,
-                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p)
+                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, nworkers=nworkers)
             
             
     

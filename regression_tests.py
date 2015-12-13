@@ -1,20 +1,98 @@
 from __future__ import division
 import numpy as np
 import math 
-import time
 import ex_parallel
-import ex_parallel_original
-import fnbod
-from compare_test import kdv_init, kdv_func, kdv_solout, burgers_init, burgers_func, burgers_solout
-import twelve_tests as tst
 import matplotlib.pyplot as plt
 
-plotConv=False
+allmethods = ['midpoint explicit','midpoint implicit','midpoint semi implicit','euler explicit','euler semi implicit']
+
+regressionvalues = {'midpoint explicit':[
+                        [2.4054371001e-06,   4.3055665867e-07,   6.1728696137e-10,
+         1.8917700341e-12,   2.7161091660e-15,   2.7161091660e-15],
+                        [2.4641284233e-06,   2.4641284233e-06,   1.9030069619e-09,
+         1.4625004260e-09,   1.5762550692e-13,   1.0086956501e-14],
+                        [2.2475235488e-06,   1.0300735551e-06,   1.1973036784e-08,
+         4.4328429816e-11,   2.2526425170e-13,   8.2156503822e-15]                      
+                                         ]                    
+                    ,'midpoint implicit':[
+                        [1.5293204761e-08,   1.1928156003e-08,   1.5104319287e-09,
+         8.1136216588e-13,   4.2250587027e-15,   7.5447476834e-16],
+                        [ 1.8031544714e-08,   1.8035168218e-08,   3.1238860457e-09,
+         6.0817623062e-13,   1.7484057935e-15,   2.4208695602e-15],
+                        [3.8327484742e-08,   1.1024071656e-09,   8.2266193857e-11,
+         8.5931262106e-14,   5.9952043330e-15,   1.5543122345e-15]                      
+                                         ]
+                    ,'midpoint semi implicit':[
+                        [8.0450452184e-07,   8.0450452184e-07,   1.1962604868e-09,
+         7.9778162005e-13,   1.9616343977e-15,   3.0178990734e-15],
+                        [ 2.2771937896e-08,   2.2771937896e-08,   9.8490786300e-09,
+         7.3030909994e-11,   2.0604289812e-13,   3.0933333269e-15],
+                        [9.1299733940e-07,   9.1299733940e-07,   2.2042861980e-09,
+         1.5252021868e-11,   1.0214051827e-13,   8.3266726847e-15]                        
+                                         ]
+                    ,'euler explicit':[
+                        [ 5.1530388716e-04,   1.0316403746e-06,   2.1394378449e-08,
+         4.2737343969e-10,   3.4526274349e-12,   3.3800469622e-13],
+                        [4.7945288696e-04,   4.1676312202e-05,   2.7430285643e-07,
+         2.4722151276e-09,   3.9390775571e-11,   1.2338365192e-12],
+                        [5.5596474756e-04,   1.5538277741e-06,   4.6832369094e-09,
+         3.6981750995e-11,   1.8984813721e-13,   2.2148949341e-13]                       
+                                         ]
+                    ,'euler semi implicit':[
+                        [2.3100925231e-06,   1.6777735428e-06,   1.1281401974e-08,
+         6.8942395382e-11,   2.5335262721e-13,   2.8458788262e-13],
+                        [7.6971229056e-06,   2.8710945728e-06,   6.0000955762e-08,
+         8.1554684121e-10,   1.4732739680e-11,   3.5129507174e-13],
+                        [4.0039427062e-06,   8.3667530160e-07,   1.2044836240e-09,
+         3.1111668797e-11,   1.4654943925e-14,   1.7763568394e-14]                       
+                                         ]}
+
+regressionvaluesdense = {'midpoint explicit':[
+                        [3.4642501161e-07,   3.4642501161e-07,   4.3374772739e-09,
+         9.4880259659e-13,   1.9190810732e-15,   2.2736380777e-15],
+                        [2.9323421672e-07,   2.9323421672e-07,   8.1102149183e-09,
+         1.8421823156e-11,   2.8988487086e-13,   2.4080152326e-14],
+                        [4.8941277641e-07,   4.8941277641e-07,   8.9348270645e-09,
+         6.3902126450e-11,   2.5726071861e-13,   6.4646253816e-15]                        
+                                         ]                    
+                    ,'midpoint implicit':[
+                        [ 4.5573535834e-07,   4.5386635234e-07,   1.3496938571e-07,
+         3.7594370070e-10,   3.6022394936e-08,   6.9953683983e-09],
+                        [8.2413858176e-07,   8.2414062859e-07,   6.0333530921e-08,
+         1.2261597675e-09,   1.1225879293e-09,   3.5890791004e-09],
+                        [1.3820565861e-06,   1.3758790352e-06,   7.0553999910e-08,
+         1.1037088895e-07,   1.5887463787e-08,   2.6978897733e-09]                       
+                                         ]
+                    ,'midpoint semi implicit':[
+                        [1.6844768967e-06,   1.6844768967e-06,   3.0290113955e-08,
+         6.3914198269e-09,   5.8442029708e-08,   8.4710131146e-09],
+                        [1.1506381998e-06,   1.1506381998e-06,   1.1279165511e-08,
+         5.0249290647e-09,   4.6299269576e-08,   6.1071721315e-10],
+                        [1.4565000722e-06,   1.4565000722e-06,   1.6342739136e-08,
+         3.2428177132e-08,   6.8445978340e-10,   1.0194164228e-07]                       
+                                         ]
+                    ,'euler explicit':[
+                        [2.3923420321e-04,   2.0785557794e-06,   1.0785176777e-08,
+         1.7137734957e-10,   1.3284884920e-12,   2.1175682269e-12],
+                        [3.8313415427e-04,   4.1416950951e-06,   2.4942434710e-07,
+         2.3087815273e-09,   3.7480260147e-11,   1.8490916834e-12],
+                        [4.9191579020e-04,   1.4630518763e-06,   4.9565055200e-09,
+         3.5178267705e-11,   8.7695466953e-13,   1.2257225905e-12]                       
+                                         ]
+                    ,'euler semi implicit':[
+                        [1.1878532624e-05,   1.1581152109e-05,   1.2606825472e-08,
+         5.8124968603e-11,   2.3268957453e-11,   1.1943356002e-12],
+                        [4.6834255496e-04,   1.5255137462e-06,   1.7013210124e-09,
+         8.1260873044e-10,   1.5196170114e-11,   4.2986541030e-13],
+                        [1.0144633464e-05,   5.8557909975e-08,   3.4065216128e-09,
+         3.9356063873e-10,   2.4978308382e-10,   2.6221456459e-12]                        
+                                         ]}
+
 
 def relative_error(y, y_ref):
     return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref)
 
-def regression_tst(func, y0, t, y_ref, tol_boundary=(0,6), h0=0.5, mxstep=10e4,
+def regression_tst(method, func, y0, t, y_ref, tol_boundary=(0,6), h0=0.5, mxstep=10e6,
         adaptive="order", p=4, solout=(lambda t: t), nworkers=2):
     tol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
     a, b = tol_boundary
@@ -24,22 +102,20 @@ def regression_tst(func, y0, t, y_ref, tol_boundary=(0,6), h0=0.5, mxstep=10e4,
     print ''
     for i in range(len(tol)):
         print tol[i]
-        ys, infodict = ex_parallel.ex_midpoint_explicit_parallel(func,None, y0, t, atol=tol[i], 
+        ys, infodict = ex_parallel.extrapolation_parallel(method,func, None, y0, t, atol=tol[i], 
             rtol=tol[i], mxstep=mxstep, full_output=True, nworkers=nworkers)
         y = solout(ys[1:len(ys)])
         err[i] = relative_error(y, y_ref)
-        print (y-y_ref)
-        print infodict
     return err
 
 def f_1(y,t):
-    lam = -1j
-    y0 = np.array([1 + 0j])
+    lam = -1
+    y0 = np.array([1.])
     return lam*y
 
 def exact_1(t):
-    lam = -1j
-    y0 = np.array([1 + 0j])
+    lam = -1
+    y0 = np.array([1.])
     return y0*np.exp(np.dot(lam,t))
 
 def f_2(y,t):
@@ -53,16 +129,19 @@ def f_3(y,t):
     return 4.*t*np.sqrt(y)
     
 def exact_3(t):
-    return np.array([(1.+t**2)**2])
+    return np.array([np.power(1.+np.power(t,2),2)])
 
+#TODO: this fourth test function gives singular matrix with semi implicit methods
+#mainly because y has to be >0 and when the method gives a y<0 then the function evaluation
+#at that estimated value is nan and it blows all the execution afterwards
 def f_4(y,t):
     return y/t*np.log(y)
     
 def exact_4(t):
     return np.array([np.exp(2.*t)])
 
-def f_5(y,t):
-    return fnbod.fnbod(y,t)
+
+alltestfunctions = [(f_1,exact_1),(f_2,exact_2),(f_3,exact_3)]
 
 def check(err, err_ref, test_name):
     """
@@ -78,140 +157,47 @@ def check(err, err_ref, test_name):
 ########### RUN TESTS ###########
 
 def non_dense_tests():
-    print("\n Executing non dense tests")
-    # Test 1
-    t0, tf = 0, 10
-    y0 = exact_1(t0)
-    y_ref = exact_1(tf)
-    err = regression_tst(f_1, y0, [t0, tf], y_ref)
-    err_ref_1 = np.array([  2.1630698948e-03,   1.9757059466e-05,   1.3907151930e-07,
-         1.1075581382e-09,   9.3295927483e-12,   1.1965242901e-13]) 
-    check(err, err_ref_1, "Test 1: linear ODE")
-    print err
- 
-
-    # Test 2
-    t0, tf = 0, 10
-    y0 = exact_2(t0)
-    y_ref = exact_2(tf)
-    err = regression_tst(f_2, y0, [t0, tf], y_ref)
-    err_ref_2 = np.array([4.9732202037e-03,   2.0319706692e-05,   4.3446608751e-07,
-         2.6994205605e-09,   4.5295951528e-11,   1.6383672339e-12])
-    check(err, err_ref_2, "Test 2")
-    print err
+    print("\n Executing regression non dense tests")
     
-    # Test 3
-    t0, tf = 0, 10
-    y0 = exact_3(t0)
-    y_ref = exact_3(tf)
-    err = regression_tst(f_3, y0, [t0, tf], y_ref)
-    err_ref_3 = np.array([8.0615031844e-07,   1.3156476857e-07,   2.3068719262e-09,
-         2.1587147846e-11,   1.7617503487e-13,   1.6048333136e-15]) 
-    check(err, err_ref_3, "Test 3")
-    print err
-
-    # Test 4
-    t0, tf = 0.5, 10
-    y0 = exact_4(t0)
-    y_ref = exact_4(tf)
-    err = regression_tst(f_4, y0, [t0, tf], y_ref)
-    err_ref_4 = np.array([9.9765055429e-03,   5.5735241863e-05,   3.4917465397e-07,
-         2.7457698162e-09,   2.1222716857e-11,   4.4841830265e-14]) 
-    check(err, err_ref_4, "Test 4")
-    print err
-
-    # Test 5
-    t0, tf = 0, 0.08
-    y0 = fnbod.init_fnbod(2400)
-    y_ref = np.loadtxt("reference.txt")
-    err = regression_tst(f_5, y0, [t0, tf], y_ref)
-    err_ref_5 = np.array([ 5.7624705654e-01,   2.0529390615e-01,   1.4130955311e-02,
-         7.9667511556e-06,   1.7720280179e-07,   5.0404934818e-09]) 
-    check(err, err_ref_5, "Test 5")
-    print err
-    
-#     # Test 6
-#     t0, tf = 0, 0.003
-#     y0 = kdv_init(t0)
-#     y_ref = np.loadtxt("reference_kdv.txt")
-#     err = regression_tst(kdv_func, y0, [t0, tf], y_ref, solout=kdv_solout)
-#     err_ref_6 = np.array([]) 
-#     check(err, err_ref_6, "Test 6")
-#     print err
-#    
-#     # Test 7
-#     t0, tf = 0, 3.
-#     y0 = burgers_init(t0)
-#     y_ref = np.loadtxt("reference_burgers.txt")
-#     err = regression_tst(burgers_func, y0, [t0, tf], y_ref, solout=burgers_solout, tol_boundary=(0,4))
-#     err_ref_7 = np.array([4.4209014256e-08,   4.6450102760e-11,   6.4950357912e-13,   1.6405125244e-14]) 
-#     check(err, err_ref_7, "Test 7")
-#     print err
+    for method in allmethods:
+        print("\n Method: " + method)
+        k=0
+        for test in alltestfunctions:
+            print("\n Test: " + str(k))
+            (f,exact) = test
+            t0, tf = 0.1, 1
+            y0 = exact(t0)
+            y_ref = exact(tf)
+            err = regression_tst(method, f, y0, [t0, tf], y_ref)
+            err_ref = regressionvalues[method][k] 
+            check(err, err_ref, "Test " + str(k))
+            k+=1
+            print err
      
     print("All tests passed")
 
 
 def dense_tests():
-    print("\n Executing dense tests")
-    # Test 1 dense
-    t0=0
-    t = [t0,2.5,5,7.5,10]
-    y0 = exact_1(t0)
-    y_ref = exact_1([[2.5],[5],[7.5],[10]])
-    err = regression_tst(f_1, y0, t, y_ref)
-#     err_ref_1 = np.array([ 1.2796005275e-03,   1.4160078828e-05,   1.1154717428e-07,
-#          6.6923205526e-10,   2.5033682435e-11,   5.4255003010e-12]) 
-    err_ref_1 = np.array([ 4.0388541531e-04,   3.6069536594e-06,   1.7350073446e-08,
-         2.9149161935e-10,   8.3688477982e-13,   2.0974333704e-13]) 
-
-    check(err, err_ref_1, "Test 1 dense")
-    print err
-      
-    # Test 2 dense 
-    t0=0
-    t = [t0,2.5,5,7.5,10]
-    y0 = exact_2(t0)
-    y_ref = exact_2([[2.5],[5],[7.5],[10]])
-    err = regression_tst(f_2, y0, t, y_ref)
-#     err_ref_2 = np.array([ 1.4763869532e-03,   5.9302773357e-05,   1.9116074302e-07,
-#          1.4820318333e-09,   2.3923358893e-11,   2.1980051033e-12])
-    err_ref_2 = np.array([ 2.6556611408e-03,   5.6819363991e-04,   1.0109797259e-06,
-         1.3020804372e-08,   7.3727740776e-11,   5.6430123318e-13])
-    check(err, err_ref_2, "Test 2 dense")
-    print err
-  
-    # Test 3 dense
-    t0=0
-    t = [t0,2.5,5,7.5,10]
-    y0 = exact_3(t0)
-    y_ref = exact_3(np.array([[2.5],[5],[7.5],[10]]))
-    err = regression_tst(f_3, y0, t, y_ref)
-#     err_ref_3 = np.array([ 5.4288121430e-05,   7.3657652413e-07,   4.7892864282e-09,
-#          8.3632503120e-11,   1.3985673220e-10,   2.3489431842e-13])
-    err_ref_3 = np.array([  3.1995189542e-07,   1.1009718320e-07,   7.5469109379e-09,
-         1.0636289556e-11,   8.6409834669e-14,   4.7465438790e-14]) 
-    check(err, err_ref_3, "Test 3 dense")
-    print err
- 
-    # Test 4 dense
-    t0 = 0.5
-    t = [t0,2.5,5,7.5,10]
-    y0 = exact_4(t0)
-    y_ref = exact_4(np.array([[2.5],[5],[7.5],[10]]))
-    err = regression_tst(f_4, y0, t, y_ref)
-#     err_ref_4 = np.array([  1.6218737110e-02,   2.5189774159e-05,   8.2681493532e-07,
-#          7.8329039603e-10,   3.2782336939e-11,   7.4040697301e-12])
-    err_ref_4 = np.array([  1.1139882478e-02,   5.8477866642e-05,   3.9084471181e-07,
-         3.9017464759e-09,   2.8246633161e-11,   2.0101404777e-13]) 
-    check(err, err_ref_4, "Test 4 dense")
-    print err
+    print("\n Executing regression dense tests")
     
+    for method in allmethods:
+        print("\n Method " + method)
+        k=0
+        for test in alltestfunctions:
+            print("\n Test " + str(k))
+            (f,exact) = test
+            t0 = 0.1
+            t=[t0,0.25,0.5,0.75,1]
+            y0 = exact(t0)
+            y_ref = exact([[t[1]],[t[2]],[t[3]],[t[4]]])
+            err = regression_tst(method, f, y0, t, y_ref)
+            err_ref = regressionvaluesdense[method][k] 
+            check(err, err_ref, "Test " + str(k))
+            k+=1
+            print err
+                
     print("All tests passed")
-    #TODO: add tests 5, 6 and 7 for dense output
 
-def implicit_dense_tests():
-    #TODO: to implement
-    print("To implement")
 
 def inputTuple(k,denseOutput,test,firstStep,robustness, order):    
     standardTuple = {'func': test.RHSFunction, 'grad': test.RHSGradient, 'y0': test.initialValue, 't': denseOutput
@@ -505,7 +491,7 @@ def checkInterpolationPolynomial():
 if __name__ == "__main__":
     non_dense_tests()
     dense_tests()
-#     implicit_dense_tests()
+
 #     doAllConvergenceTests()
 #     checkInterpolationPolynomial()
     
