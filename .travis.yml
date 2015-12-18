@@ -23,6 +23,7 @@ install:
   - conda install --yes -c dan_blanchard python-coveralls nose-cov
   - "pip install -r requirements.txt"
   - "f2py -c fnbod.f -m fnbod"
+  - "f2py -c fnbruss.f -m fnbruss"
 
 # Run test
 script:

@@ -830,7 +830,7 @@ def _centered_finite_diff(j, f_yj, hj):
 
     return dj
 
-def _backward_finite_diff(j, yj, hj,lam):
+def _backward_finite_diff(j, yj, hj, lam):
     '''
     Computes through the backward differentiation formula different order derivatives of y for a given 
     extrapolation step (for every T{1,j}). In other words, it calculates VI.5.43 ref II (step 1) for all kappa
@@ -876,8 +876,8 @@ def _compute_rs(yj, hs, k, seq=(lambda t: 4*t-2)):
     ref I (see _compute_ds function)
     
     Contains a parameter to be chosen: lam={0,1}.
-    TODO: check if it works properly with lam=1
-    TODO: once this is checked set to lam=1, as it requires less work and the order of interpolation is enough
+    
+    lam=1 requires less work and the order of interpolation is enough
     given the global error committed. Theorem VI.5.7 ref II (interpolation error).
     
     @param yj (3D array): array containing for each extrapolation value (1...k) an array with all the intermediate solution 
@@ -891,9 +891,9 @@ def _compute_rs(yj, hs, k, seq=(lambda t: 4*t-2)):
             (extrapolated k-kappa-lam times)
 
     '''
-    lam=0
+    lam=1
     dj_kappa = np.zeros((k+1-lam, k+1), dtype=(type(yj[1][0])))
-    rs = np.zeros((k+1), dtype=(type(yj[1][0])))
+    rs = np.zeros((k+1-lam), dtype=(type(yj[1][0])))
     
     for j in range(1+lam,k+1):
         dj_ = _backward_finite_diff(j,yj[j], hs[j],lam)
@@ -904,7 +904,6 @@ def _compute_rs(yj, hs, k, seq=(lambda t: 4*t-2)):
         numextrap = k+1-kappa-lam
         T = np.zeros((numextrap+1, numextrap+1), dtype=(type(yj[1][0])))
         T[:,1] = 1*dj_kappa[kappa, (kappa+lam-1):]
-
         _fill_extrapolation_table(T, numextrap, lam+kappa-1, seq, symmetric=False)
 
         rs[kappa] = 1*T[numextrap,numextrap] 
@@ -951,7 +950,7 @@ def _compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
         
         _fill_extrapolation_table(T, numextrap, int(skip/2), seq, symmetric=True)
         
-        ds[kappa] = 1*T[numextrap,numextrap] 
+        ds[kappa] = 1*T[numextrap,numextrap]
         if (kappa != 0):
             skip +=1
 
@@ -1781,6 +1780,9 @@ parameters are set to the 'optimal').
     @param p (int): the order of extrapolation if order is fixed, or the starting order otherwise.
     @param nworkers (int): the number of workers working in parallel. If nworkers==None, then 
             the the number of workers is set to the number of CPUs on the running machine.
+    @param adaptive (string): specifies the strategy of integration. Can take three values:
+        - "fixed" = use fixed step size and order strategy.
+        - "order" or any other string = use adaptive step size and adaptive order strategy (recommended).
 
     @return: 
         @return ys (2D-array, shape (len(t), len(y0))): array containing the value of y for each desired time in t, with 
@@ -1799,23 +1801,28 @@ parameters are set to the 'optimal').
 '''
 
 def extrapolation_parallel(method, func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
-        atol=1.0e-8, h0=0.5, mxstep=10e4, p=4, nworkers=None):
+        atol=1.0e-8, h0=0.5, mxstep=10e4, p=4, nworkers=None, adaptative = 'order'):
         
         if(method == 'midpoint explicit'):
             return  ex_midpoint_explicit_parallel(func, grad, y0, t, args=args,
-                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, nworkers=nworkers)
+                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, 
+                nworkers=nworkers, adaptative=adaptative)
         elif(method == 'midpoint implicit'):
             return ex_midpoint_implicit_parallel(func, grad, y0, t, args=args,
-                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, nworkers=nworkers)
+                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, 
+                nworkers=nworkers, adaptative=adaptative)
         elif(method == 'midpoint semi implicit'):
             return ex_midpoint_semi_implicit_parallel(func, grad, y0, t, args=args,
-                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, nworkers=nworkers)
+                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, 
+                nworkers=nworkers, adaptative=adaptative)
         elif(method == 'euler explicit'):
             return ex_euler_explicit_parallel(func, grad, y0, t, args=args,
-                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, nworkers=nworkers)
+                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, 
+                nworkers=nworkers, adaptative=adaptative)
         
         return ex_euler_semi_implicit_parallel(func, grad, y0, t, args=args,
-                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, nworkers=nworkers)
+                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, 
+                nworkers=nworkers, adaptative=adaptative)
             
             
     
