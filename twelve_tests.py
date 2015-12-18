@@ -9,10 +9,9 @@ import ex_parallel_original
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import math
-from compare_test import kdv_func, kdv_init
+from compare_test import kdv_func, kdv_init, kdv_solout
 from numpy import meshgrid
 import fnbruss
-import yappi
 
 
 '''
@@ -204,7 +203,7 @@ def E5Problem():
 #BRUSS-2D problem
     
 A=0
-N=20
+N=15
 step=0
 x=0
 y=0
@@ -315,16 +314,16 @@ def BRUSS2DProblem():
     tf=11.5
     denseOutput = [0,1.5,tf]
     initialValue = BRUSS2DInitialValue(N)
-    denseOutput = [0,0.5,1.,1.3,1.4,5.6,6.,6.1,6.2,10]
+#     denseOutput = [0,0.5,1.,1.3,1.4,5.6,6.,6.1,6.2,10]
     return TestProblemDefinition("BRUSS2D_"+str(N), FortBRUSS2Df, BRUSS2Dgrad, 0, initialValue, denseOutput,1.,None)
 
 #KDV problem
 
 def KDVProblem():
-    t0, tf = 0, 0.003
+    t0, tf = 0, 0.0003
     denseOutput = [t0,tf]
     y0 = kdv_init(t0)
-    return TestProblemDefinition("kdv", kdv_func, None, t0, y0, denseOutput,1.,None)
+    return TestProblemDefinition("kdv2", kdv_func, None, t0, y0, denseOutput,1.,None)
 
 
 def getAllTests():
@@ -367,17 +366,20 @@ def getReferenceFile(problemName):
     return "reference_" + problemName + ".txt"
       
 
-def inputTuple(k,denseOutput,test,rtol,atol,firstStep,robustness,smoothing,seq,useOptimal):    
+def inputTuple(k,denseOutput,test,rtol,atol,firstStep,robustness,smoothing,seq,useOptimal, useGrad):    
     '''
     Gets the input tuple to pass to the solver with all the parameters passed to this function.
     
     If useOptimal is True then the parameters smoothing and seq are ignored and the returned tuple
     sets its values to the optimal values (obtained through exhaustive comparison on multiple
-    test problemS)
+    test problems)
     '''
     standardTuple = {'func': test.RHSFunction, 'grad': test.RHSGradient, 'y0': test.initialValue, 't': denseOutput
                      ,'full_output': True, 'rtol': rtol, 'atol': atol, 'h0': firstStep, 'mxstep': 10e8, 'robustness': robustness,
                      'smoothing': smoothing,'seq':seq}#, 'nworkers': 1}    
+    
+    if not useGrad:
+        standardTuple['grad'] = None
     
     standardOldTuple = {'func': test.RHSFunction, 'y0': test.initialValue, 't': denseOutput
                      ,'full_output': True, 'rtol': rtol, 'atol': atol, 'h0': firstStep, 'mxstep': 10e8}
@@ -401,8 +403,8 @@ def inputTuple(k,denseOutput,test,rtol,atol,firstStep,robustness,smoothing,seq,u
 #             midsemiimplicitTuple
 #             ,
             eulersemiimplicitTuple
-            ,
-            standardTuple
+#             ,
+#             standardTuple
         ]
         return optimalTuples[k]
     return standardTuple
@@ -419,7 +421,7 @@ def comparisonTest():
     (see inputTuple(...))
     '''
     dense=True
-    tol = [1.e-4]#,1.e-5,1.e-7,1.e-8]#,1.e-10,1.e-12]#,1.e-13,1.e-15]
+    tol = [1.e-7]#,1.e-5,1.e-7,1.e-8]#,1.e-10,1.e-12]#,1.e-13,1.e-15]
     resultDict={}
     useOptimal = True
     solverFunctions = [
@@ -432,8 +434,8 @@ def comparisonTest():
 #         ex_parallel.ex_midpoint_semi_implicit_parallel
 #         ,
         ex_parallel.ex_euler_semi_implicit_parallel
-#         ,
-#         integrate.odeint
+        ,
+        integrate.odeint
         ]
     labelsFunction=[
 #         "New Explicit parl"
@@ -445,24 +447,26 @@ def comparisonTest():
 #         "SemiImp Midpoint"
 #         ,
         "Semi Eul"
-#         ,
-#         "Scipy int"
+        ,
+        "Scipy int"
         ]
 
     robustnesses=[3]#, 3, 5, 10, 100]
     smoothings = ['no']#,'semiimp']#,'gbs']
-    useGrads = [False]#, False]
+#     useGrads = [True]#, False]
+    useGrad = False
+    workers=[1,1,2,2]
 
     def BD1983(t):
         #First value of the sequence not used
         seq=[0,2,6,10,14,22,34,50,70,98,138,194]
         return seq[t]
     
-    seqs = {'2(2t-1)':(lambda t: 2*(2*t-1))}#,'t+1':(lambda t: t+1)}#,'B&D1983':BD1983,'None':None}#, }
+    seqs = {'2(2t-1)':(lambda t: 2*t)}#,'t+1':(lambda t: t+1)}#,'B&D1983':BD1983,'None':None}#, }
     firstStep=0.0005
     for test in getAllTests():
         testProblemResult = []
-        for aux in range(0,len(labelsFunction)*len(robustnesses)*len(smoothings)*len(useGrads)*len(seqs)):
+        for aux in range(0,len(labelsFunction)*len(robustnesses)*len(smoothings)*len(workers)*len(seqs)):
             testProblemResult.append([])
         y_ref = np.loadtxt(getReferenceFile(test.problemName))
         denseOutput = test.denseOutput
@@ -485,55 +489,65 @@ def comparisonTest():
             for seqStr in seqs:
                 seq = seqs[seqStr]
 #                 print("sequence " + seqStr)
-                for useGrad in useGrads:
-                    print("gradient " + str(useGrad))
+#                 for useGrad in useGrads:
+                for worker in workers:
+#                     print("gradient " + str(useGrad))
+                    print("workers " + str(worker))
                     for smoothing in smoothings:
 #                         print("smoothing " + str(smoothing))
                         for robustness in robustnesses:
 #                             print("robustness " + str(robustness))
                             k=0    
                             for solverFunction in solverFunctions:
-                                startTime = time.time()
                                 if solverFunction is integrate.odeint:
                                     if(useGrad):
                                         grad = test.RHSGradient
                                     else:
                                         grad = None
-
+                                    startTime = time.time()
                                     ys, infodict = solverFunction(test.RHSFunction,test.initialValue, denseOutput, Dfun= grad, atol=atol, rtol=rtol, mxstep=100000000, full_output = True)
+                                    finalTime = time.time()
+
                                     mean_order = 0
                                     fe_seq = np.sum(infodict["nfe"])
                                     mused = infodict["mused"]
-#                                     print "1: adams (nonstiff), 2: bdf (stiff) -->" + str(mused)
+                                    print "1: adams (nonstiff), 2: bdf (stiff) -->" + str(mused)
                                 else:
 #                                     print("initial guess " + str(first))
 #                                     print("iterative "+ str(first))
 #                                     print("freeze jac " + str(first))
-                                    ex_parallel.setusegradient(useGrad)
-                                    aaa=(True and first)
-                                    ex_parallel.setfrezeejacobian(True)
-                                    ex_parallel.setwork(True)
-                                    ex_parallel.setaddinitialguess(False)
-                                    ex_parallel.setiterative(True)
-                                    if(first):
-                                        first=False
-                                    functionTuple=inputTuple(k,denseOutput, test,rtol,atol,firstStep,robustness,smoothing,seq,useOptimal)
-#                                     yappi.start()
+
+                                    #To use this external setting the number of workers
+                                    #disable the ex_parallel call to set_NUM_WORKERS function 
+                                    #and I recommend changing the use of NUM_WORKERS variable
+                                    #in A(k) to a fix number (to have a more accurate comparison of how
+                                    #parallelization works).
+#                                     ex_parallel.set_NUM_WORKERS(worker)
+
+#                                     ex_parallel.setfrezeejacobian(True)
+#                                     ex_parallel.setwork(False)
+#                                     ex_parallel.setaddinitialguess(False)
+#                                     ex_parallel.setiterative(True)
+
+                                    functionTuple=inputTuple(k,denseOutput, test,rtol,atol,firstStep,robustness,smoothing,seq,useOptimal, useGrad)
+                                    startTime = time.time()
                                     ys, infodict = solverFunction(**functionTuple)
-                                #Code to see bottleneck in the code
-#                                     yappi.get_func_stats().print_all()
-#                                     yappi.clear_stats()                                    
+                                    finalTime = time.time()
+                                  
                                     mean_order = infodict["k_avg"]
                                     fe_seq = infodict["fe_seq"]
 
         
-                                finalTime = time.time()
                                 fe_tot = np.sum(infodict["nfe"])
                                 nsteps = np.sum(infodict["nst"])
                                 je_tot = np.sum(infodict["nje"])
                                 ys=ys[1:len(ys)]
-                                componentwise_relative_error = (ys-y_ref)/y_ref
-                                relative_error = [np.linalg.norm(output, 2) for output in componentwise_relative_error]
+                                
+                                relative_error = np.linalg.norm(ys-y_ref)/np.linalg.norm(y_ref)
+#                                 relative_error = np.linalg.norm((kdv_solout(ys[-1])-y_ref))/np.linalg.norm(y_ref)
+#                                 relative_error = np.linalg.norm((kdv_solout(ys[-1])-y_ref)/y_ref)
+
+#                                 relative_error = [np.linalg.norm(output, 2) for output in componentwise_relative_error]
                                 print(relative_error)
                                 maximum_relative_error = np.linalg.norm(relative_error)
                                 testProblemResult[j].append([finalTime-startTime, maximum_relative_error, fe_tot, nsteps, mean_order, fe_seq, je_tot])
@@ -543,7 +557,7 @@ def comparisonTest():
                                 if(not useOptimal):
                                     labels.append(labelsFunction[k] + ", smooth=" + str(smoothing) + " , seq = " + seqStr)
                                 else:
-                                    labels.append(labelsFunction[k] + " optim, freeze=" + str(aaa) ) # + ", seq = " + str(seqStr))#", it= " + str(aaa))
+                                    labels.append(labelsFunction[k] + " optim, worker=" + str(worker) ) # + ", seq = " + str(seqStr))#", it= " + str(aaa))
                                 k+=1
                                 j+=1
         
