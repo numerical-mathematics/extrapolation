@@ -587,8 +587,8 @@ def checkDerivativesForPolynomial():
 
 
 if __name__ == "__main__":
-    non_dense_tests()
-    dense_tests()
+#     non_dense_tests()
+#     dense_tests()
   
     doAllConvergenceTests()
     checkInterpolationPolynomial()
