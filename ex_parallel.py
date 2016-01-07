@@ -3,10 +3,7 @@ import numpy as np
 import multiprocessing as mp
 import math
 from scipy import optimize
-import os
-import warnings
 import scipy
-import time
 import forward_diff
 
 '''
@@ -99,15 +96,13 @@ def _solve_implicit_step(zero_f, zero_grad, estimatedValue, addSolverParam):
     #TODO: Problem -> fsolve doesn't seem to work well with xtol parameter
     #TODO: pass to the zero finder solver the tolerance required to the overall problem 
     # by doing this the error by the solver doesn't limit the global error of the ODE's solution
-
+    #TODO change solver so it doesn't do the 2 extra unnecessary function evaluations
+    #https://github.com/scipy/scipy/issues/5369
+    #TODO: add extra 2 function evaluations
     
     x, infodict, ier, mesg = optimize.fsolve(zero_f,estimatedValue, 
             fprime = zero_grad, full_output = True, xtol=addSolverParam['min_tol'])
-#     print ("jac ev: " + str(infodict["njev"]))
-#     print ("func ev: " + str(infodict["nfev"]))
-    #TODO change solver so it doesn't do the 2 extra unnnecessary function evaluations
-    #https://github.com/scipy/scipy/issues/5369
-    #TODO: add extra 2 function evaluations
+
     if("njev" in infodict):
         return (x, infodict["nfev"], infodict["njev"])
     else:
@@ -173,8 +168,6 @@ def _calculateMatrix(I,J00,step):
     '''
     Calculates matrix needed for semi implicit methods.
     
-    TODO: this part of code takes a long time.
-    
     @param I (2D array): identity matrix
     @param J00 (2D array): Jacobian matrix
     @param step (float): step length
@@ -208,11 +201,8 @@ def _euler_semiimplicit(f, grad, previousValues, previousTime, f_previousValue,s
     if(not addSolverParam['initialGuess']):
         xval=None
     else:
-        # The option of doing an explicit step doesn't seem to be effective (maybe because with
+        #TODO: The option of doing an explicit step doesn't seem to be effective (maybe because with
         # extrapolation we are taking too big steps for the explicit solver to be close to the solution).
-        # Doing the _euler_explicit doesn't cost extra function evaluations
-        # This idea came from the lsode solver.
-        # TODO: This should be tested more extensively
 #         xval, f_yj, fe_tot_,je_tot=_euler_explicit(f, grad, previousValues, previousTime, f_yj, step, args, addSolverParam)
 #         fe_tot += fe_tot_
         xval = previousValue
@@ -221,12 +211,10 @@ def _euler_semiimplicit(f, grad, previousValues, previousTime, f_previousValue,s
     
     #TODO: change this checking of the sparsity type of the matrix only once
     # at the beginning of the ODE solving 
-    #Choose system solver: 
-    #http://scicomp.stackexchange.com/questions/3262/how-to-choose-a-method-for-solving-linear-equations
     if(scipy.sparse.issparse(J00)):
         A=_calculateMatrix(Isparse,J00,step)
         if(addSolverParam['iterative']):
-            #TODO: choose an appropiate maxiter parameter to distribute work between taking more steps and having a
+            #TODO: choose an appropriate maxiter parameter to distribute work between taking more steps and having a
             #more accurate solution
             sol, info= scipy.sparse.linalg.gmres(A, b, tol=addSolverParam['min_tol'],x0=xval, maxiter=100)                             
             if info >0:
@@ -276,9 +264,6 @@ def _midpoint_implicit(f, grad, previousValues, previousTime,f_previousValue, st
     fe_tot +=fe_tot_
     je_tot += je_tot_
     
-    #TODO: see if this extra function can be done only if interpolating polynomial is calculated (looks complicated)
-    #This can't follow the _midpoint_explicit approach because in _midpoint_implicit we are doing function evaluations
-    #at previousTime+step/2
     f_yj= f(*(previousValue,previousTime)+args)
     fe_tot += 1
     return (x, f_yj, fe_tot, je_tot)
@@ -382,8 +367,7 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj
         Tj1 = Y[nj]
         if(not smoothing == 'no'):
             #TODO: this f_yj_unused can be used in the case of interpolation, it should be adequately saved in
-            #f_yj so function evaluations are not repeated. Careful: only in the case of symmetric interpolation this 
-            #value is currently recalculated (because is needed).
+            #f_yj so function evaluations are not repeated.
             nextStepSolution, f_yj_unused, fe_tot_, je_tot_ = method(func, grad, (Y[nj-1], Y[nj]), tn + h, None, step, args, addSolverParam, **methodargs)
             fe_tot += fe_tot_
             je_tot += je_tot_
@@ -654,7 +638,6 @@ def _getJacobian(func, args, yn, tn, grad, methodargs, rejectPreviousStep, previ
             
             global previousJ00
             if(addSolverParam['freezeJac'] and not rejectPreviousStep):
-                #TODO: update J00 Broyden-style
                 yn_1, f_yn_1 = previousStepSolution
                 updatedJ00, f_yn = _updateJ00(previousJ00,func, yn, tn, yn_1, f_yn_1, args)
                 methodargs['J00']=updatedJ00
@@ -1393,7 +1376,6 @@ def _solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args
     
     y_solution=[]
     if((not rejectStep) & dense):
-        #TODO: see if grad (gradient function) can be used for the interpolating
         rejectStep, y_solution, h_int, (fe_tot_, fe_seq_) = _interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half, f_yj,yj, yn, 
                                                                          atol, rtol, seq, adaptative, symmetric)
         fe_tot += fe_tot_
@@ -1465,18 +1447,7 @@ def _interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half
     '''
     
     fe_tot = 0
-    fe_seq = 0
-    #Do last evaluations to construct polynomials
-    #they are done here to avoid extra function evaluations if interpolation is not needed
-    for j in range(1,len(T[:,1])):
-        Tj1=T[j,1]
-        f_yjj = f_yj[j]
-        #TODO: reuse last function evaluation to calculate next step
-        f_yjj[-1] = func(*(Tj1, t_curr + h) + args)
-        fe_tot+=1
-        fe_seq +=1
-        
-        
+    fe_seq = 0    
         
     Tkk = T[k,k]
     f_Tkk = func(*(Tkk, t_curr+h) + args)
@@ -1485,11 +1456,19 @@ def _interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half
     
     #Calculate interpolating polynomial
     if(symmetric):
-#         poly = _interpolate_nonsym(y0, Tkk, yj, hs, h, k, atol,rtol, seq)
+        #Do last evaluations to construct polynomials
+        #they are done here to avoid extra function evaluations if interpolation is not needed
+        #This extra function evaluations are only needed for the symmetric interpolation
+        for j in range(1,len(T[:,1])):
+            Tj1=T[j,1]
+            f_yjj = f_yj[j]
+            #TODO: reuse last function evaluation to calculate next step
+            f_yjj[-1] = func(*(Tj1, t_curr + h) + args)
+            fe_tot+=1
+            fe_seq +=1
         poly = _interpolate_sym(yn, Tkk, f_Tkk, y_half, f_yj, hs, h, k, atol,rtol, seq)
     else:
         poly = _interpolate_nonsym(yn, Tkk, yj, hs, h, k, atol,rtol, seq)
-#         poly = _interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, h, k, atol,rtol, seq)
 
     y_solution=[]
     old_index = t_index
@@ -1529,9 +1508,7 @@ def _getAdditionalSolverParameters(N,atol,rtol,addWork):
     @param addWork (bool): whether to add extra work to the work estimation used to compute
             next step to take. Should only be True when some form of Jacobian estimation
             or evaluation is performed.
-            
-    #TODO: currently addWork value is overridden
-            
+                        
     @return addSolverParam (dict):
              KEY            MEANING
             'min_tol'      minimum tolerance, see BLOCK 1 functions, used in implicit and semi implicit methods
@@ -1685,8 +1662,7 @@ def ex_midpoint_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0
     
     methodargs = {}
     methodargs["J00"] = None
-    #TODO see if code can be reused into using only one of the matrices
-    #(if performance is not worse)
+    
     methodargs["I"] = np.identity(len(y0), dtype=float)
     methodargs["Isparse"] = np.identity(len(y0), dtype=float)  
 
@@ -1729,8 +1705,6 @@ def ex_euler_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0, r
     
     methodargs = {}
     methodargs["J00"] = None
-    #TODO see if code can be reused into using only one of the matrices
-    #(if performance is not worse)
     
     #The identity matrices are created here so that they can be reused (and are not 
     #recalculated), and also because global variables cause problems with multiprocessing
