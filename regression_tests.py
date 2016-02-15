@@ -8,112 +8,13 @@ import twelve_tests as tst
 #Whether to do convergence plots to see if they are straight lines (to choose the steps)
 plotConv=False
 
-allmethods = ['midpoint explicit','midpoint implicit','midpoint semi implicit','euler explicit','euler semi implicit']
+allmethods = ['explicit midpoint','implicit midpoint','semi-implicit midpoint','explicit Euler','semi-implicit Euler']
 #Methods that use smoothing loose an order of convergence
 methodsmoothing = [0,1,1,0,0]
-
-
-regressionvalues = {'midpoint explicit':[
-                        [2.4054371001e-06,   4.3055665867e-07,   6.1728696137e-10,
-         1.8917700341e-12,   2.7161091660e-15,   2.7161091660e-15],
-                        [2.4641284233e-06,   2.4641284233e-06,   1.9030069619e-09,
-         1.4625004260e-09,   1.5762550692e-13,   1.0086956501e-14],
-                        [2.2475235488e-06,   1.0300735551e-06,   1.1973036784e-08,
-         4.4328429816e-11,   2.2526425170e-13,   8.2156503822e-15]                      
-                                         ]                    
-                    ,'midpoint implicit':[
-                        [1.5293204761e-08,   1.1928156003e-08,   1.5104319287e-09,
-         8.1136216588e-13,   4.2250587027e-15,   7.5447476834e-16],
-                        [ 1.8031544714e-08,   1.8035168218e-08,   3.1238860457e-09,
-         6.0817623062e-13,   1.7484057935e-15,   2.4208695602e-15],
-                        [3.8327484742e-08,   1.1024071656e-09,   8.2266193857e-11,
-         8.5931262106e-14,   5.9952043330e-15,   1.5543122345e-15]                      
-                                         ]
-                    ,'midpoint semi implicit':[
-                        [8.0450452184e-07,   8.0450452184e-07,   1.1962604868e-09,
-         7.9778162005e-13,   1.9616343977e-15,   3.0178990734e-15],
-                        [ 2.2771937896e-08,   2.2771937896e-08,   9.8490786300e-09,
-         7.3030909994e-11,   2.0604289812e-13,   3.0933333269e-15],
-                        [9.1299733940e-07,   9.1299733940e-07,   2.2042861980e-09,
-         1.5252021868e-11,   1.0214051827e-13,   8.3266726847e-15]                        
-                                         ]
-                    ,'euler explicit':[
-                        [ 5.1530388716e-04,   1.0316403746e-06,   2.1394378449e-08,
-         4.2737343969e-10,   3.4526274349e-12,   3.3800469622e-13],
-                        [4.7945288696e-04,   4.1676312202e-05,   2.7430285643e-07,
-         2.4722151276e-09,   3.9390775571e-11,   1.2338365192e-12],
-                        [5.5596474756e-04,   1.5538277741e-06,   4.6832369094e-09,
-         3.6981750995e-11,   1.8984813721e-13,   2.2148949341e-13]                       
-                                         ]
-                    ,'euler semi implicit':[
-                        [2.3100925231e-06,   1.6777735428e-06,   1.1281401974e-08,
-         6.8942395382e-11,   2.5335262721e-13,   2.8458788262e-13],
-                        [7.6971229056e-06,   2.8710945728e-06,   6.0000955762e-08,
-         8.1554684121e-10,   1.4732739680e-11,   3.5129507174e-13],
-                        [4.0039427062e-06,   8.3667530160e-07,   1.2044836240e-09,
-         3.1111668797e-11,   1.4654943925e-14,   1.7763568394e-14]                       
-                                         ]}
-
-regressionvaluesdense = {'midpoint explicit':[
-                        [3.4642501161e-07,   3.4642501161e-07,   4.3374772739e-09,
-         9.4880259659e-13,   1.9190810732e-15,   2.2736380777e-15],
-                        [2.9323421672e-07,   2.9323421672e-07,   8.1102149183e-09,
-         1.8421823156e-11,   2.8988487086e-13,   2.4080152326e-14],
-                        [4.8941277641e-07,   4.8941277641e-07,   8.9348270645e-09,
-         6.3902126450e-11,   2.5726071861e-13,   6.4646253816e-15]                        
-                                         ]                    
-                    ,'midpoint implicit':[
-                        [ 4.5573535834e-07,   4.5386635234e-07,   1.3496938571e-07,
-         3.7594370070e-10,   3.6022394936e-08,   6.9953683983e-09],
-                        [8.2413858176e-07,   8.2414062859e-07,   6.0333530921e-08,
-         1.2261597675e-09,   1.1225879293e-09,   3.5890791004e-09],
-                        [1.3820565861e-06,   1.3758790352e-06,   7.0553999910e-08,
-         1.1037088895e-07,   1.5887463787e-08,   2.6978897733e-09]                       
-                                         ]
-                    ,'midpoint semi implicit':[
-                        [1.6844768967e-06,   1.6844768967e-06,   3.0290113955e-08,
-         6.3914198269e-09,   5.8442029708e-08,   8.4710131146e-09],
-                        [1.1506381998e-06,   1.1506381998e-06,   1.1279165511e-08,
-         5.0249290647e-09,   4.6299269576e-08,   6.1071721315e-10],
-                        [1.4565000722e-06,   1.4565000722e-06,   1.6342739136e-08,
-         3.2428177132e-08,   6.8445978340e-10,   1.0194164228e-07]                       
-                                         ]
-                    ,'euler explicit':[
-                        [3.6652288081e-04,   6.3501597236e-06,   1.3078086207e-08,
-         1.7312127004e-10,   1.4091210316e-12,   2.2623039249e-12],
-                        [3.9326591749e-04,   5.1895536078e-05,   2.5848895459e-07,
-         2.1451167261e-09,   3.4473686776e-11,   9.2666003762e-13],
-                        [6.0412010046e-04,   1.5551489837e-06,   4.0491380415e-09,
-         1.4740434733e-10,   2.1519318487e-12,   9.7896453378e-13]                       
-                                         ]
-                    ,'euler semi implicit':[
-                        [ 2.5217524868e-05,   2.4642363796e-05,   1.7683037167e-08,
-         6.9499620478e-11,   4.3153242717e-12,   1.7553153345e-11],
-                        [6.0794514737e-04,   3.5010746371e-06,   5.1065185129e-07,
-         1.3428965111e-09,   1.4571102983e-11,   2.8916618098e-13],
-                        [ 4.7095438519e-04,   1.8734554551e-06,   8.5109742980e-08,
-         6.7031283936e-10,   8.4730847123e-12,   5.1272933202e-12]                        
-                                         ]}
-
+regression_methods = ['explicit midpoint','implicit midpoint']
 
 def relative_error(y, y_ref):
     return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref)
-
-def regression_tst(method, func, y0, t, y_ref, tol_boundary=(0,6), h0=0.5, mxstep=10e6,
-        adaptive="order", p=4, solout=(lambda t: t), nworkers=2):
-    tol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
-    a, b = tol_boundary
-    tol = tol[a:b]
-
-    err = np.zeros(len(tol))
-    print ''
-    for i in range(len(tol)):
-        print tol[i]
-        ys, infodict = ex_parallel.extrapolation_parallel(method,func, None, y0, t, atol=tol[i], 
-            rtol=tol[i], mxstep=mxstep, full_output=True, nworkers=nworkers)
-        y = solout(ys[1:len(ys)])
-        err[i] = relative_error(y, y_ref)
-    return err
 
 def f_1(y,t):
     lam = -1
@@ -150,58 +51,155 @@ def exact_4(t):
 
 alltestfunctions = [(f_1,exact_1),(f_2,exact_2),(f_3,exact_3)]
 
-def checkRegression(err, err_ref, test_name):
-    """
-    Checks if err equals err_ref, returns silently if err equals err_ref (matching 10 decimals)
-    or raises an exception otherwise
-    @param err: calculated error
-    @param err_ref: expected error
-    @param test_name: tests explanation and/or explanatory name
-    """
-    np.testing.assert_array_almost_equal(err, err_ref, 10, "REGRESSION TEST " + test_name + " FAILED")
-    
-    
+reference_solutions = {
+    'explicit midpoint' : {
+        f_1 : {
+                1.e-3 :  [0.367880291007],
+                1.e-5 :  [0.36788005839],
+                1.e-7 :  [0.367879445322],
+                1.e-9 :  [0.367879441197],
+                1.e-11 : [0.367879441172],
+                1.e-13 : [0.367879441171]
+            },
+        f_2 : {
+                1.e-3 :  [1.6509654995],
+                1.e-5 :  [1.65097346807],
+                1.e-7 :  [1.65097810912],
+                1.e-9 :  [1.6509782068],
+                1.e-11 : [1.65097820812],
+                1.e-13 : [1.65097820815]
+            },
+        f_3 : {
+                1.e-3 :  [3.99998398423],
+                1.e-5 :  [3.9999966533],
+                1.e-7 :  [4.00000000482],
+                1.e-9 :  [3.99999999988],
+                1.e-11 : [4.0],
+                1.e-13 : [4.0]
+            }
+         },
+    'implicit midpoint' : {
+        f_1 : {
+                1.e-3 :  [0.367880291007],
+                1.e-5 :  [0.36788005839],
+                1.e-7 :  [0.367879445322],
+                1.e-9 :  [0.367879441197],
+                1.e-11 : [0.367879441172],
+                1.e-13 : [0.367879441171]
+            },
+        f_2 : {
+                1.e-3 :  [1.6509654995],
+                1.e-5 :  [1.65097346807],
+                1.e-7 :  [1.65097810912],
+                1.e-9 :  [1.6509782068],
+                1.e-11 : [1.65097820812],
+                1.e-13 : [1.65097820815]
+            },
+        f_3 : {
+                1.e-3 :  [3.99998398423],
+                1.e-5 :  [3.9999966533],
+                1.e-7 :  [4.00000000482],
+                1.e-9 :  [3.99999999988],
+                1.e-11 : [4.0],
+                1.e-13 : [4.0]
+            }
+         }
+    }
+
+dense_reference_solutions = {
+    'explicit midpoint' : {
+        f_1 : {
+                1.e-3 :  [],
+                1.e-5 :  [],
+                1.e-7 :  [],
+                1.e-9 :  [],
+                1.e-11 : [],
+                1.e-13 : []
+            },
+        f_2 : {
+                1.e-3 :  [],
+                1.e-5 :  [],
+                1.e-7 :  [],
+                1.e-9 :  [],
+                1.e-11 : [],
+                1.e-13 : []
+            },
+        f_3 : {
+                1.e-3 :  [],
+                1.e-5 :  [],
+                1.e-7 :  [],
+                1.e-9 :  [],
+                1.e-11 : [],
+                1.e-13 : []
+            }
+         },
+    'implicit midpoint' : {
+        f_1 : {
+                1.e-3 :  [0.513416992557],
+                1.e-5 :  [0.513417041583],
+                1.e-7 :  [0.51341711976],
+                1.e-9 :  [0.51341708752],
+                1.e-11 : [0.513417119092],
+                1.e-13 : [0.51341711908]
+            },
+        f_2 : {
+                1.e-3 :  [1.15744652812],
+                1.e-5 :  [1.15744652813],
+                1.e-7 :  [1.15744600006],
+                1.e-9 :  [1.15744546087],
+                1.e-11 : [1.15744580962],
+                1.e-13 : [1.1574455052]
+            },
+        f_3 : {
+                1.e-3 :  [2.08642350313],
+                1.e-5 :  [2.08642338504],
+                1.e-7 :  [2.08641986814],
+                1.e-9 :  [2.08642012105],
+                1.e-11 : [2.08641975192],
+                1.e-13 : [2.08642041979]
+            }
+         }
+    }
+
 ########### RUN TESTS ###########
 
-def non_dense_tests():
-    print("\n Executing regression non dense tests")
+tolerances = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
+def non_dense_output_tests():
+    print("\n Executing regression tests without dense output...")
     
-    for method in allmethods:
+    for method in regression_methods:
         print("\n Method: " + method)
-        k=0
-        for test in alltestfunctions:
-            print("\n Test: " + str(k))
-            (f,exact) = test
+        for f, exact in alltestfunctions:
+            print("\n   Test: " + f.__name__)
             t0, tf = 0.1, 1
             y0 = exact(t0)
-            y_ref = exact(tf)
-            err = regression_tst(method, f, y0, [t0, tf], y_ref)
-            err_ref = regressionvalues[method][k] 
-            checkRegression(err, err_ref, "Test " + str(k))
-            k+=1
-            print err
+            output_times = [t0, tf]
+            for tol in tolerances:
+                print("\n       Tolerance: " + str(tol))
+                ys, infodict = ex_parallel.extrapolation_parallel(method,f, None, y0, output_times, atol=tol,
+                    rtol=tol, mxstep=1.e6, full_output=True, nworkers=2)
+                y = ys[-1][0]
+                assert np.allclose(y, reference_solutions[method][f][tol])
      
     print("All tests passed")
 
 
-def dense_tests():
-    print("\n Executing regression dense tests")
+def dense_output_tests():
+    print("\n Executing regression tests with dense output...")
     
-    for method in allmethods:
+    for method in regression_methods:
         print("\n Method " + method)
-        k=0
-        for test in alltestfunctions:
-            print("\n Test " + str(k))
-            (f,exact) = test
+        for f, exact in alltestfunctions:
+            print("\n   Test " + f.__name__)
             t0 = 0.1
-            t=[t0,0.25,0.5,0.75,1]
+            output_times = [t0,1./3,2./3,1]
             y0 = exact(t0)
-            y_ref = exact([[t[1]],[t[2]],[t[3]],[t[4]]])
-            err = regression_tst(method, f, y0, t, y_ref)
-            err_ref = regressionvaluesdense[method][k] 
-            checkRegression(err, err_ref, "Test " + str(k))
-            k+=1
-            print err
+            for tol in tolerances:
+                print("\n       Tolerance: " + str(tol))
+                ys, infodict = ex_parallel.extrapolation_parallel(method,f, None, y0, output_times, atol=tol,
+                    rtol=tol, mxstep=1.e6, full_output=True, nworkers=2)
+                y = ys[-2][0]
+                assert np.allclose(y, dense_reference_solutions[method][f][tol])
                 
     print("All tests passed")
 
@@ -255,7 +253,7 @@ def checkConvergenceCoeff(coeff, coeff_ref, test_name):
     @param err_ref: expected error
     @param test_name: tests explanation and/or explanatory name
     """
-    np.testing.assert_approx_equal(coeff, coeff_ref, 1, "CONVERGENCE TEST " + test_name + " FAILED")
+    np.testing.assert_approx_equal(coeff, coeff_ref, 1, "Convergence test " + test_name + " failed")
 
 
 def doAllConvergenceTests():
@@ -328,7 +326,7 @@ def doAllConvergenceTests():
     allordersvdpol = [2,4,6,8]
     allvdpolsteps = [vdpolSteps2,vdpolSteps2,vdpolSteps6,vdpolSteps8]
 
-    print("\n Executing convergence non dense tests")
+    print("\n Executing convergence tests without dense output")
     
     i=0
     for method in allmethods:
@@ -360,7 +358,7 @@ def doAllConvergenceTests():
           
     print("All tests passed")
     
-    print("\n Executing convergence dense tests")
+    print("\n Executing convergence tests with dense output")
     
     i=0
     for method in allmethods:
@@ -587,8 +585,8 @@ def checkDerivativesForPolynomial():
 
 
 if __name__ == "__main__":
-#     non_dense_tests()
-#     dense_tests()
+    non_dense_output_tests()
+    dense_output_tests()
   
     doAllConvergenceTests()
     checkInterpolationPolynomial()
