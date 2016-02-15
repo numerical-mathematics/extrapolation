@@ -464,17 +464,9 @@ def doAllConvergenceTests():
     global plotConv
     plotConv=False
  
-    #linear: 2
-    linearSteps2 = np.concatenate((np.linspace(0.5,0.2,4), np.linspace(0.19,0.04,7),np.linspace(0.039,0.02,7),
-                                  np.linspace(0.019,0.005,10),np.linspace(0.0049,0.002,10),np.linspace(0.0019,0.001,10)))
-    
-    #linear: 4
-    linearSteps4 = np.concatenate((np.linspace(0.5,0.2,4), np.linspace(0.19,0.04,7),np.linspace(0.039,0.02,7),
-                                  np.linspace(0.019,0.005,10),np.linspace(0.0049,0.0035,5)))
-    
-    #linear: 6 
-    linearSteps6 = np.concatenate((np.linspace(0.7,0.2,3), np.linspace(0.19,0.04,7),np.linspace(0.039,0.02,7),
-                                  np.linspace(0.019,0.015,4)))
+    linearSteps2 = np.array([0.5,0.2,0.04,0.02,0.005,0.002,0.001])
+    linearSteps4 = np.array([0.5,0.2,0.04,0.02,0.005,0.002,0.001])
+    linearSteps6 = np.array([0.5,0.2,0.04,0.02])
     
     #vdpol: 2,4
     vdpolSteps2 = np.concatenate((np.linspace(0.15,0.04,5),np.linspace(0.039,0.02,7),
