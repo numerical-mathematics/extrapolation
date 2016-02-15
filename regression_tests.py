@@ -8,10 +8,53 @@ import twelve_tests as tst
 #Whether to do convergence plots to see if they are straight lines (to choose the steps)
 plotConv=False
 
-allmethods = ['explicit midpoint','implicit midpoint','semi-implicit midpoint','explicit Euler','semi-implicit Euler']
 #Methods that use smoothing loose an order of convergence
-methodsmoothing = [0,1,1,0,0]
-regression_methods = ['explicit midpoint','implicit midpoint']
+methods = {
+               'explicit midpoint' :      {'smoothing' : False, 
+                                           'linear_step_exception' : [None,None,None], 
+                                           'linear_dense_skip' : [False,False,False], 
+                                           'vdpol_step_exception' : [None,None,None,None],
+                                           'vdpol_skip' : [False,False,False,False],
+                                           'vdpol_dense_skip' : [False,False,False,False],
+                                           'vdpol_dense_step_exception' : [None,None,None,None],
+                                           'linear_dense_step_exception' : [None,None,None]},
+
+               'implicit midpoint' :      {'smoothing' : True,  
+                                           'linear_step_exception' : [None,None,None], 
+                                           'linear_dense_skip' : [False,False,False], 
+                                           'vdpol_step_exception' : [None,None,None,None],
+                                           'vdpol_skip' : [False,False,False,False],
+                                           'vdpol_dense_skip' : [False,False,False,False],
+                                           'vdpol_dense_step_exception' : [None,None,None,None],
+                                           'linear_dense_step_exception' : [None,None,None]},
+
+               'semi-implicit midpoint' : {'smoothing' : True,  
+                                           'linear_step_exception' : [None,None,None], 
+                                           'linear_dense_skip' : [False,False,False], 
+                                           'vdpol_step_exception' : [None,None,None,None],
+                                           'vdpol_skip' : [False,False,False,False],
+                                           'vdpol_dense_skip' : [False,False,False,False],
+                                           'vdpol_dense_step_exception' : [None,None,None,None],
+                                           'linear_dense_step_exception' : [None,None,None]},
+
+               'explicit Euler' :         {'smoothing' : False, 
+                                           'linear_step_exception' : [None,None,None], 
+                                           'linear_dense_skip' : [False,False,False], 
+                                           'vdpol_step_exception' : [None,None,None,None],
+                                           'vdpol_skip' : [False,False,False,False],
+                                           'vdpol_dense_skip' : [False,False,False,False],
+                                           'vdpol_dense_step_exception' : [None,None,None,None],
+                                           'linear_dense_step_exception' : [None,None,None]},
+
+               'semi-implicit Euler' :    {'smoothing' : False, 
+                                           'linear_step_exception' : [None,None,None], 
+                                           'linear_dense_skip' : [False,False,False], 
+                                           'vdpol_step_exception' : [None,None,None,None],
+                                           'vdpol_skip' : [False,False,False,False],
+                                           'vdpol_dense_skip' : [False,False,False,False],
+                                           'vdpol_dense_step_exception' : [None,None,None,None],
+                                           'linear_dense_step_exception' : [None,None,None]}
+           }
 
 def relative_error(y, y_ref):
     return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref)
@@ -78,6 +121,7 @@ reference_solutions = {
                 1.e-13 : [4.0]
             }
          },
+
     'implicit midpoint' : {
         f_1 : {
                 1.e-3 :  [0.367880291007],
@@ -103,13 +147,37 @@ reference_solutions = {
                 1.e-11 : [4.0],
                 1.e-13 : [4.0]
             }
-         }
-    }
-
-dense_reference_solutions = {
-    'explicit midpoint' : {
+         },
+    'semi-implicit midpoint' : {
         f_1 : {
-                1.e-3 :  [],
+                1.e-3 :  [0.367879737132],
+                1.e-5 :  [0.367879737132],
+                1.e-7 :  [0.367879441612],
+                1.e-9 :  [0.367879441172],
+                1.e-11 : [0.367879441171],
+                1.e-13 : [0.367879441171]
+            },
+        f_2 : {
+                1.e-3 :  [1.65097824605],
+                1.e-5 :  [1.65097824605],
+                1.e-7 :  [1.65097822441],
+                1.e-9 :  [1.65097820802],
+                1.e-11 : [1.65097820814],
+                1.e-13 : [1.65097820815]
+            },
+        f_3 : {
+                1.e-3 :  [3.99999634801],
+                1.e-5 :  [3.99999634801],
+                1.e-7 :  [3.99999999118],
+                1.e-9 :  [3.99999999994],
+                1.e-11 : [4.0],
+                1.e-13 : [4.0]
+            }
+         },
+
+    'explicit Euler' : {
+        f_1 : {
+                1.e-3 :  [0.368069010877],
                 1.e-5 :  [],
                 1.e-7 :  [],
                 1.e-9 :  [],
@@ -117,7 +185,7 @@ dense_reference_solutions = {
                 1.e-13 : []
             },
         f_2 : {
-                1.e-3 :  [],
+                1.e-3 :  [1.65018664188],
                 1.e-5 :  [],
                 1.e-7 :  [],
                 1.e-9 :  [],
@@ -125,7 +193,64 @@ dense_reference_solutions = {
                 1.e-13 : []
             },
         f_3 : {
-                1.e-3 :  [],
+                1.e-3 :  [3.99777614101],
+                1.e-5 :  [],
+                1.e-7 :  [],
+                1.e-9 :  [],
+                1.e-11 : [],
+                1.e-13 : []
+            }
+         },
+
+    'semi-implicit Euler' : {
+        f_1 : {
+                1.e-3 :  [0.367880291007],
+                1.e-5 :  [],
+                1.e-7 :  [],
+                1.e-9 :  [],
+                1.e-11 : [],
+                1.e-13 : []
+            },
+        f_2 : {
+                1.e-3 :  [1.6509654995],
+                1.e-5 :  [],
+                1.e-7 :  [],
+                1.e-9 :  [],
+                1.e-11 : [],
+                1.e-13 : []
+            },
+        f_3 : {
+                1.e-3 :  [3.99998398423],
+                1.e-5 :  [],
+                1.e-7 :  [],
+                1.e-9 :  [],
+                1.e-11 : [],
+                1.e-13 : []
+            }
+         }
+
+    }
+
+dense_reference_solutions = {
+    'explicit midpoint' : {
+        f_1 : {
+                1.e-3 :  [0.513417318852],
+                1.e-5 :  [],
+                1.e-7 :  [],
+                1.e-9 :  [],
+                1.e-11 : [],
+                1.e-13 : []
+            },
+        f_2 : {
+                1.e-3 :  [1.15744512965],
+                1.e-5 :  [],
+                1.e-7 :  [],
+                1.e-9 :  [],
+                1.e-11 : [],
+                1.e-13 : []
+            },
+        f_3 : {
+                1.e-3 :  [2.08641874929],
                 1.e-5 :  [],
                 1.e-7 :  [],
                 1.e-9 :  [],
@@ -158,7 +283,86 @@ dense_reference_solutions = {
                 1.e-11 : [2.08641975192],
                 1.e-13 : [2.08642041979]
             }
+         },
+    'semi-implicit midpoint' : {
+        f_1 : {
+                1.e-3 :  [0.513417197383],
+                1.e-5 :  [0.513417197383],
+                1.e-7 :  [0.513417121761],
+                1.e-9 :  [0.513417053851],
+                1.e-11 : [0.513417119025],
+                1.e-13 : [0.513417119031]
+            },
+        f_2 : {
+                1.e-3 :  [1.15744626921],
+                1.e-5 :  [1.15744626921],
+                1.e-7 :  [1.1574457217],
+                1.e-9 :  [1.15744556821],
+                1.e-11 : [1.1574454661],
+                1.e-13 : [1.15744546561]
+            },
+        f_3 : {
+                1.e-3 :  [2.08642277948],
+                1.e-5 :  [2.08642277948],
+                1.e-7 :  [2.08642116049],
+                1.e-9 :  [2.08641997499],
+                1.e-11 : [2.08641995246],
+                1.e-13 : [2.08641975312]
+            }
+         },
+    'explicit Euler' : {
+        f_1 : {
+                1.e-3 :  [0.51362268695],
+                1.e-5 :  [],
+                1.e-7 :  [],
+                1.e-9 :  [],
+                1.e-11 : [],
+                1.e-13 : []
+            },
+        f_2 : {
+                1.e-3 :  [1.15688350412],
+                1.e-5 :  [],
+                1.e-7 :  [],
+                1.e-9 :  [],
+                1.e-11 : [],
+                1.e-13 : []
+            },
+        f_3 : {
+                1.e-3 :  [2.08516207191],
+                1.e-5 :  [],
+                1.e-7 :  [],
+                1.e-9 :  [],
+                1.e-11 : [],
+                1.e-13 : []
+            }
+         },
+    'semi-implicit Euler' : {
+        f_1 : {
+                1.e-3 :  [0.513424124096],
+                1.e-5 :  [],
+                1.e-7 :  [],
+                1.e-9 :  [],
+                1.e-11 : [],
+                1.e-13 : []
+            },
+        f_2 : {
+                1.e-3 :  [1.15617955038],
+                1.e-5 :  [],
+                1.e-7 :  [],
+                1.e-9 :  [],
+                1.e-11 : [],
+                1.e-13 : []
+            },
+        f_3 : {
+                1.e-3 :  [2.08703832785],
+                1.e-5 :  [],
+                1.e-7 :  [],
+                1.e-9 :  [],
+                1.e-11 : [],
+                1.e-13 : []
+            }
          }
+
     }
 
 ########### RUN TESTS ###########
@@ -167,7 +371,7 @@ tolerances = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
 def non_dense_output_tests():
     print("\n Executing regression tests without dense output...")
     
-    for method in regression_methods:
+    for method in methods.keys():
         print("\n Method: " + method)
         for f, exact in alltestfunctions:
             print("\n   Test: " + f.__name__)
@@ -175,7 +379,7 @@ def non_dense_output_tests():
             y0 = exact(t0)
             output_times = [t0, tf]
             for tol in tolerances:
-                print("\n       Tolerance: " + str(tol))
+                print("       Tolerance: " + str(tol))
                 ys, infodict = ex_parallel.extrapolation_parallel(method,f, None, y0, output_times, atol=tol,
                     rtol=tol, mxstep=1.e6, full_output=True, nworkers=2)
                 y = ys[-1][0]
@@ -187,7 +391,7 @@ def non_dense_output_tests():
 def dense_output_tests():
     print("\n Executing regression tests with dense output...")
     
-    for method in regression_methods:
+    for method in methods.keys():
         print("\n Method " + method)
         for f, exact in alltestfunctions:
             print("\n   Test " + f.__name__)
@@ -195,7 +399,7 @@ def dense_output_tests():
             output_times = [t0,1./3,2./3,1]
             y0 = exact(t0)
             for tol in tolerances:
-                print("\n       Tolerance: " + str(tol))
+                print("       Tolerance: " + str(tol))
                 ys, infodict = ex_parallel.extrapolation_parallel(method,f, None, y0, output_times, atol=tol,
                     rtol=tol, mxstep=1.e6, full_output=True, nworkers=2)
                 y = ys[-2][0]
@@ -204,7 +408,7 @@ def dense_output_tests():
     print("All tests passed")
 
 
-def convergenceTest(method, i, test, allSteps, order, dense=False):
+def convergenceTest(method_name, i, test, allSteps, order, dense=False):
     '''''
        Perform a convergence test with the test problem (in test parameter) with
        the given steps in parameter allSteps. 
@@ -225,7 +429,7 @@ def convergenceTest(method, i, test, allSteps, order, dense=False):
     errorPerStep=[]
     for step in allSteps:
         #rtol and atol are not important as we are fixing the step size
-        ys, infodict = ex_parallel.extrapolation_parallel(method,test.RHSFunction, None, test.initialValue, denseOutput, atol=1e-1, 
+        ys, infodict = ex_parallel.extrapolation_parallel(method_name,test.RHSFunction, None, test.initialValue, denseOutput, atol=1e-1, 
             rtol=1e-1, mxstep=10000000, full_output=True, nworkers=4, adaptative='fixed', p=order, h0=step)        
 #         print("number steps: " + str(infodict['nst']) + " (should be " + str(denseOutput[-1]/step) + ")")
         
@@ -237,7 +441,7 @@ def convergenceTest(method, i, test, allSteps, order, dense=False):
         
     coefficients = np.polyfit(np.log10(allSteps), np.log10(errorPerStep), 1)
 
-    print("coefficients: " + str(coefficients) + " order is: " + str(order-methodsmoothing[i]))
+    print("coefficients: " + str(coefficients) + " order is: " + str(order-methods[method_name]['smoothing']))
     
     if(plotConv):
         plt.plot(np.log10(allSteps),np.log10(errorPerStep), marker="x")
@@ -302,22 +506,46 @@ def doAllConvergenceTests():
     vdpolSteps6ex1 = np.concatenate((np.linspace(0.65,0.2,6), np.linspace(0.19,0.055,7)))
     
     #This is needed because some methods converge faster than the others and some steps have to be personalized
-    methodslinearstepexception = [[None,None,None],[None,None,linearSteps6ex1],[None,None,None],[None,None,linearSteps6ex2],[None,None,linearSteps6ex3]] 
+    methods['implicit midpoint']['linear_step_exception'][2] = linearSteps6ex1
+    methods['implicit midpoint']['linear_dense_step_exception'][2] = linearSteps6ex1
+    methods['explicit Euler']['linear_step_exception'][2] = linearSteps6ex2
+    methods['explicit Euler']['linear_dense_step_exception'][2] = linearSteps6ex2
+    methods['semi-implicit Euler']['linear_step_exception'][2] = linearSteps6ex3
     
-    methodslinearskip = [[' ',' ',' '],[' ',' ',' '],[' ',' ',' '],[' ',' ',' '],[' ',' ',' ']]
-    
-    methodslineardensestepexception = [[None,None,None],[None,None,linearSteps6ex1],[None,None,None],[None,None,linearSteps6ex2],[None,None,None]] 
     #Can't use order 2 with midpoint method (it doesn't do extrapolation and interpolation doesn't work)
-    methodslineardenseskip = [['skip',' ','skip'],['skip',' ','skip'],['skip',' ','skip'],[' ',' ',' '],[' ',' ','skip']] 
+    methods['explicit midpoint']['linear_dense_skip'][0] = True
+    methods['explicit midpoint']['linear_dense_skip'][2] = True
+    methods['implicit midpoint']['linear_dense_skip'][0] = True
+    methods['implicit midpoint']['linear_dense_skip'][2] = True
+    methods['semi-implicit midpoint']['linear_dense_skip'][0] = True
+    methods['semi-implicit midpoint']['linear_dense_skip'][2] = True
+    methods['semi-implicit Euler']['linear_dense_skip'][2] = True
 
 
-    methodsvdpolstepexception = [[None,None,None,None],[None,None,None,None],[None,None,None,None],[None,None,None,None],[None,vdpolSteps4ex1,vdpolSteps6ex1,None]]
-    
-    methodsvdpolskip = [[' ',' ',' ',' '],[' ',' ',' ','skip'],[' ',' ',' ','skip'],[' ',' ',' ','skip'],[' ',' ',' ','skip']] 
+    methods['semi-implicit Euler']['vdpol_step_exception'][1] = vdpolSteps4ex1
+    methods['semi-implicit Euler']['vdpol_step_exception'][2] = vdpolSteps6ex1
 
-    methodsvdpoldensestepexception = [[None,vdpolSteps4ex1,None,None],[None,None,None,None],[None,None,None,None],[None,vdpolSteps4ex1,vdpolSteps6ex1,None],[None,vdpolSteps4ex1,vdpolSteps6ex1,None]]
+    #Fishy!
+    methods['implicit midpoint']['vdpol_skip'][3] = True
+    methods['semi-implicit midpoint']['vdpol_skip'][3] = True
+    methods['explicit Euler']['vdpol_skip'][3] = True
+    methods['semi-implicit Euler']['vdpol_skip'][3] = True
 
-    methodsvdpoldenseskip = [['skip',' ',' ','skip'],['skip',' ',' ','skip'],['skip',' ',' ','skip'],[' ',' ','skip','skip'],[' ',' ',' ','skip']] 
+    methods['explicit midpoint']['vdpol_dense_skip'][0] = True
+    methods['explicit midpoint']['vdpol_dense_skip'][3] = True
+    methods['implicit midpoint']['vdpol_dense_skip'][0] = True
+    methods['implicit midpoint']['vdpol_dense_skip'][3] = True
+    methods['semi-implicit midpoint']['vdpol_dense_skip'][0] = True
+    methods['semi-implicit midpoint']['vdpol_dense_skip'][3] = True
+    methods['explicit Euler']['vdpol_dense_skip'][2] = True
+    methods['explicit Euler']['vdpol_dense_skip'][3] = True
+    methods['semi-implicit Euler']['vdpol_dense_skip'][3] = True
+
+    methods['explicit midpoint']['vdpol_dense_step_exception'][1] = vdpolSteps4ex1
+    methods['explicit Euler']['vdpol_dense_step_exception'][1] = vdpolSteps4ex1
+    methods['explicit Euler']['vdpol_dense_step_exception'][2] = vdpolSteps6ex1
+    methods['semi-implicit Euler']['vdpol_dense_step_exception'][1] = vdpolSteps4ex1
+    methods['semi-implicit Euler']['vdpol_dense_step_exception'][2] = vdpolSteps6ex1
 
     
     allorderslinear = [2,4,6]
@@ -329,30 +557,29 @@ def doAllConvergenceTests():
     print("\n Executing convergence tests without dense output")
     
     i=0
-    for method in allmethods:
-        print("\n Method: " + method)
+    for method_name, method in methods.iteritems():
+        print("\n Method: " + method_name)
         print("\n Test: Linear Function")
         k=0
         for p in allorderslinear:
-            if(methodslinearskip[i][k]!='skip'):
-                if(methodslinearstepexception[i][k] is not None):
-                    linearsteps=methodslinearstepexception[i][k]
-                else:
-                    linearsteps=alllinearsteps[k]
-                coeff = convergenceTest(method,i, tst.LinearProblem(),linearsteps,p,False)
-                checkConvergenceCoeff(coeff, p-methodsmoothing[i], "Test Linear non dense")
+            if(method['linear_step_exception'][k] is not None):
+                linear_steps=method['linear_step_exception'][k]
+            else:
+                linear_steps=alllinearsteps[k]
+            coeff = convergenceTest(method_name,i, tst.LinearProblem(),linear_steps,p,False)
+            checkConvergenceCoeff(coeff, p-method['smoothing'], "Test Linear non dense")
             k+=1
             
         print("\n Test: VDPOL Easy (high epsilon) Function")
         k=0
         for p in allordersvdpol:
-            if(methodsvdpolskip[i][k]!='skip'):
-                if(methodsvdpolstepexception[i][k] is not None):
-                    vdpolsteps=methodsvdpolstepexception[i][k]
+            if not method['vdpol_skip'][k]:
+                if method['vdpol_step_exception'][k] is not None:
+                    vdpol_steps = method['vdpol_step_exception'][k]
                 else:
-                    vdpolsteps=allvdpolsteps[k]
-                coeff = convergenceTest(method,i, tst.VDPOLEasyProblem(),vdpolsteps,p,False)
-                checkConvergenceCoeff(coeff, p-methodsmoothing[i], "Test VPOL non dense")
+                    vdpol_steps=allvdpolsteps[k]
+                coeff = convergenceTest(method_name,i, tst.VDPOLEasyProblem(),vdpol_steps,p,False)
+                checkConvergenceCoeff(coeff, p-method['smoothing'], "Test VPOL non dense")
             k+=1
         i+=1
           
@@ -361,30 +588,30 @@ def doAllConvergenceTests():
     print("\n Executing convergence tests with dense output")
     
     i=0
-    for method in allmethods:
-        print("\n Method: " + method)
+    for method_name, method in methods.iteritems():
+        print("\n Method: " + method_name)
         print("\n Test: Linear Function")
         k=0
         for p in allorderslinear:
-            if(methodslineardenseskip[i][k]!='skip'):
-                if(methodslineardensestepexception[i][k] is not None):
-                    linearsteps=methodslineardensestepexception[i][k]
+            if not method['linear_dense_skip'][k]:
+                if method['linear_dense_step_exception'][k] is not None:
+                    linear_steps = method['linear_dense_step_exception'][k]
                 else:
-                    linearsteps=alllinearsteps[k]
-                coeff = convergenceTest(method,i, tst.LinearProblem(),linearsteps,p,True)
-                checkConvergenceCoeff(coeff, p-methodsmoothing[i], "Test Linear non dense")
+                    linear_steps=alllinearsteps[k]
+                coeff = convergenceTest(method_name,i, tst.LinearProblem(),linear_steps,p,True)
+                checkConvergenceCoeff(coeff, p-method['smoothing'], "Test Linear non dense")
             k+=1
           
         print("\n Test: VDPOL Easy (high epsilon) Function")
         k=0
         for p in allordersvdpol:
-            if(methodsvdpoldenseskip[i][k]!='skip'):
-                if(methodsvdpoldensestepexception[i][k] is not None):
-                    vdpolsteps=methodsvdpoldensestepexception[i][k]
+            if not method['vdpol_dense_skip'][k]:
+                if method['vdpol_dense_step_exception'][k] is not None:
+                    vdpol_steps = method['vdpol_dense_step_exception'][k]
                 else:
-                    vdpolsteps=allvdpolsteps[k]
-                coeff = convergenceTest(method,i, tst.VDPOLEasyProblem(),vdpolsteps,p,True)
-                checkConvergenceCoeff(coeff, p-methodsmoothing[i], "Test VPOL non dense")
+                    vdpol_steps=allvdpolsteps[k]
+                coeff = convergenceTest(method_name,i, tst.VDPOLEasyProblem(),vdpol_steps,p,True)
+                checkConvergenceCoeff(coeff, p-method['smoothing'], "Test VPOL non dense")
             k+=1
         i+=1
  
