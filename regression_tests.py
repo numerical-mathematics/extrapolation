@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import twelve_tests as tst
 
 #Whether to do convergence plots to see if they are straight lines (to choose the steps)
-plotConv=False
+plot_convergence=False
 
 #Methods that use smoothing loose an order of convergence
 methods = {
@@ -43,17 +43,7 @@ def f_3(y,t):
 def exact_3(t):
     return np.array([np.power(1.+np.power(t,2),2)])
 
-#TODO: this fourth test function gives singular matrix with semi implicit methods
-#mainly because y has to be >0 and when the method gives a y<0 then the function evaluation
-#at that estimated value is nan and it blows all the execution afterwards
-def f_4(y,t):
-    return y/t*np.log(y)
-    
-def exact_4(t):
-    return np.array([np.exp(2.*t)])
-
-
-alltestfunctions = [(f_1,exact_1),(f_2,exact_2),(f_3,exact_3)]
+test_functions = [(f_1,exact_1),(f_2,exact_2),(f_3,exact_3)]
 
 reference_solutions = {
     'explicit midpoint' : {
@@ -334,7 +324,7 @@ def non_dense_output_tests():
     
     for method in methods.keys():
         print("\n Method: " + method)
-        for f, exact in alltestfunctions:
+        for f, exact in test_functions:
             print("\n   Test: " + f.__name__)
             t0, tf = 0.1, 1
             y0 = exact(t0)
@@ -354,7 +344,7 @@ def dense_output_tests():
     
     for method in methods.keys():
         print("\n Method " + method)
-        for f, exact in alltestfunctions:
+        for f, exact in test_functions:
             print("\n   Test " + f.__name__)
             t0 = 0.1
             output_times = [t0,1./3,2./3,1]
@@ -369,48 +359,47 @@ def dense_output_tests():
     print("All tests passed")
 
 
-def convergenceTest(method_name, test, allSteps, order, dense=False):
-    '''''
-       Perform a convergence test with the test problem (in test parameter) with
-       the given steps in parameter allSteps. 
-    '''''
-    
+def convergence_test(method_name, test, step_sizes, order, dense=False):
+    """
+   Perform a convergence test by applying the specified method to the specified
+   the test problem with the specified step sizes.
+    """
     y_ref = np.loadtxt(tst.getReferenceFile(test.problemName))
-    denseOutput = test.denseOutput
+    dense_output = test.denseOutput
 
     if(not dense):
         y_ref=y_ref[-1]
-        denseOutput=[denseOutput[0], denseOutput[-1]]
+        dense_output=[dense_output[0], dense_output[-1]]
     else:
         nhalf = np.ceil(len(y_ref)/2)
         y_ref = y_ref[nhalf]
-        print("dense output time " + str(denseOutput[nhalf]))
+        print("dense output time " + str(dense_output[nhalf]))
         
-    k=0
-    errorPerStep=[]
-    for step in allSteps:
+    error_per_step=[]
+    for step in step_sizes:
         #rtol and atol are not important as we are fixing the step size
-        ys, infodict = ex_parallel.extrapolation_parallel(method_name,test.RHSFunction, None, test.initialValue, denseOutput, atol=1e-1, 
-            rtol=1e-1, mxstep=10000000, full_output=True, nworkers=4, adaptative='fixed', p=order, h0=step)        
-#         print("number steps: " + str(infodict['nst']) + " (should be " + str(denseOutput[-1]/step) + ")")
+        ys, infodict = ex_parallel.extrapolation_parallel(method_name,test.RHSFunction, None,
+                                                          test.initialValue, dense_output, atol=1e-1,
+                                                          rtol=1e-1, mxstep=10000000, full_output=True,
+                                                          nworkers=4, adaptative='fixed', p=order, h0=step)
         
         ys=ys[1:len(ys)]
         if(dense):
             ys=ys[nhalf]
         error = relative_error(ys, y_ref)
-        errorPerStep.append(error)
+        error_per_step.append(error)
         
-    coefficients = np.polyfit(np.log10(allSteps), np.log10(errorPerStep), 1)
+    coefficients = np.polyfit(np.log10(step_sizes), np.log10(error_per_step), 1)
 
-    print("Slope: " + str(coefficients[0]) + "; order is approximately: " + str(order-methods[method_name]['smoothing']))
+    print("     Slope: " + str(coefficients[0]) + "; Design order is: " + str(order-methods[method_name]['smoothing']))
     
-    if(plotConv):
-        plt.plot(np.log10(allSteps),np.log10(errorPerStep), marker="x")
+    if(plot_convergence):
+        plt.loglog(step_sizes,error_per_step, marker="x")
         plt.show()
 
     return coefficients[0]
 
-def checkConvergenceCoeff(coeff, coeff_ref, test_name):
+def check_convergence_rate(apparent_rate, expected_rate, test_name):
     """
     Checks if err equals err_ref, returns silently if err equals err_ref (matching 10 decimals)
     or raises an exception otherwise
@@ -418,122 +407,73 @@ def checkConvergenceCoeff(coeff, coeff_ref, test_name):
     @param err_ref: expected error
     @param test_name: tests explanation and/or explanatory name
     """
-    np.testing.assert_approx_equal(coeff, coeff_ref, 1, "Convergence test " + test_name + " failed")
+    np.testing.assert_approx_equal(apparent_rate, expected_rate, 1, 
+                                   "Convergence test " + test_name + " failed")
 
 
-def doAllConvergenceTests(methods):
-    global plotConv
-    plotConv=False
-
+def run_convergence_tests(methods):
+    """
+    Test convergence of each method for the linear, scalar problem and for
+    vanderpol (non-stiff epsilon).  It's challenging especially for high-order
+    methods, to find a range of step
+    sizes that are in the asymptotic regime but don't reach roundoff.
+    For this reason, some tests are currently skipped and the tests only
+    go up to order 6.  With some more difficult test problems it may be
+    more feasible to test higher-order methods.
+    """
     for method in methods.itervalues():
         method['linear problem step sizes'] = {}
-        method['linear problem step sizes'][2] = np.array([0.5,0.2,0.04,0.02,0.005,0.002,0.001])
-        method['linear problem step sizes'][4] = np.array([0.5,0.2,0.04,0.02,0.005,0.002,0.001])
-        method['linear problem step sizes'][6] = np.array([0.5,0.2,0.04,0.02])
+        method['linear problem step sizes'][2] = [0.5,0.2,0.04,0.02,0.005,0.002,0.001]
+        method['linear problem step sizes'][4] = [0.5,0.2,0.04,0.02,0.005,0.002,0.001]
+        method['linear problem step sizes'][6] = [1.0,0.8,0.4,0.2]
 
         method['vanderpol step sizes'] = {}
-        method['vanderpol step sizes'][2] = np.array([0.15,0.04,0.02,0.005,0.002])
-        method['vanderpol step sizes'][4] = np.array([0.15,0.04,0.02,0.005,0.002])
-        method['vanderpol step sizes'][6] = np.array([0.75,0.2,0.04,0.02])
-        method['vanderpol step sizes'][8] = np.array([1.1,0.75,0.2,0.055])
+        method['vanderpol step sizes'][2] = [0.15,0.04,0.02,0.005,0.002]
+        method['vanderpol step sizes'][4] = [0.15,0.04,0.02,0.005]
+        method['vanderpol step sizes'][6] = [0.75,0.2,0.04,0.02]
 
         method['skip linear dense']    = []
         method['skip vanderpol']       = []
         method['skip vanderpol dense'] = []
  
-    #linear: 6 exception 1
-    linearSteps6ex1 = [1,1/2,1/3,1/4,1/5]
-    
-    #linear: 6 exception 2
-    linearSteps6ex2 = np.array([0.7,0.2,0.04,0.025])
-    
-    #linear: 6 exception 3
-    linearSteps6ex3 = [1,1/2,1/3,1/4,1/5,1/6,1/7,1/8,1/9,1/10,1/11,1/12,1/13]
-    
-    #vdpol: 4 exception 1
-    vdpolSteps4ex1 = np.array([0.65,0.2,0.04,0.025])
-
-    #vdpol: 6 exception 1
-    vdpolSteps6ex1 = np.concatenate((np.linspace(0.65,0.2,6), np.linspace(0.19,0.055,7)))
-    #vdpolSteps6ex1 = np.array([0.65,0.2,0.055])
-    
-    #This is needed because some methods converge faster than the others and some steps have to be personalized
-    methods['implicit midpoint']['linear problem step sizes'][6] = linearSteps6ex1
-    methods['explicit Euler']['linear problem step sizes'][6] = linearSteps6ex2
-    methods['semi-implicit Euler']['linear problem step sizes'][6] = linearSteps6ex3
-    
     #Can't use order 2 with midpoint method (it doesn't do extrapolation and interpolation doesn't work)
-    methods['explicit midpoint']['skip linear dense'].append(2)
-    methods['explicit midpoint']['skip linear dense'].append(6)
-    methods['implicit midpoint']['skip linear dense'].append(2)
-    methods['implicit midpoint']['skip linear dense'].append(6)
-    methods['semi-implicit midpoint']['skip linear dense'].append(2)
-    methods['semi-implicit midpoint']['skip linear dense'].append(6)
+    for mtype in ['explicit', 'implicit', 'semi-implicit']:
+        for skip in ['skip linear dense', 'skip vanderpol', 'skip vanderpol dense']:
+            methods[mtype + ' midpoint'][skip].append(2)
+
+    # Convergence stagnates; probably because of the nonlinear solver:
+    methods['semi-implicit Euler']['linear problem step sizes'][6] = [0.8,0.4,0.2,0.1]
+    #This one is super-convergent:
     methods['semi-implicit Euler']['skip linear dense'].append(6)
+    methods['semi-implicit Euler']['skip vanderpol dense'].append(6)
+    methods['semi-implicit Euler']['linear problem step sizes'][6] = [0.8,0.4,0.2,0.1]
+    methods['semi-implicit Euler']['vanderpol step sizes'][6] = [0.75,0.2,0.1]
 
-
-    methods['semi-implicit Euler']['vanderpol step sizes'][4] = vdpolSteps4ex1
-    methods['semi-implicit Euler']['vanderpol step sizes'][6] = vdpolSteps6ex1
-
-    #methods['explicit midpoint']['vanderpol step sizes'][4] = vdpolSteps4ex1
-    methods['explicit Euler']['vanderpol step sizes'][4] = vdpolSteps4ex1
-    methods['explicit Euler']['vanderpol step sizes'][6] = vdpolSteps6ex1
-    methods['semi-implicit Euler']['vanderpol step sizes'][4] = vdpolSteps4ex1
-    methods['semi-implicit Euler']['vanderpol step sizes'][6] = vdpolSteps6ex1
-
-    #Fishy!
-    methods['implicit midpoint']['skip vanderpol'].append(8)
-    methods['semi-implicit midpoint']['skip vanderpol'].append(8)
-    methods['explicit Euler']['skip vanderpol'].append(8)
-    methods['semi-implicit Euler']['skip vanderpol'].append(8)
-
-    methods['explicit midpoint']['skip vanderpol dense'].append(2)
-    methods['explicit midpoint']['skip vanderpol dense'].append(8)
-    methods['implicit midpoint']['skip vanderpol dense'].append(2)
-    methods['implicit midpoint']['skip vanderpol dense'].append(8)
-    methods['semi-implicit midpoint']['skip vanderpol dense'].append(2)
-    methods['semi-implicit midpoint']['skip vanderpol dense'].append(8)
-    methods['explicit Euler']['skip vanderpol dense'].append(6)
-    methods['explicit Euler']['skip vanderpol dense'].append(8)
-    methods['semi-implicit Euler']['skip vanderpol dense'].append(8)
-
-    allorderslinear = [2,4,6]
-    allordersvdpol = [2,4,6,8]
-
-    print("\n Executing convergence tests without dense output")
     for method_name, method in methods.iteritems():
         print("\n Method: " + method_name)
-        print("\n Test: Linear Function")
-        for p in allorderslinear:
+        for p in (2,4,6):
+            print("   Testing method of order " + str(p))
+            print("     Linear test problem, no dense output")
             step_sizes = method['linear problem step sizes'][p]
-            coeff = convergenceTest(method_name, tst.LinearProblem(),step_sizes,p,False)
-            checkConvergenceCoeff(coeff, p-method['smoothing'], "Test Linear non dense")
-            
-        print("\n Test: VDPOL Easy (high epsilon) Function")
-        for p in allordersvdpol:
+            coeff = convergence_test(method_name, tst.LinearProblem(),step_sizes,p,False)
+            check_convergence_rate(coeff, p-method['smoothing'], "Test Linear non dense")
             if not (p in method['skip vanderpol']):
+                print("     Vanderpol test problem, no dense output")
                 step_sizes = method['vanderpol step sizes'][p]
-                coeff = convergenceTest(method_name, tst.VDPOLEasyProblem(),step_sizes,p,False)
-                checkConvergenceCoeff(coeff, p-method['smoothing'], "Test VPOL non dense")
-    print("All convergence tests without dense output passed")
-    
-    print("\n Executing convergence tests with dense output")
-    for method_name, method in methods.iteritems():
-        print("\n Method: " + method_name)
-        print("\n Test: Linear Function")
-        for p in allorderslinear:
+                coeff = convergence_test(method_name, tst.VDPOLEasyProblem(),step_sizes,p,False)
+                check_convergence_rate(coeff, p-method['smoothing'], "Test VPOL non dense")
             if not (p in method['skip linear dense']):
+                print("     Linear test problem, dense output")
                 step_sizes = method['linear problem step sizes'][p]
-                coeff = convergenceTest(method_name, tst.LinearProblem(),step_sizes,p,True)
-                checkConvergenceCoeff(coeff, p-method['smoothing'], "Test Linear non dense")
-          
-        print("\n Test: VDPOL Easy (high epsilon) Function")
-        for p in allordersvdpol:
+                coeff = convergence_test(method_name, tst.LinearProblem(),step_sizes,p,True)
+                check_convergence_rate(coeff, p-method['smoothing'], "Test Linear non dense")
             if not (p in method['skip vanderpol dense']):
+                print("     Vanderpol test problem, dense output")
                 step_sizes = method['vanderpol step sizes'][p]
-                coeff = convergenceTest(method_name, tst.VDPOLEasyProblem(),step_sizes,p,True)
-                checkConvergenceCoeff(coeff, p-method['smoothing'], "Test VPOL non dense")
-    print("All convergence tests with dense output passed")
+                coeff = convergence_test(method_name, tst.VDPOLEasyProblem(),step_sizes,p,True)
+                check_convergence_rate(coeff, p-method['smoothing'], "Test VPOL dense")
+
+    print("All convergence tests passed")
    
     
 def exp(x):
@@ -542,20 +482,20 @@ def exp(x):
 def expder(x,orderder):
     return np.array([np.float128((-1)**orderder*np.exp(-x))])
 
-def checkInterpolationPolynomial():
-    plotConv=False
+def test_interpolation_polynomial():
+    plot_convergence=False
     print("\n Executing convergence interpolation polynomial test")
     orders=[2,3,4,5]
 
     steps = [0.5,0.55,0.6,0.65,0.7,0.8,0.85,0.9,0.95,1,1.05,1.1,1.15]
     
     #TODO: This should be zero all the time
-    orderdisparity = [[0,1,0,1],[0,1,0,1],[0,1,0,1],[0,0,-1,1]]
+    orderdisparity = [[0,1,0,1],[0,1,0,1],[0,1,0,1],[0,1,0,1]]
     
     idx=0
     for order in orders:
         print("Order: "  + str(order))
-        errorPerStep = np.zeros(len(steps))
+        error_per_step = np.zeros(len(steps))
         errorIntPerStep = np.zeros(len(steps))
         errorPerStepSym = np.zeros(len(steps))
         errorIntPerStepSym = np.zeros(len(steps))
@@ -594,7 +534,7 @@ def checkInterpolationPolynomial():
             res,errint,hint = poly(x)
             resexact=exp(t0+H*x)
             errorIntPerStep[k]=np.linalg.norm((errint))
-            errorPerStep[k] = np.linalg.norm((res-resexact))
+            error_per_step[k] = np.linalg.norm((res-resexact))
     
             ressym,errintsym,hint = polysym(x)
             errorIntPerStepSym[k]=np.linalg.norm(errintsym)
@@ -603,31 +543,31 @@ def checkInterpolationPolynomial():
             k+=1
         
         print("Order disparity: " + str(orderdisparity[idx]))
-        coefficients = np.polyfit(np.log10(steps), np.log10(errorPerStep), 1)
+        coefficients = np.polyfit(np.log10(steps), np.log10(error_per_step), 1)
         print("coefficients error " + str(coefficients) + "order is: " + str(order))
         # In this case order of interpolation for non symmetric should be order because lam=1
         # see _compute_rs(..) in ex_parallel
-        checkConvergenceCoeff(coefficients[0], order+orderdisparity[idx][0], "Interpolation non symmetric")
+        check_convergence_rate(coefficients[0], order+orderdisparity[idx][0], "Interpolation non symmetric")
         
         #TODO: this should be one order less of convergence (with lam=0 it works well)
         #if lam=0 then last check should be order+1 (as expected)
         coefficientsint = np.polyfit(np.log10(steps), np.log10(errorIntPerStep), 1)
         print("coefficients error interpolation" + str(coefficientsint) + " order is: " + str(order-1))
-        checkConvergenceCoeff(coefficientsint[0], order-1+orderdisparity[idx][1], "Interpolation non symmetric estimated interpolation error")
+        check_convergence_rate(coefficientsint[0], order-1+orderdisparity[idx][1], "Interpolation non symmetric estimated interpolation error")
 
          
         coefficients = np.polyfit(np.log10(steps), np.log10(errorPerStepSym), 1)
         print("coefficients error sym " + str(coefficients) + " order is: " + str(order+4))
-        checkConvergenceCoeff(coefficients[0], order+4+orderdisparity[idx][2], "Interpolation symmetric")
+        check_convergence_rate(coefficients[0], order+4+orderdisparity[idx][2], "Interpolation symmetric")
              
         coefficientsint = np.polyfit(np.log10(steps), np.log10(errorIntPerStepSym), 1)
         print("coefficients error sym interpolation" + str(coefficientsint) + " order is: " + str(order+4-1))
-        checkConvergenceCoeff(coefficientsint[0], order+4-1+orderdisparity[idx][3], "Interpolation symmetric estimated interpolation error")
+        check_convergence_rate(coefficientsint[0], order+4-1+orderdisparity[idx][3], "Interpolation symmetric estimated interpolation error")
         
         idx+=1
         
-        if(plotConv):
-            plt.plot(np.log10(steps),np.log10(errorPerStep), marker="x")
+        if(plot_convergence):
+            plt.plot(np.log10(steps),np.log10(error_per_step), marker="x")
             plt.plot(np.log10(steps),np.log10(errorIntPerStepSym), marker="x")
             plt.plot(np.log10(steps),np.log10(errorPerStepSym), marker="x")
             plt.plot(np.log10(steps),np.log10(errorIntPerStep), marker="x")
@@ -635,8 +575,8 @@ def checkInterpolationPolynomial():
             
     print("All tests passed")
 
-def checkDerivativesForPolynomial():
-    plotConv=False
+def test_interpolated_derivatives():
+    plot_convergence=False
     #TODO: orderrs>7 not correct behaviour
     orderrs=7
     #TODO: orderds>4 does not behave correctly (data type numeric error)
@@ -706,9 +646,9 @@ def checkDerivativesForPolynomial():
         coefficientsrs = np.polyfit(np.log10(steps), np.log10(errorrsPerStep), 1)
         expectedorder=orderrs-der
         print("coefficients error non sym interpolation" + str(coefficientsrs) + " order is: " + str(expectedorder))
-        checkConvergenceCoeff(coefficientsrs[0]+deviationorder[der], expectedorder, "Interpolation non symmetric derivatives convergence")
+        check_convergence_rate(coefficientsrs[0]+deviationorder[der], expectedorder, "Interpolation non symmetric derivatives convergence")
          
-        if(plotConv):
+        if(plot_convergence):
             plt.plot(np.log10(steps),np.log10(errorrsPerStep), marker="x")
     plt.show()
      
@@ -720,9 +660,9 @@ def checkDerivativesForPolynomial():
         coefficientsds = np.polyfit(np.log10(steps), np.log10(errordsPerStep), 1)
         expectedorder=2*(orderds-math.ceil(der/2)+1)
         print("coefficients error sym interpolation" + str(coefficientsds) + " order is: " + str(expectedorder))
-        checkConvergenceCoeff(coefficientsds[0], expectedorder, "Interpolation symmetric derivatives convergence")
+        check_convergence_rate(coefficientsds[0], expectedorder, "Interpolation symmetric derivatives convergence")
         
-        if(plotConv):
+        if(plot_convergence):
             plt.plot(np.log10(steps),np.log10(errordsPerStep), marker="x")
     plt.show()
     
@@ -733,8 +673,8 @@ if __name__ == "__main__":
     non_dense_output_tests()
     dense_output_tests()
   
-    doAllConvergenceTests(methods)
-    checkInterpolationPolynomial()
-    checkDerivativesForPolynomial()
+    run_convergence_tests(methods)
+    test_interpolation_polynomial()
+    test_interpolated_derivatives()
     
 
