@@ -27,7 +27,7 @@ install:
 
 # Run test
 script:
-  - coverage run --source=extrapolation regression_tests.py
+  - coverage run --source=ex_parallel regression_tests.py
 
 # Calculate coverage
 after_success:

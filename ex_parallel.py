@@ -379,7 +379,7 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj
 
     return res
 
-def __extrapolation_parallel (method, methodargs, func, grad, y0, t, args=(), full_output=False,
+def __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=(), full_output=False,
         rtol=1.0e-8, atol=1.0e-8, h0=0.5, mxstep=10e4, robustness_factor=2, p=4,
         nworkers=None, smoothing='no', symmetric=True, seq=None, adaptative="order", addSolverParam={}):   
     '''
@@ -1774,29 +1774,18 @@ parameters are set to the 'optimal').
 
 '''
 
-def extrapolation_parallel(method, func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
+methods = {
+        'explicit midpoint' : ex_midpoint_explicit_parallel,
+        'implicit midpoint' : ex_midpoint_implicit_parallel,
+        'semi-implicit midpoint' : ex_midpoint_semi_implicit_parallel,
+        'explicit Euler' : ex_euler_explicit_parallel,
+        'semi-implicit Euler' : ex_euler_semi_implicit_parallel
+        }
+
+def extrapolation_parallel(method_name, func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
         atol=1.0e-8, h0=0.5, mxstep=10e4, p=4, nworkers=None, adaptative = 'order'):
         
-        if(method == 'midpoint explicit'):
-            return  ex_midpoint_explicit_parallel(func, grad, y0, t, args=args,
-                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, 
-                nworkers=nworkers, adaptative=adaptative)
-        elif(method == 'midpoint implicit'):
-            return ex_midpoint_implicit_parallel(func, grad, y0, t, args=args,
-                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, 
-                nworkers=nworkers, adaptative=adaptative)
-        elif(method == 'midpoint semi implicit'):
-            return ex_midpoint_semi_implicit_parallel(func, grad, y0, t, args=args,
-                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, 
-                nworkers=nworkers, adaptative=adaptative)
-        elif(method == 'euler explicit'):
-            return ex_euler_explicit_parallel(func, grad, y0, t, args=args,
-                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, 
-                nworkers=nworkers, adaptative=adaptative)
-        
-        return ex_euler_semi_implicit_parallel(func, grad, y0, t, args=args,
-                full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p, 
-                nworkers=nworkers, adaptative=adaptative)
-            
-            
-    
+        method_function = methods[method_name]
+        return method_function(func, grad, y0, t, args=args, full_output=full_output,
+                               rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p,
+                               nworkers=nworkers, adaptative=adaptative)
