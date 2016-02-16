@@ -483,6 +483,15 @@ def expder(x,orderder):
     return np.array([np.float128((-1)**orderder*np.exp(-x))])
 
 def test_interpolation_polynomial():
+    '''
+    Check the correct behavior of the two interpolation functions for dense output results; 
+    symmetric and non symmetric interpolation (_interpolate_nonsym and _interpolate_sym).
+    
+    It uses an exponential function to feed the two functions with exact values at each intermediate
+    point and its derivatives at each point too. It then calculates the interpolation polynomial for 
+    different steps' length and compares the exact solution at one intermediate point (currently H/5)
+    with the interpolated value at the same point. It then check the convergence order of the polynomial.  
+    '''
     plot_convergence=False
     print("\n Executing convergence interpolation polynomial test")
     orders=[2,3,4,5]
@@ -576,8 +585,16 @@ def test_interpolation_polynomial():
     print("All tests passed")
 
 def test_interpolated_derivatives():
+    '''
+    It checks if the higher order derivatives' estimations used to calculate the interpolation
+    polynomial converge correctly (_centered_finite_diff and _backward_finite_diff). 
+    
+    An exponential function is used to feed the exact values used
+    to estimate the derivatives. It then compares the estimated higher order derivatives with the
+    exact values of the exponential derivatives.
+    '''
     plot_convergence=False
-    #TODO: orderrs>7 not correct behaviour
+    #TODO: orderrs>7 not correct behavior
     orderrs=7
     #TODO: orderds>4 does not behave correctly (data type numeric error)
     orderds=4
