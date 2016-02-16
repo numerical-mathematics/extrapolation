@@ -10,50 +10,11 @@ plotConv=False
 
 #Methods that use smoothing loose an order of convergence
 methods = {
-               'explicit midpoint' :      {'smoothing' : False, 
-                                           'linear_step_exception' : [None,None,None], 
-                                           'linear_dense_skip' : [False,False,False], 
-                                           'vdpol_step_exception' : [None,None,None,None],
-                                           'vdpol_skip' : [False,False,False,False],
-                                           'vdpol_dense_skip' : [False,False,False,False],
-                                           'vdpol_dense_step_exception' : [None,None,None,None],
-                                           'linear_dense_step_exception' : [None,None,None]},
-
-               'implicit midpoint' :      {'smoothing' : True,  
-                                           'linear_step_exception' : [None,None,None], 
-                                           'linear_dense_skip' : [False,False,False], 
-                                           'vdpol_step_exception' : [None,None,None,None],
-                                           'vdpol_skip' : [False,False,False,False],
-                                           'vdpol_dense_skip' : [False,False,False,False],
-                                           'vdpol_dense_step_exception' : [None,None,None,None],
-                                           'linear_dense_step_exception' : [None,None,None]},
-
-               'semi-implicit midpoint' : {'smoothing' : True,  
-                                           'linear_step_exception' : [None,None,None], 
-                                           'linear_dense_skip' : [False,False,False], 
-                                           'vdpol_step_exception' : [None,None,None,None],
-                                           'vdpol_skip' : [False,False,False,False],
-                                           'vdpol_dense_skip' : [False,False,False,False],
-                                           'vdpol_dense_step_exception' : [None,None,None,None],
-                                           'linear_dense_step_exception' : [None,None,None]},
-
-               'explicit Euler' :         {'smoothing' : False, 
-                                           'linear_step_exception' : [None,None,None], 
-                                           'linear_dense_skip' : [False,False,False], 
-                                           'vdpol_step_exception' : [None,None,None,None],
-                                           'vdpol_skip' : [False,False,False,False],
-                                           'vdpol_dense_skip' : [False,False,False,False],
-                                           'vdpol_dense_step_exception' : [None,None,None,None],
-                                           'linear_dense_step_exception' : [None,None,None]},
-
-               'semi-implicit Euler' :    {'smoothing' : False, 
-                                           'linear_step_exception' : [None,None,None], 
-                                           'linear_dense_skip' : [False,False,False], 
-                                           'vdpol_step_exception' : [None,None,None,None],
-                                           'vdpol_skip' : [False,False,False,False],
-                                           'vdpol_dense_skip' : [False,False,False,False],
-                                           'vdpol_dense_step_exception' : [None,None,None,None],
-                                           'linear_dense_step_exception' : [None,None,None]}
+               'explicit midpoint' :      {'smoothing' : False},
+               'implicit midpoint' :      {'smoothing' : True},
+               'semi-implicit midpoint' : {'smoothing' : True},
+               'explicit Euler' :         {'smoothing' : False},
+               'semi-implicit Euler' :    {'smoothing' : False}
            }
 
 def relative_error(y, y_ref):
@@ -408,7 +369,7 @@ def dense_output_tests():
     print("All tests passed")
 
 
-def convergenceTest(method_name, i, test, allSteps, order, dense=False):
+def convergenceTest(method_name, test, allSteps, order, dense=False):
     '''''
        Perform a convergence test with the test problem (in test parameter) with
        the given steps in parameter allSteps. 
@@ -441,7 +402,7 @@ def convergenceTest(method_name, i, test, allSteps, order, dense=False):
         
     coefficients = np.polyfit(np.log10(allSteps), np.log10(errorPerStep), 1)
 
-    print("coefficients: " + str(coefficients) + " order is: " + str(order-methods[method_name]['smoothing']))
+    print("Slope: " + str(coefficients[0]) + "; order is approximately: " + str(order-methods[method_name]['smoothing']))
     
     if(plotConv):
         plt.plot(np.log10(allSteps),np.log10(errorPerStep), marker="x")
@@ -460,154 +421,119 @@ def checkConvergenceCoeff(coeff, coeff_ref, test_name):
     np.testing.assert_approx_equal(coeff, coeff_ref, 1, "Convergence test " + test_name + " failed")
 
 
-def doAllConvergenceTests():
+def doAllConvergenceTests(methods):
     global plotConv
     plotConv=False
+
+    for method in methods.itervalues():
+        method['linear problem step sizes'] = {}
+        method['linear problem step sizes'][2] = np.array([0.5,0.2,0.04,0.02,0.005,0.002,0.001])
+        method['linear problem step sizes'][4] = np.array([0.5,0.2,0.04,0.02,0.005,0.002,0.001])
+        method['linear problem step sizes'][6] = np.array([0.5,0.2,0.04,0.02])
+
+        method['vanderpol step sizes'] = {}
+        method['vanderpol step sizes'][2] = np.array([0.15,0.04,0.02,0.005,0.002])
+        method['vanderpol step sizes'][4] = np.array([0.15,0.04,0.02,0.005,0.002])
+        method['vanderpol step sizes'][6] = np.array([0.75,0.2,0.04,0.02])
+        method['vanderpol step sizes'][8] = np.array([1.1,0.75,0.2,0.055])
+
+        method['skip linear dense']    = []
+        method['skip vanderpol']       = []
+        method['skip vanderpol dense'] = []
  
-    linearSteps2 = np.array([0.5,0.2,0.04,0.02,0.005,0.002,0.001])
-    linearSteps4 = np.array([0.5,0.2,0.04,0.02,0.005,0.002,0.001])
-    linearSteps6 = np.array([0.5,0.2,0.04,0.02])
-    
-    #vdpol: 2,4
-    vdpolSteps2 = np.concatenate((np.linspace(0.15,0.04,5),np.linspace(0.039,0.02,7),
-                                  np.linspace(0.019,0.005,10),np.linspace(0.0049,0.002,10)))
-    
-    #vdpol: 6 
-    vdpolSteps6 = np.concatenate((np.linspace(0.75,0.2,7), np.linspace(0.19,0.04,7),
-                                np.linspace(0.039,0.02,7)))
-    #vdpol: 8
-    vdpolSteps8 = np.concatenate((np.linspace(1.1,0.75,5),np.linspace(0.73,0.2,8), np.linspace(0.19,0.055,8)))
-    
     #linear: 6 exception 1
     linearSteps6ex1 = [1,1/2,1/3,1/4,1/5]
     
     #linear: 6 exception 2
-    linearSteps6ex2 = np.concatenate((np.linspace(0.7,0.2,3), np.linspace(0.19,0.04,7),np.linspace(0.039,0.025,4)))
+    linearSteps6ex2 = np.array([0.7,0.2,0.04,0.025])
     
     #linear: 6 exception 3
     linearSteps6ex3 = [1,1/2,1/3,1/4,1/5,1/6,1/7,1/8,1/9,1/10,1/11,1/12,1/13]
     
-    #vdpol: 8 exception 1
-    vdpolSteps8ex1 = np.concatenate((np.linspace(0.73,0.2,8), np.linspace(0.19,0.07,8)))
-    
     #vdpol: 4 exception 1
-    vdpolSteps4ex1 = np.concatenate((np.linspace(0.65,0.2,6), np.linspace(0.19,0.04,7),
-                                np.linspace(0.039,0.025,4)))
+    vdpolSteps4ex1 = np.array([0.65,0.2,0.04,0.025])
 
     #vdpol: 6 exception 1
     vdpolSteps6ex1 = np.concatenate((np.linspace(0.65,0.2,6), np.linspace(0.19,0.055,7)))
+    #vdpolSteps6ex1 = np.array([0.65,0.2,0.055])
     
     #This is needed because some methods converge faster than the others and some steps have to be personalized
-    methods['implicit midpoint']['linear_step_exception'][2] = linearSteps6ex1
-    methods['implicit midpoint']['linear_dense_step_exception'][2] = linearSteps6ex1
-    methods['explicit Euler']['linear_step_exception'][2] = linearSteps6ex2
-    methods['explicit Euler']['linear_dense_step_exception'][2] = linearSteps6ex2
-    methods['semi-implicit Euler']['linear_step_exception'][2] = linearSteps6ex3
+    methods['implicit midpoint']['linear problem step sizes'][6] = linearSteps6ex1
+    methods['explicit Euler']['linear problem step sizes'][6] = linearSteps6ex2
+    methods['semi-implicit Euler']['linear problem step sizes'][6] = linearSteps6ex3
     
     #Can't use order 2 with midpoint method (it doesn't do extrapolation and interpolation doesn't work)
-    methods['explicit midpoint']['linear_dense_skip'][0] = True
-    methods['explicit midpoint']['linear_dense_skip'][2] = True
-    methods['implicit midpoint']['linear_dense_skip'][0] = True
-    methods['implicit midpoint']['linear_dense_skip'][2] = True
-    methods['semi-implicit midpoint']['linear_dense_skip'][0] = True
-    methods['semi-implicit midpoint']['linear_dense_skip'][2] = True
-    methods['semi-implicit Euler']['linear_dense_skip'][2] = True
+    methods['explicit midpoint']['skip linear dense'].append(2)
+    methods['explicit midpoint']['skip linear dense'].append(6)
+    methods['implicit midpoint']['skip linear dense'].append(2)
+    methods['implicit midpoint']['skip linear dense'].append(6)
+    methods['semi-implicit midpoint']['skip linear dense'].append(2)
+    methods['semi-implicit midpoint']['skip linear dense'].append(6)
+    methods['semi-implicit Euler']['skip linear dense'].append(6)
 
 
-    methods['semi-implicit Euler']['vdpol_step_exception'][1] = vdpolSteps4ex1
-    methods['semi-implicit Euler']['vdpol_step_exception'][2] = vdpolSteps6ex1
+    methods['semi-implicit Euler']['vanderpol step sizes'][4] = vdpolSteps4ex1
+    methods['semi-implicit Euler']['vanderpol step sizes'][6] = vdpolSteps6ex1
+
+    #methods['explicit midpoint']['vanderpol step sizes'][4] = vdpolSteps4ex1
+    methods['explicit Euler']['vanderpol step sizes'][4] = vdpolSteps4ex1
+    methods['explicit Euler']['vanderpol step sizes'][6] = vdpolSteps6ex1
+    methods['semi-implicit Euler']['vanderpol step sizes'][4] = vdpolSteps4ex1
+    methods['semi-implicit Euler']['vanderpol step sizes'][6] = vdpolSteps6ex1
 
     #Fishy!
-    methods['implicit midpoint']['vdpol_skip'][3] = True
-    methods['semi-implicit midpoint']['vdpol_skip'][3] = True
-    methods['explicit Euler']['vdpol_skip'][3] = True
-    methods['semi-implicit Euler']['vdpol_skip'][3] = True
+    methods['implicit midpoint']['skip vanderpol'].append(8)
+    methods['semi-implicit midpoint']['skip vanderpol'].append(8)
+    methods['explicit Euler']['skip vanderpol'].append(8)
+    methods['semi-implicit Euler']['skip vanderpol'].append(8)
 
-    methods['explicit midpoint']['vdpol_dense_skip'][0] = True
-    methods['explicit midpoint']['vdpol_dense_skip'][3] = True
-    methods['implicit midpoint']['vdpol_dense_skip'][0] = True
-    methods['implicit midpoint']['vdpol_dense_skip'][3] = True
-    methods['semi-implicit midpoint']['vdpol_dense_skip'][0] = True
-    methods['semi-implicit midpoint']['vdpol_dense_skip'][3] = True
-    methods['explicit Euler']['vdpol_dense_skip'][2] = True
-    methods['explicit Euler']['vdpol_dense_skip'][3] = True
-    methods['semi-implicit Euler']['vdpol_dense_skip'][3] = True
+    methods['explicit midpoint']['skip vanderpol dense'].append(2)
+    methods['explicit midpoint']['skip vanderpol dense'].append(8)
+    methods['implicit midpoint']['skip vanderpol dense'].append(2)
+    methods['implicit midpoint']['skip vanderpol dense'].append(8)
+    methods['semi-implicit midpoint']['skip vanderpol dense'].append(2)
+    methods['semi-implicit midpoint']['skip vanderpol dense'].append(8)
+    methods['explicit Euler']['skip vanderpol dense'].append(6)
+    methods['explicit Euler']['skip vanderpol dense'].append(8)
+    methods['semi-implicit Euler']['skip vanderpol dense'].append(8)
 
-    methods['explicit midpoint']['vdpol_dense_step_exception'][1] = vdpolSteps4ex1
-    methods['explicit Euler']['vdpol_dense_step_exception'][1] = vdpolSteps4ex1
-    methods['explicit Euler']['vdpol_dense_step_exception'][2] = vdpolSteps6ex1
-    methods['semi-implicit Euler']['vdpol_dense_step_exception'][1] = vdpolSteps4ex1
-    methods['semi-implicit Euler']['vdpol_dense_step_exception'][2] = vdpolSteps6ex1
-
-    
     allorderslinear = [2,4,6]
-    alllinearsteps = [linearSteps2,linearSteps4,linearSteps6]
-    
     allordersvdpol = [2,4,6,8]
-    allvdpolsteps = [vdpolSteps2,vdpolSteps2,vdpolSteps6,vdpolSteps8]
 
     print("\n Executing convergence tests without dense output")
-    
-    i=0
     for method_name, method in methods.iteritems():
         print("\n Method: " + method_name)
         print("\n Test: Linear Function")
-        k=0
         for p in allorderslinear:
-            if(method['linear_step_exception'][k] is not None):
-                linear_steps=method['linear_step_exception'][k]
-            else:
-                linear_steps=alllinearsteps[k]
-            coeff = convergenceTest(method_name,i, tst.LinearProblem(),linear_steps,p,False)
+            step_sizes = method['linear problem step sizes'][p]
+            coeff = convergenceTest(method_name, tst.LinearProblem(),step_sizes,p,False)
             checkConvergenceCoeff(coeff, p-method['smoothing'], "Test Linear non dense")
-            k+=1
             
         print("\n Test: VDPOL Easy (high epsilon) Function")
-        k=0
         for p in allordersvdpol:
-            if not method['vdpol_skip'][k]:
-                if method['vdpol_step_exception'][k] is not None:
-                    vdpol_steps = method['vdpol_step_exception'][k]
-                else:
-                    vdpol_steps=allvdpolsteps[k]
-                coeff = convergenceTest(method_name,i, tst.VDPOLEasyProblem(),vdpol_steps,p,False)
+            if not (p in method['skip vanderpol']):
+                step_sizes = method['vanderpol step sizes'][p]
+                coeff = convergenceTest(method_name, tst.VDPOLEasyProblem(),step_sizes,p,False)
                 checkConvergenceCoeff(coeff, p-method['smoothing'], "Test VPOL non dense")
-            k+=1
-        i+=1
-          
-    print("All tests passed")
+    print("All convergence tests without dense output passed")
     
     print("\n Executing convergence tests with dense output")
-    
-    i=0
     for method_name, method in methods.iteritems():
         print("\n Method: " + method_name)
         print("\n Test: Linear Function")
-        k=0
         for p in allorderslinear:
-            if not method['linear_dense_skip'][k]:
-                if method['linear_dense_step_exception'][k] is not None:
-                    linear_steps = method['linear_dense_step_exception'][k]
-                else:
-                    linear_steps=alllinearsteps[k]
-                coeff = convergenceTest(method_name,i, tst.LinearProblem(),linear_steps,p,True)
+            if not (p in method['skip linear dense']):
+                step_sizes = method['linear problem step sizes'][p]
+                coeff = convergenceTest(method_name, tst.LinearProblem(),step_sizes,p,True)
                 checkConvergenceCoeff(coeff, p-method['smoothing'], "Test Linear non dense")
-            k+=1
           
         print("\n Test: VDPOL Easy (high epsilon) Function")
-        k=0
         for p in allordersvdpol:
-            if not method['vdpol_dense_skip'][k]:
-                if method['vdpol_dense_step_exception'][k] is not None:
-                    vdpol_steps = method['vdpol_dense_step_exception'][k]
-                else:
-                    vdpol_steps=allvdpolsteps[k]
-                coeff = convergenceTest(method_name,i, tst.VDPOLEasyProblem(),vdpol_steps,p,True)
+            if not (p in method['skip vanderpol dense']):
+                step_sizes = method['vanderpol step sizes'][p]
+                coeff = convergenceTest(method_name, tst.VDPOLEasyProblem(),step_sizes,p,True)
                 checkConvergenceCoeff(coeff, p-method['smoothing'], "Test VPOL non dense")
-            k+=1
-        i+=1
- 
-    print("All tests passed")
+    print("All convergence tests with dense output passed")
    
     
 def exp(x):
@@ -807,7 +733,7 @@ if __name__ == "__main__":
     non_dense_output_tests()
     dense_output_tests()
   
-    doAllConvergenceTests()
+    doAllConvergenceTests(methods)
     checkInterpolationPolynomial()
     checkDerivativesForPolynomial()
     
