@@ -37,11 +37,8 @@ def compare_speedup(func, y0, t0, tf, y_ref, problem_name, tol = 1e-9, nsteps=10
                                                          rtol=tol, mxstep=nsteps, nworkers=nworkers[i], 
                                                          adaptive="order", full_output=True)
         runtime[i] = time.time() - start_time
-        # print"y"+str(y[-1])
         y[-1] = solout(y[-1])
-        # print"ysol"+str(y[-1])
         fe_seq[i], fe_tot[i], nstp[i], h_avg[i], k_avg[i] = infodict['fe_seq'], infodict['nfe'], infodict['nst'], infodict['h_avg'], infodict['k_avg']
-        # print"yref"+str(y_ref)
         yerr[i] = relative_error(y[-1], y_ref)
         print 'Runtime: ', runtime[i], ' s   Error: ', yerr[i], '   fe_seq: ', fe_seq[i], '   fe_tot: ', fe_tot[i], '   nstp: ', nstp[i], '   h_avg: ', h_avg[i], '   k_avg: ', k_avg[i], 
         speedup[i]= runtime[0]/runtime[i]
@@ -54,8 +51,8 @@ def compare_speedup(func, y0, t0, tf, y_ref, problem_name, tol = 1e-9, nsteps=10
     import matplotlib.pyplot as plt
     plt.hold('true')
 
-    runtime_line,   = plt.semilogy(nworkers, runtime, "s-")
-    plt.xlabel('nworkers')
+    runtime_line,   = plt.plot(nworkers, runtime, "s-")
+    plt.xlabel('Processes')
     plt.ylabel('Wall clock time (seconds)')
     plt.title('ParEx: ' + problem_name + ' at tolerance = ' + str(tol))
     plt.show()
@@ -63,19 +60,19 @@ def compare_speedup(func, y0, t0, tf, y_ref, problem_name, tol = 1e-9, nsteps=10
     plt.close()
 
     speedup_line,   = plt.plot(nworkers, speedup, "s-")
-    plt.xlabel('nworkers')
-    plt.ylabel('Speedup (time with nworkers=1 / time with nworkers=n)')
+    plt.xlabel('Processes')
+    plt.ylabel('Relative speedup')
     plt.title('ParEx: ' + problem_name + ' at tolerance = ' + str(tol))
     plt.show()
-    plt.savefig('images/' + problem_name + '_nworkers_vs_speedup.png')
+    plt.savefig('images/speedup_' + problem_name + '.png')
     plt.close()
 
     fig, plot1 = plt.subplots()
     plot2 = plot1.twinx()
     colors = ('Blue', 'Red')
-    plot1_line, = plot1.semilogy(nworkers, k_avg, '-s', color=colors[0])
-    plot2_line, = plot2.semilogy(nworkers, h_avg, '-s', color=colors[1])
-    plot1.set_xlabel("nworkers")
+    plot1_line, = plot1.plot(nworkers, k_avg, '-s', color=colors[0])
+    plot2_line, = plot2.plot(nworkers, h_avg, '-s', color=colors[1])
+    plot1.set_xlabel("Processes")
     plot1.set_ylabel("Average Extrapolation Order", color= colors[0])
     plot2.set_ylabel("Average Step Size", color= colors[1])
     plot1.tick_params(axis='y', colors=colors[0])
