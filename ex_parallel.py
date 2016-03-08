@@ -307,10 +307,10 @@ def _euler_explicit(f, grad, previousValues, previousTime,f_previousValue, step,
 END BLOCK 1: ODE numerical methods formulas (explicit, implicit and semi-implicit)
 '''''
 
-def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj_lst, smoothing, addSolverParam)):
+def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, j_nj_list, smoothing, addSolverParam)):
     '''
-    Compute extrapolation tableau values with the order specified and number of steps specified in k_nj_lst.
-    It calculates the T_{k,1} values for the k's in k_nj_lst.  
+    Compute extrapolation tableau values with the order specified and number of steps specified in j_nj_list.
+    It calculates the T_{k,1} values for the k's in j_nj_list.  
     
     Based on II.9.2 (Definition of the Method ref I)
     
@@ -323,7 +323,7 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj
     @param f_yn (array): function evaluation (func) at yn,tn
     @param args (tuple): extra arguments for func
     @param h (float): big step to take to obtain T_{k,1}
-    @param k_nj_lst (array of 2-tuples): array with (k,nj) pairs indicating which y_{h_j}(tn+h) are calculated  
+    @param j_nj_list (array of 2-tuples): array with (j,nj) pairs indicating which y_{h_j}(tn+h) are calculated  
     @param smoothing (string): specifies if a smoothing step should be performed:
         -'no': no smoothing step performed
         -'gbs': three point smoothing step (based on GBS method), II.9.13c ref I and IV.9.9 ref II.
@@ -343,7 +343,7 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj
         @return je_tot (int): number of total jacobian evaluations done to calculate this T
     '''
     res = []
-    for (k,nj) in k_nj_lst:
+    for (j,nj) in j_nj_list:
         fe_tot=0
         je_tot=0
         nj = int(nj)
@@ -360,7 +360,7 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj
             fe_tot += fe_tot_
             je_tot += je_tot_
         
-        #TODO: this y_half value is already returned inside Y, remove and when needed (interpolation) extract form Y
+        #TODO: this y_half value is already returned inside Y, remove and when needed (interpolation) extract from Y
         y_half = Y[nj/2]
         
         #Perform smoothing step
@@ -531,43 +531,62 @@ def __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=(), ful
     else:
         return ys
 
-def _balance_load(k, seq=(lambda t: 2*t)):
+def _balance_load(k, nworkers, seq=(lambda t: 2*t)):
     '''
-    Distributes the work load for the different processors. The tasks to be parallelized are the calculation
-    of each T_{j,1} for j=1...k. As the number of steps (and thus the work load) is determined for each j (seq(j))
-    load balancing is better to be fixed than dynamically distributed.
+    Distributes the workload for the different processors. The tasks to be parallelized are the calculation
+    of each T_{j,1} for j=1...k. As the number of steps required to compute T_{j,1} is given by seq(j).
+    This manual load-balancing can be more performant than relying on dynamic load-balancing.
     
-    Each processor is given a list of 2-tuples (k,nj) so that the sum of nj's (work loads) is equal (or with a 
-    minimized difference) between all processors.
+    Each process is given a list of 2-tuples (j,seq(j)) so that the maximal sum of seq(j)'s (workloads)
+    for any one process is minimized.
     
-    @param k (int): order of extrapolation
+    @param k (int): Number of extrapolation steps to be performed (i.e., number of T_{j,1} values)
     @param seq  (callable(i), int i>=1): sequence of steps to take
     
-    @return k_nj_lst (list of lists of 2-tuples): the list contains NUM_WORKERS lists each one containing which
-            T_{j,1} each processor has to calculate (each T_{j,1} is specified by the tuple (k,nj)).
+    @return j_nj_list (list of lists of 2-tuples): the list contains nworkers lists each one containing which
+            T_{j,1} values each processor has to calculate (each T_{j,1} is specified by the tuple (j,nj)).
+
+    The algorithm used here is not optimal for all possible sequences, but is typically optimal.
+    Basically, it gives one task to each process in some order, then reverses the list of processes
+    and repeats.
     '''
-#     return [(i,seq(i)) for i in range(k, 0, -1)]
-    if k <= NUM_WORKERS:
-        k_nj_lst = [[(i,seq(i))] for i in range(k, 0, -1)]
+    if k <= nworkers: # Just let each process compute one of the T_{j,1}
+        j_nj_list = [[(j,seq(j))] for j in range(k, 0, -1)]
     else:
-        k_nj_lst = [[] for i in range(NUM_WORKERS)]
-        index = range(NUM_WORKERS)
+        j_nj_list = [[] for i in range(nworkers)]
+        processes = range(nworkers)
         i = k
         while 1:
-            if i >= NUM_WORKERS:
-                for j in index:
-                    k_nj_lst[j] += [(i, seq(i))]
+            if i >= nworkers:
+                for j in processes:
+                    j_nj_list[j] += [(i, seq(i))]
                     i -= 1
             else:
-                for j in index:
+                for j in processes:
                     if i == 0:
                         break
-                    k_nj_lst[j] += [(i, seq(i))]
+                    j_nj_list[j] += [(i, seq(i))]
                     i -= 1
                 break
-            index = index[::-1]
+            processes = processes[::-1]
      
-    return k_nj_lst
+    return j_nj_list
+
+def _ideal_speedup(k, seq, nworkers):
+    """
+    Determine the maximum speedup that could possibly be achieved by using nworkers instead of just 1.
+    
+    This is only used for evaluating performance.
+    """
+    steps = [seq(j) for j in range(1,k+1)]
+    serial_cost = sum(steps)
+    j_nj_list = _balance_load(k, nworkers, seq)
+    max_work = 0
+    for proc_worklist in j_nj_list:
+        work = sum([nj for j, nj in proc_worklist])
+        max_work = max(max_work, work)
+    return serial_cost / float(max_work)
+
 
 def _updateJ00(previousJ00,func, yn, tn, yn_1, f_yn_1, args):
     '''
@@ -626,6 +645,7 @@ def _getJacobian(func, args, yn, tn, grad, methodargs, rejectPreviousStep, previ
         @return je_tot (int): number of Jacobian evaluations (1 if analytical Jacobian) 
             or Jacobian estimations (1 if estimated Jacobian)
     
+    Note that the Jacobian itself is not explicitly returned; it is stored as an entry in methodargs.
     '''
     je_tot=0
     fe_tot=0
@@ -710,27 +730,29 @@ def _compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h
 
     '''
     T = np.zeros((k+1,k+1, len(yn)), dtype=(type(yn[0])))
-    k_nj_lst = _balance_load(k, seq=seq)
+    j_nj_list = _balance_load(k, NUM_WORKERS, seq=seq)
     
-    f_yn, fe_tot, je_tot = _getJacobian(func, args, yn, tn, grad, methodargs, rejectPreviousStep, previousStepSolution,addSolverParam)
+    f_yn, fe_tot, je_tot = _getJacobian(func, args, yn, tn, grad, methodargs,
+                                        rejectPreviousStep, previousStepSolution,
+                                        addSolverParam)
     
-    jobs = [(method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj, smoothing, addSolverParam) for k_nj in k_nj_lst]
-    results = pool.map_async(_compute_stages, jobs, chunksize=1).get(9999999)
+    jobs = [(method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj, smoothing, addSolverParam) for k_nj in j_nj_list]
+    results = pool.map(_compute_stages, jobs, chunksize=1)
 
-#     res = _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj_lst, smoothing))
+    # Here's how this would be done in serial:
+    # res = _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, j_nj_list, smoothing))
     
-    #At this stage fe_tot has only counted the function evaluations for the jacobian estimation
-    #(which are not parallelized)
+    # At this stage fe_tot has only counted the function evaluations for the jacobian estimation
+    # (which are not parallelized)
     fe_seq = 1*fe_tot
     fe_tot_stage_max=0
-    # process the returned results from the pool 
+    # process the results returned from the pool 
     y_half = (k+1)*[None]
     f_yj = (k+1)*[None]
     yj = (k+1)*[None]
     hs = (k+1)*[None]
-    
+
     for res in results:
-#     for i in range(1,2):
         fe_tot_stage = 0
         for (k_, nj_, Tk_, y_half_, f_yj_, yj_, fe_tot_, je_tot_) in res:
             T[k_, 1] = Tk_
