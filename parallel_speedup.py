@@ -9,25 +9,10 @@ Resulting graphs are saved in the `./images` folder
 
 from __future__ import division
 import numpy as np
-import math 
 import time
-import subprocess
 
 import ex_parallel as ex_p
 import fnbod
-
-def replace_in_file(infile, outfile, oldstring, newstring):
-    f_in = open(infile,'r')
-    f_out = open(outfile,'w')
-    for line in f_in:
-        f_out.write(line.replace(oldstring,newstring))
-    f_out.close()
-    f_in.close()
-
-def get_fe(out):
-    fe_total = float(out[out.find("fcn=")+4:out.find("step=")])
-    step = float(out[out.find("step=")+5:out.find("accpt=")])
-    return (fe_total, step)
 
 def relative_error(y, y_ref):
     return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref)
@@ -48,7 +33,9 @@ def compare_speedup(func, y0, t0, tf, y_ref, problem_name, tol = 1e-9, nsteps=10
     for i in range(len(nworkers)):
         print 'nworkers: ', nworkers[i]
         start_time = time.time()
-        y, infodict = ex_p.ex_midpoint_explicit_parallel(func, None, y0, [t0, tf], atol=tol, rtol=tol, mxstep=nsteps, nworkers=nworkers[i], adaptative="order", full_output=True)
+        y, infodict = ex_p.ex_midpoint_explicit_parallel(func, None, y0, [t0, tf], atol=tol, 
+                                                         rtol=tol, mxstep=nsteps, nworkers=nworkers[i], 
+                                                         adaptive="order", full_output=True)
         runtime[i] = time.time() - start_time
         # print"y"+str(y[-1])
         y[-1] = solout(y[-1])

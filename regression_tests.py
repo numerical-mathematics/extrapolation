@@ -381,7 +381,7 @@ def convergence_test(method_name, test, step_sizes, order, dense=False):
         ys, infodict = ex_parallel.extrapolation_parallel(method_name,test.RHSFunction, None,
                                                           test.initialValue, dense_output, atol=1e-1,
                                                           rtol=1e-1, mxstep=10000000, full_output=True,
-                                                          nworkers=4, adaptative='fixed', p=order, h0=step)
+                                                          nworkers=4, adaptive='fixed', p=order, h0=step)
         
         ys=ys[1:len(ys)]
         if(dense):
