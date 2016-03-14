@@ -6,6 +6,13 @@ from scipy import optimize
 import scipy
 import forward_diff
 
+try:
+    import petsc4py, sys
+    petsc4py.init(sys.argv)
+    from petsc4py import PETSc
+except ImportError:
+    PETSc = None
+
 '''
 IMPORTANT: this code is based basically based on two references.
     ref I: Solving Ordinary Differential Equations I: Nonstiff Problems by Hairer, Norsett and Wanner
@@ -114,6 +121,35 @@ def _solve_implicit_step(zero_f, zero_grad, estimatedValue, addSolverParam):
 # #     print ("func ev: " + str(optObject.nfev))
 #     return (optObject.x, optObject.nfev)
 
+def _GMRES(A, b, x, tol, maxit):
+    if not PETSc:
+        sol, info = scipy.sparse.linalg.gmres(A, b, tol=tol, x0=x, maxiter=maxit)
+        return sol, info
+    size = A.shape
+    if not A.has_sorted_indices:
+        A.sort_indices()
+    ai, aj, av = A.indptr, A.indices, A.data
+    mat_A = PETSc.Mat().createAIJWithArrays(size, (ai, aj, av), comm=PETSc.COMM_SELF)
+    vec_b = PETSc.Vec().createWithArray(b, comm=PETSc.COMM_SELF)
+    if x is None: x = np.zeros_like(b)
+    vec_x = PETSc.Vec().createWithArray(x, comm=PETSc.COMM_SELF)
+    ksp = PETSc.KSP().create(comm=PETSc.COMM_SELF)
+    ksp.setType("gmres")
+    ksp.pc.setType("ilu")
+    ksp.setInitialGuessNonzero(True)
+    ksp.setTolerances(atol=tol, rtol=tol)
+    ksp.setOperators(mat_A, mat_A)
+    ksp.setFromOptions()
+    ksp.solve(vec_b, vec_x)
+    if ksp.getConvergedReason() > 0:
+        info = 0
+    else:
+        info = ksp.getIterationNumber()
+    ksp.destroy()
+    mat_A.destroy()
+    vec_b.destroy()
+    vec_x.destroy()
+    return x, info
 
 def _midpoint_semiimplicit(f, grad, previousValues, previousTime,f_previousValue, step, args, addSolverParam, J00, I, Isparse):
     '''
@@ -146,7 +182,7 @@ def _midpoint_semiimplicit(f, grad, previousValues, previousTime,f_previousValue
     if(scipy.sparse.issparse(J00)):
         A=_calculateMatrix(Isparse,J00,step)
         if(addSolverParam['iterative']):
-            sol, info= scipy.sparse.linalg.gmres(A, b, tol=addSolverParam['min_tol'],x0=xval, maxiter=100)                             
+            sol, info= _GMRES(A, b, x=xval, tol=addSolverParam['min_tol'], maxit=100)
             if info >0:
                 print("Info: maximum iterations reached for sparse system solver (GMRES).")
         else:
@@ -216,7 +252,7 @@ def _euler_semiimplicit(f, grad, previousValues, previousTime, f_previousValue,s
         if(addSolverParam['iterative']):
             #TODO: choose an appropriate maxiter parameter to distribute work between taking more steps and having a
             #more accurate solution
-            sol, info= scipy.sparse.linalg.gmres(A, b, tol=addSolverParam['min_tol'],x0=xval, maxiter=100)                             
+            sol, info= _GMRES(A, b, x=xval, tol=addSolverParam['min_tol'], maxit=100)
             if info >0:
                 print("Info: maximum iterations reached for sparse system solver (GMRES).")
         else:
@@ -715,9 +751,9 @@ def _compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h
     f_yn, fe_tot, je_tot = _getJacobian(func, args, yn, tn, grad, methodargs, rejectPreviousStep, previousStepSolution,addSolverParam)
     
     jobs = [(method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj, smoothing, addSolverParam) for k_nj in k_nj_lst]
-    results = pool.map(_compute_stages, jobs, chunksize=1)
 
-#     res = _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj_lst, smoothing))
+    results = pool.map(_compute_stages, jobs, chunksize=1)
+    #results = [_compute_stages(job) for job in jobs]
     
     #At this stage fe_tot has only counted the function evaluations for the jacobian estimation
     #(which are not parallelized)
@@ -1664,7 +1700,7 @@ def ex_midpoint_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0
     methodargs["J00"] = None
     
     methodargs["I"] = np.identity(len(y0), dtype=float)
-    methodargs["Isparse"] = np.identity(len(y0), dtype=float)  
+    methodargs["Isparse"] = scipy.sparse.identity(len(y0), dtype=float, format='csr')
 
     return __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
@@ -1710,7 +1746,7 @@ def ex_euler_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0, r
     #recalculated), and also because global variables cause problems with multiprocessing
     #(processes would lock on the I or Isparse global variable)
     methodargs["I"] = np.identity(len(y0), dtype=float)
-    methodargs["Isparse"] = np.identity(len(y0), dtype=float)  
+    methodargs["Isparse"] = scipy.sparse.identity(len(y0), dtype=float, format='csr')
 
     return __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
