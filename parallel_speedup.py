@@ -27,7 +27,7 @@ def compare_speedup(func, y0, t0, tf, y_ref, problem_name, tol = 1e-9, nsteps=10
     yerr = np.zeros(len(nworkers))
     nstp = np.zeros(len(nworkers))
     h_avg = np.zeros(len(nworkers))
-    k_avg = np.zeros(len(nworkers))
+    p_avg = np.zeros(len(nworkers))
     speedup = np.zeros(len(nworkers))
 
     for i in range(len(nworkers)):
@@ -38,9 +38,9 @@ def compare_speedup(func, y0, t0, tf, y_ref, problem_name, tol = 1e-9, nsteps=10
                                                          adaptive="order", full_output=True)
         runtime[i] = time.time() - start_time
         y[-1] = solout(y[-1])
-        fe_seq[i], fe_tot[i], nstp[i], h_avg[i], k_avg[i] = infodict['fe_seq'], infodict['nfe'], infodict['nst'], infodict['h_avg'], infodict['k_avg']
+        fe_seq[i], fe_tot[i], nstp[i], h_avg[i], p_avg[i] = infodict['fe_seq'], infodict['nfe'], infodict['nst'], infodict['h_avg'], infodict['p_avg']
         yerr[i] = relative_error(y[-1], y_ref)
-        print 'Runtime: ', runtime[i], ' s   Error: ', yerr[i], '   fe_seq: ', fe_seq[i], '   fe_tot: ', fe_tot[i], '   nstp: ', nstp[i], '   h_avg: ', h_avg[i], '   k_avg: ', k_avg[i], 
+        print 'Runtime: ', runtime[i], ' s   Error: ', yerr[i], '   fe_seq: ', fe_seq[i], '   fe_tot: ', fe_tot[i], '   nstp: ', nstp[i], '   h_avg: ', h_avg[i], '   p_avg: ', p_avg[i], 
         speedup[i]= runtime[0]/runtime[i]
         print '\nSpeedup: ', speedup[i]
         print ''       
@@ -70,7 +70,7 @@ def compare_speedup(func, y0, t0, tf, y_ref, problem_name, tol = 1e-9, nsteps=10
     fig, plot1 = plt.subplots()
     plot2 = plot1.twinx()
     colors = ('Blue', 'Red')
-    plot1_line, = plot1.plot(nworkers, k_avg, '-s', color=colors[0])
+    plot1_line, = plot1.plot(nworkers, p_avg, '-s', color=colors[0])
     plot2_line, = plot2.plot(nworkers, h_avg, '-s', color=colors[1])
     plot1.set_xlabel("Processes")
     plot1.set_ylabel("Average Extrapolation Order", color= colors[0])
@@ -79,7 +79,7 @@ def compare_speedup(func, y0, t0, tf, y_ref, problem_name, tol = 1e-9, nsteps=10
     plot2.tick_params(axis='y', colors=colors[1])
     plt.title('ParEx: ' + problem_name + ' at tolerance = ' + str(tol))
     plt.show()
-    plt.savefig('images/' + problem_name + '_nworkers_vs_k_avg_and_h_avg.png')
+    plt.savefig('images/' + problem_name + '_nworkers_vs_p_avg_and_h_avg.png')
     plt.close()
 
     print "FINISHED! Images were saved in ./images folder"
