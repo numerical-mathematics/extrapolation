@@ -1,17 +1,15 @@
 '''
-Runs a performance test comparing Python Extrap, Fortran DOP853, ODEX-P(12),
+Runs a performance test comparing ParEx, Fortran DOP853, ODEX-P(12),
 and scipy.integrate.ode for integrators DOPRI5 and DOP853 
 Result graphs are saved in the folder ./images
 '''
 
 from __future__ import division
 import numpy as np
-import math 
 import time
 import subprocess
 from scipy.integrate import ode
 from scipy.integrate import complex_ode
-import scipy.integrate
 
 import ex_parallel as ex_p
 import fnbod
@@ -32,7 +30,7 @@ def get_fe(out):
 def relative_error(y, y_ref):
     return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref)
 
-def compare_preformance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6), is_complex=False, nsteps=10e5, solout=(lambda t: t), run_odex_code=False):
+def compare_performance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6), is_complex=False, nsteps=10e5, solout=(lambda t: t), run_odex_code=False):
     print 'RUNNING COMPARISON TEST FOR ' + problem_name
     tol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
     a, b = tol_boundary
@@ -76,7 +74,9 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6
     adams_fe_tot = np.zeros(len(tol))
     adams_yerr = np.zeros(len(tol))
     adams_nstp = np.zeros(len(tol))
-    
+
+    # This is necessary because multiprocessing uses pickle, which can't handle
+    # Fortran function pointers
     def func2(t,y):
         return func(y,t)
 
@@ -84,15 +84,11 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6
         print 'Tolerance: ', tol[i]
 
         # run Python extrapolation code 
-        print 'running Python Extrap'
+        print 'running ParEx'
         start_time = time.time()
-        y, infodict = ex_p.ex_midpoint_explicit_parallel(func, None, y0, [t0, tf], atol=tol[i], rtol=tol[i], mxstep=nsteps, adaptative="order", full_output=True)
+        y, infodict = ex_p.ex_midpoint_explicit_parallel(func, None, y0, [t0, tf], atol=tol[i], rtol=tol[i], mxstep=nsteps, adaptive="order", full_output=True)
         py_runtime[i] = time.time() - start_time
-        print"y"+str(y[-1])
-        y[-1] = solout(y[-1])
-        print"ysol"+str(y[-1])
         py_fe_seq[i], py_fe_tot[i], py_nstp[i] = infodict['fe_seq'], infodict['nfe'], infodict['nst']
-        print"yref"+str(y_ref)
         py_yerr[i] = relative_error(y[-1], y_ref)
         print 'Runtime: ', py_runtime[i], ' s   Error: ', py_yerr[i], '   fe_seq: ', py_fe_seq[i], '   fe_tot: ', py_fe_tot[i], '   nstp: ', py_nstp[i]
         print ''
@@ -178,7 +174,7 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6
 
         print ''
 
-    print "Final data: Python Extrap"
+    print "Final data: ParEx"
     print py_runtime, py_fe_seq, py_fe_tot, py_yerr, py_nstp
     print "Final data: DOPRI5 (scipy)"
     print dopri5_runtime, dopri5_fe_seq, dopri5_fe_tot, dopri5_yerr, dopri5_nstp
@@ -203,9 +199,9 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6
     if run_odex_code:
         f_dop853_line, = plt.loglog(f_dop853_yerr, f_dop853_runtime, "s-")
         odex_line, = plt.loglog(odex_yerr, odex_runtime, "s-")
-        plt.legend([py_line, f_dop853_line, odex_line, dopri5_line, dop853_line], ["Python Extrap", "Fortran DOP853", "ODEX-P(12)", "DOPRI5 (scipy)", "DOP853 (scipy)"], loc=1)
+        plt.legend([py_line, f_dop853_line, odex_line, dopri5_line, dop853_line], ["ParEx", "Fortran DOP853", "ODEX-P(12)", "DOPRI5 (scipy)", "DOP853 (scipy)"], loc=1)
     else:
-        plt.legend([py_line, dopri5_line, dop853_line], ["Python Extrap", "DOPRI5 (scipy)", "DOP853 (scipy)"], loc=1)
+        plt.legend([py_line, dopri5_line, dop853_line], ["ParEx", "DOPRI5 (scipy)", "DOP853 (scipy)"], loc=1)
     plt.xlabel('Error')
     plt.ylabel('Wall clock time (seconds)')
     plt.title(problem_name)
@@ -217,7 +213,7 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6
         py_line,   = plt.loglog(py_yerr, py_fe_seq, "s-")
         f_dop853_line, = plt.loglog(f_dop853_yerr, f_dop853_fe_seq, "s-")
         odex_line, = plt.loglog(odex_yerr, odex_fe_seq, "s-")
-        plt.legend([py_line, f_dop853_line, odex_line], ["Python Extrap", "Fortran DOP853", "ODEX-P(12)"], loc=1)
+        plt.legend([py_line, f_dop853_line, odex_line], ["ParEx", "Fortran DOP853", "ODEX-P(12)"], loc=1)
         plt.xlabel('Error')
         plt.ylabel('Sequential derivative evaluations')
         plt.title(problem_name)
@@ -227,7 +223,7 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6
         py_line,   = plt.loglog(py_yerr, py_fe_tot, "s-")
         f_dop853_line, = plt.loglog(f_dop853_yerr, f_dop853_fe_tot, "s-")
         odex_line, = plt.loglog(odex_yerr, odex_fe_tot, "s-")
-        plt.legend([py_line, f_dop853_line, odex_line], ["Python Extrap", "Fortran DOP853", "ODEX-P(12)"], loc=1)
+        plt.legend([py_line, f_dop853_line, odex_line], ["ParEx", "Fortran DOP853", "ODEX-P(12)"], loc=1)
         plt.xlabel('Error')
         plt.ylabel('Total derivative evaluations')  
         plt.title(problem_name)
@@ -237,7 +233,7 @@ def compare_preformance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6
         py_line,   = plt.loglog(tol, py_nstp, "s-")
         f_dop853_line, = plt.loglog(tol, f_dop853_nstp, "s-")
         odex_line, = plt.loglog(tol, odex_nstp, "s-")
-        plt.legend([py_line, f_dop853_line, odex_line], ["Python Extrap", "Fortran DOP853", "ODEX-P(12)"], loc=1)
+        plt.legend([py_line, f_dop853_line, odex_line], ["ParEx", "Fortran DOP853", "ODEX-P(12)"], loc=1)
         plt.xlabel('tol')
         plt.ylabel('Total number of steps')  
         plt.title(problem_name)
@@ -257,8 +253,7 @@ def nbod_problem():
     tf = 0.08
     y0 = fnbod.init_fnbod(2400)
     y_ref = np.loadtxt("reference.txt")
-    # compare_preformance(nbod_func, y0, t0, tf, y_ref, "nbod_problem", run_odex_code=True)
-    compare_preformance(nbod_func, y0, t0, tf, y_ref, "nbod_problem")
+    compare_performance(nbod_func, y0, t0, tf, y_ref, "nbod_problem")
 
 ###### kdv Problem ######
 def kdv_init(t0):
@@ -292,7 +287,7 @@ def kdv_problem():
     tf = 0.003
     y0 = kdv_init(t0)
     y_ref = np.loadtxt("reference_kdv.txt")
-    compare_preformance(kdv_func, y0, t0, tf, y_ref, "kdv_problem", is_complex=True, solout=kdv_solout)
+    compare_performance(kdv_func, y0, t0, tf, y_ref, "kdv_problem", is_complex=True, solout=kdv_solout)
 
 ###### Burgers' Problem ######
 def burgers_init(t0):
@@ -329,7 +324,7 @@ def burgers_problem():
     tf = 3.
     y0 = burgers_init(t0)
     y_ref = np.loadtxt("reference_burgers.txt")
-    compare_preformance(burgers_func, y0, t0, tf, y_ref, "burgers_problem", tol_boundary=(0,4), nsteps=10e4, is_complex=True, solout=burgers_solout)
+    compare_performance(burgers_func, y0, t0, tf, y_ref, "burgers_problem", tol_boundary=(0,4), nsteps=10e4, is_complex=True, solout=burgers_solout)
 
 
 ########### RUN TESTS ###########

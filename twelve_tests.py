@@ -2,34 +2,34 @@ from __future__ import division
 from scipy import integrate
 import scipy
 import numpy as np
-from collections import namedtuple, Counter
+from collections import namedtuple
 import time
 import ex_parallel
 import ex_parallel_original
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 import math
 from compare_test import kdv_func, kdv_init, kdv_solout
-from numpy import meshgrid
 import fnbruss
 
-
-'''
+"""
 From book: Solving Ordinary Differential Equations II,
 IV.10 Numerical Experiment, Twelve Test Problems
-'''
 
-'''
-Each ODE problem is defined with: problemName, right hand side function (derivative function), jacobian matrix of RHS function, initial time (float), initial value (np.array),
-times at which output is wanted, atolfact absolute tolerance factor-> set to 1. as default (multiplies relative tolerance factor to make absolute tolerance more stringent), 
-atol absolute tolerance -> set to None as default (required absolute tolerance for all relative tolerances wanted).
-'''
+Each ODE problem is defined with: problemName, right hand side function
+(derivative function), jacobian matrix of RHS function, initial time (float),
+initial value (np.array), times at which output is wanted, atolfact absolute
+tolerance factor-> set to 1. as default (multiplies relative tolerance factor
+to make absolute tolerance more stringent), atol absolute tolerance -> set to
+None as default (required absolute tolerance for all relative tolerances
+wanted).
+"""
 #TODO: for each problem add plot function to plot results
-TestProblemDefinition = namedtuple("TestProblemDefinition", ["problemName","RHSFunction", "RHSGradient","initialTime","initialValue", "denseOutput", "atolfact", "atol"])
+TestProblemDefinition = namedtuple("TestProblemDefinition", 
+            ["problemName","RHSFunction", "RHSGradient","initialTime",
+                "initialValue", "denseOutput", "atolfact", "atol"])
 
 
 #Linear problem
-
 def Linearf(y,t):
     lam = -1.
     return lam*y
@@ -40,7 +40,7 @@ def LinearProblem():
 
 #VDPOL problem
 
-#OBS: RHS function can't be nested in VDPOLProblem():
+#Observation: RHS function can't be nested in VDPOLProblem():
 #http://stackoverflow.com/questions/4677012/python-cant-pickle-type-x-attribute-lookup-failed
 
 def VDPOLf(y,t):
@@ -56,7 +56,6 @@ def VDPOLgrad(y,t):
 
 def VDPOLProblem():    
     return TestProblemDefinition("VDPOL", VDPOLf, VDPOLgrad, 0, np.array([2.,0.]),np.arange(0,13,1.),1.,None)
-
 
 def VDPOLMildf(y,t):
     epsilon=1e-2
@@ -200,7 +199,7 @@ def E5Problem():
     return TestProblemDefinition("E5", E5f, E5grad, 0, np.array([1.76e-3,0,0,0]), denseOutput,1.,1.7e-24)
 
 
-#BRUSS-2D problem
+#BRUSS-2D problem (Brusselator)
     
 A=0
 N=15

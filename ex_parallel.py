@@ -343,10 +343,10 @@ def _euler_explicit(f, grad, previousValues, previousTime,f_previousValue, step,
 END BLOCK 1: ODE numerical methods formulas (explicit, implicit and semi-implicit)
 '''''
 
-def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj_lst, smoothing, addSolverParam)):
+def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, j_nj_list, smoothing, addSolverParam)):
     '''
-    Compute extrapolation tableau values with the order specified and number of steps specified in k_nj_lst.
-    It calculates the T_{k,1} values for the k's in k_nj_lst.  
+    Compute extrapolation tableau values with the order specified and number of steps specified in j_nj_list.
+    It calculates the T_{k,1} values for the k's in j_nj_list.  
     
     Based on II.9.2 (Definition of the Method ref I)
     
@@ -359,7 +359,7 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj
     @param f_yn (array): function evaluation (func) at yn,tn
     @param args (tuple): extra arguments for func
     @param h (float): big step to take to obtain T_{k,1}
-    @param k_nj_lst (array of 2-tuples): array with (k,nj) pairs indicating which y_{h_j}(tn+h) are calculated  
+    @param j_nj_list (array of 2-tuples): array with (j,nj) pairs indicating which y_{h_j}(tn+h) are calculated  
     @param smoothing (string): specifies if a smoothing step should be performed:
         -'no': no smoothing step performed
         -'gbs': three point smoothing step (based on GBS method), II.9.13c ref I and IV.9.9 ref II.
@@ -379,7 +379,7 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj
         @return je_tot (int): number of total jacobian evaluations done to calculate this T
     '''
     res = []
-    for (k,nj) in k_nj_lst:
+    for (j,nj) in j_nj_list:
         fe_tot=0
         je_tot=0
         nj = int(nj)
@@ -391,12 +391,12 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj
         Y[1], f_yj[0], fe_tot_, je_tot_ = method(func, grad, (None, Y[0]), tn, f_yn, step, args, addSolverParam, **methodargs)
         fe_tot += fe_tot_
         je_tot += je_tot_
-        for j in range(2,nj+1):
-            Y[j], f_yj[j-1], fe_tot_ , je_tot_= method(func, grad, (Y[j-2], Y[j-1]), tn + (j-1)*(h/nj), None, step, args, addSolverParam, **methodargs)
+        for i in range(2,nj+1):
+            Y[i], f_yj[i-1], fe_tot_ , je_tot_= method(func, grad, (Y[i-2], Y[i-1]), tn + (i-1)*(h/nj), None, step, args, addSolverParam, **methodargs)
             fe_tot += fe_tot_
             je_tot += je_tot_
         
-        #TODO: this y_half value is already returned inside Y, remove and when needed (interpolation) extract form Y
+        #TODO: this y_half value is already returned inside Y, remove and when needed (interpolation) extract from Y
         y_half = Y[nj/2]
         
         #Perform smoothing step
@@ -411,13 +411,13 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj
                 Tj1 = 1/4*(Y[nj-1]+2*Y[nj]+nextStepSolution)
             elif(smoothing == 'semiimp'):
                 Tj1 = 1/2*(Y[nj-1]+nextStepSolution)
-        res += [(k, nj, Tj1, y_half, f_yj,Y, fe_tot, je_tot)]
+        res += [(j, nj, Tj1, y_half, f_yj,Y, fe_tot, je_tot)]
 
     return res
 
 def __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=(), full_output=False,
         rtol=1.0e-8, atol=1.0e-8, h0=0.5, mxstep=10e4, robustness_factor=2, p=4,
-        nworkers=None, smoothing='no', symmetric=True, seq=None, adaptative="order", addSolverParam={}):   
+        nworkers=None, smoothing='no', symmetric=True, seq=None, adaptive="order", addSolverParam={}):   
     '''
     Solves the system of IVPs dy/dt = func(y, t0, ...) with parallel extrapolation. 
     
@@ -508,7 +508,7 @@ def __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=(), ful
     while t_curr < t_max:
         rejectStep, y_temp, ysolution,f_yn, h, k, h_new, k_new, (fe_seq_, fe_tot_, je_tot_) = _solve_one_step(
                 method, methodargs, func, grad, t_curr, t, t_index, yn, args, h, k, 
-                atol, rtol, pool, smoothing, symmetric, seq, adaptative, rejectStep, previousStepSolution,addSolverParam)
+                atol, rtol, pool, smoothing, symmetric, seq, adaptive, rejectStep, previousStepSolution,addSolverParam)
         #previousStepSolution is used for Jacobian updating
         previousStepSolution=(yn,f_yn)
 
@@ -552,7 +552,7 @@ def __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=(), ful
         #Check that h_new doesn't step after t_max
         h = min(h_new, t_max - t_curr)
         #Keeps the code from taking a close to machine precision step
-        if (adaptative=="fixed" and (t_max-(t_curr+h))/t_max<1e-12):
+        if (adaptive=="fixed" and (t_max-(t_curr+h))/t_max<1e-12):
             h=t_max-t_curr
             
         k = k_new
@@ -567,43 +567,62 @@ def __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=(), ful
     else:
         return ys
 
-def _balance_load(k, seq=(lambda t: 2*t)):
+def _balance_load(k, nworkers, seq=(lambda t: 2*t)):
     '''
-    Distributes the work load for the different processors. The tasks to be parallelized are the calculation
-    of each T_{j,1} for j=1...k. As the number of steps (and thus the work load) is determined for each j (seq(j))
-    load balancing is better to be fixed than dynamically distributed.
+    Distributes the workload for the different processors. The tasks to be parallelized are the calculation
+    of each T_{j,1} for j=1...k. As the number of steps required to compute T_{j,1} is given by seq(j).
+    This manual load-balancing can be more performant than relying on dynamic load-balancing.
     
-    Each processor is given a list of 2-tuples (k,nj) so that the sum of nj's (work loads) is equal (or with a 
-    minimized difference) between all processors.
+    Each process is given a list of 2-tuples (j,seq(j)) so that the maximal sum of seq(j)'s (workloads)
+    for any one process is minimized.
     
-    @param k (int): order of extrapolation
+    @param k (int): Number of extrapolation steps to be performed (i.e., number of T_{j,1} values)
     @param seq  (callable(i), int i>=1): sequence of steps to take
     
-    @return k_nj_lst (list of lists of 2-tuples): the list contains NUM_WORKERS lists each one containing which
-            T_{j,1} each processor has to calculate (each T_{j,1} is specified by the tuple (k,nj)).
+    @return j_nj_list (list of lists of 2-tuples): the list contains nworkers lists each one containing which
+            T_{j,1} values each processor has to calculate (each T_{j,1} is specified by the tuple (j,nj)).
+
+    The algorithm used here is not optimal for all possible sequences, but is typically optimal.
+    Basically, it gives one task to each process in some order, then reverses the list of processes
+    and repeats.
     '''
-#     return [(i,seq(i)) for i in range(k, 0, -1)]
-    if k <= NUM_WORKERS:
-        k_nj_lst = [[(i,seq(i))] for i in range(k, 0, -1)]
+    if k <= nworkers: # Just let each process compute one of the T_{j,1}
+        j_nj_list = [[(j,seq(j))] for j in range(k, 0, -1)]
     else:
-        k_nj_lst = [[] for i in range(NUM_WORKERS)]
-        index = range(NUM_WORKERS)
+        j_nj_list = [[] for i in range(nworkers)]
+        processes = range(nworkers)
         i = k
         while 1:
-            if i >= NUM_WORKERS:
-                for j in index:
-                    k_nj_lst[j] += [(i, seq(i))]
+            if i >= nworkers:
+                for j in processes:
+                    j_nj_list[j] += [(i, seq(i))]
                     i -= 1
             else:
-                for j in index:
+                for j in processes:
                     if i == 0:
                         break
-                    k_nj_lst[j] += [(i, seq(i))]
+                    j_nj_list[j] += [(i, seq(i))]
                     i -= 1
                 break
-            index = index[::-1]
+            processes = processes[::-1]
      
-    return k_nj_lst
+    return j_nj_list
+
+def _ideal_speedup(k, seq, nworkers):
+    """
+    Determine the maximum speedup that could possibly be achieved by using nworkers instead of just 1.
+    
+    This is only used for evaluating performance.
+    """
+    steps = [seq(j) for j in range(1,k+1)]
+    serial_cost = sum(steps)
+    j_nj_list = _balance_load(k, nworkers, seq)
+    max_work = 0
+    for proc_worklist in j_nj_list:
+        work = sum([nj for j, nj in proc_worklist])
+        max_work = max(max_work, work)
+    return serial_cost / float(max_work)
+
 
 def _updateJ00(previousJ00,func, yn, tn, yn_1, f_yn_1, args):
     '''
@@ -662,6 +681,7 @@ def _getJacobian(func, args, yn, tn, grad, methodargs, rejectPreviousStep, previ
         @return je_tot (int): number of Jacobian evaluations (1 if analytical Jacobian) 
             or Jacobian estimations (1 if estimated Jacobian)
     
+    Note that the Jacobian itself is not explicitly returned; it is stored as an entry in methodargs.
     '''
     je_tot=0
     fe_tot=0
@@ -746,27 +766,29 @@ def _compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h
 
     '''
     T = np.zeros((k+1,k+1, len(yn)), dtype=(type(yn[0])))
-    k_nj_lst = _balance_load(k, seq=seq)
+    j_nj_list = _balance_load(k, NUM_WORKERS, seq=seq)
     
-    f_yn, fe_tot, je_tot = _getJacobian(func, args, yn, tn, grad, methodargs, rejectPreviousStep, previousStepSolution,addSolverParam)
+    f_yn, fe_tot, je_tot = _getJacobian(func, args, yn, tn, grad, methodargs,
+                                        rejectPreviousStep, previousStepSolution,
+                                        addSolverParam)
     
-    jobs = [(method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj, smoothing, addSolverParam) for k_nj in k_nj_lst]
-
+    jobs = [(method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj, smoothing, addSolverParam) for k_nj in j_nj_list]
     results = pool.map(_compute_stages, jobs, chunksize=1)
+
+    # Here's how this would be done in serial:
     #results = [_compute_stages(job) for job in jobs]
     
-    #At this stage fe_tot has only counted the function evaluations for the jacobian estimation
-    #(which are not parallelized)
+    # At this stage fe_tot has only counted the function evaluations for the jacobian estimation
+    # (which are not parallelized)
     fe_seq = 1*fe_tot
     fe_tot_stage_max=0
-    # process the returned results from the pool 
+    # process the results returned from the pool 
     y_half = (k+1)*[None]
     f_yj = (k+1)*[None]
     yj = (k+1)*[None]
     hs = (k+1)*[None]
-    
+
     for res in results:
-#     for i in range(1,2):
         fe_tot_stage = 0
         for (k_, nj_, Tk_, y_half_, f_yj_, yj_, fe_tot_, je_tot_) in res:
             T[k_, 1] = Tk_
@@ -1222,7 +1244,7 @@ def _getDenseAndSequence(t_final, t, t_index, seq, symmetric):
     return (dense,seq)
 
 
-def _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative, addSolverParam): 
+def _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptive, addSolverParam): 
     '''
     Estimates next step and order, and whether to reject step, from the results
     obtained by the solver and the tolerance asked
@@ -1256,7 +1278,7 @@ def _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative, addSolve
  
     '''
     
-    if(adaptative=="fixed"):
+    if(adaptive=="fixed"):
         return (False, T[k,k], h, k)
     
     sizeODE=0
@@ -1332,7 +1354,7 @@ def _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative, addSolve
 
 
 def _solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args, h, k, atol, rtol, 
-                   pool, smoothing, symmetric, seq, adaptative, rejectPreviousStep, previousStepSolution, addSolverParam):
+                   pool, smoothing, symmetric, seq, adaptive, rejectPreviousStep, previousStepSolution, addSolverParam):
     '''
     Solves one 'big' H step of the ODE (with all its inner H/nj steps and the extrapolation). In other words, 
     solve one full stage of the problem (one step of parallel extrapolation) and interpolates all the dense 
@@ -1400,7 +1422,7 @@ def _solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args
     
     #Limit k, order of extrapolation
     #If order and step are fixed, do not limit order
-    if(not adaptative == 'fixed'):
+    if(not adaptive == 'fixed'):
         k_max = 10
         k_min = 3
         k = min(k_max, max(k_min, k))
@@ -1408,16 +1430,16 @@ def _solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args
     T, y_half, f_yj,yj, f_yn, hs, (fe_seq, fe_tot, je_tot) = _compute_extrapolation_table(method, methodargs, func, grad, 
                 t_curr, yn, args, h, k, pool, rejectPreviousStep, previousStepSolution, seq, smoothing, symmetric,addSolverParam)
     
-    rejectStep, y, h_new, k_new = _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptative, addSolverParam)
+    rejectStep, y, h_new, k_new = _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptive, addSolverParam)
     
     y_solution=[]
     if((not rejectStep) & dense):
         rejectStep, y_solution, h_int, (fe_tot_, fe_seq_) = _interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half, f_yj,yj, yn, 
-                                                                         atol, rtol, seq, adaptative, symmetric)
+                                                                         atol, rtol, seq, adaptive, symmetric)
         fe_tot += fe_tot_
         fe_seq += fe_seq_
         
-        if(not adaptative=="fixed"):
+        if(not adaptive=="fixed"):
             if(rejectStep):
                 h_new = 1*h_int
                 #Use same order if step is rejected by the interpolation (do not use the k_new of the adapted order)
@@ -1430,7 +1452,7 @@ def _solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args
 
 
 def _interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half, f_yj,yj, yn,
-                            atol, rtol, seq, adaptative, symmetric):
+                            atol, rtol, seq, adaptive, symmetric):
     '''
     This function calculates all the intermediate solutions asked as dense output (in parameter t) that fall in this
     integration step. It generates an interpolation polynomial and it calculates all the required solutions. If 
@@ -1515,7 +1537,7 @@ def _interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half
             
         y_poly, errint, h_int = poly((t[t_index] - t_curr)/h)
         
-        if adaptative=="fixed":
+        if adaptive=="fixed":
             y_solution.append(1*y_poly)
             cur_stp = 0
             t_index += 1
@@ -1586,7 +1608,7 @@ These are recommended to use for developing and testing purposes
 Each function solves the system of IVPs dy/dt = func(y, t0, ...) with parallel extrapolation.
 
 Important: the default values of the functions are set to achieve the optimal performance, it is highly
-recommended to use such default values (this applies to robustness, adaptative, seq and smoothing parameters).
+recommended to use such default values (this applies to robustness, adaptive, seq and smoothing parameters).
 
 All this functions have the same structure, and their names explicitly say the type of solver method used
 (midpoint,euler/explicit,semiimplicit,implicit). Structure:
@@ -1643,7 +1665,7 @@ All this functions have the same structure, and their names explicitly say the t
 
 def ex_midpoint_explicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
         atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'no', seq=(lambda t: 2*t), p=4, 
-        nworkers=None, adaptative="order"):
+        nworkers=None, adaptive="order"):
     ''' 
     Parallel extrapolation with midpoint explicit method
     
@@ -1657,14 +1679,14 @@ def ex_midpoint_explicit_parallel(func, grad, y0, t, args=(), full_output=0, rto
 
     return __extrapolation_parallel(method,  {}, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptative=adaptative,
+         p=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptive=adaptive,
          addSolverParam=addSolverParam)
 
 
 
 def ex_midpoint_implicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
         atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'gbs', seq=(lambda t: 2*(2*t-1)), p=4,
-        nworkers=None, adaptative="order"):
+        nworkers=None, adaptive="order"):
     ''' 
     Parallel extrapolation with midpoint implicit method
     
@@ -1678,13 +1700,13 @@ def ex_midpoint_implicit_parallel(func, grad, y0, t, args=(), full_output=0, rto
 
     return __extrapolation_parallel(method, {}, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptative=adaptative,
+         p=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptive=adaptive,
          addSolverParam=addSolverParam)
 
 
 def ex_midpoint_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
         atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'semiimp', seq=(lambda t: 2*(2*t-1)), p=4,
-        nworkers=None, adaptative="order"):
+        nworkers=None, adaptive="order"):
     ''' 
     Parallel extrapolation with midpoint semi-implicit method
     
@@ -1704,13 +1726,13 @@ def ex_midpoint_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0
 
     return __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=k, nworkers=nworkers, smoothing=smoothing, symmetric = True, seq=seq, adaptative=adaptative,
+         p=k, nworkers=nworkers, smoothing=smoothing, symmetric = True, seq=seq, adaptive=adaptive,
          addSolverParam=addSolverParam)
 
 
 def ex_euler_explicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
         atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'no', seq=(lambda t: t), p=4,
-        nworkers=None, adaptative="order"):
+        nworkers=None, adaptive="order"):
     ''' 
     Parallel extrapolation with euler explicit method
     
@@ -1723,13 +1745,13 @@ def ex_euler_explicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1
 
     return __extrapolation_parallel(method, {}, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=p, nworkers=nworkers, smoothing=smoothing, symmetric = False, seq=seq, adaptative=adaptative,
+         p=p, nworkers=nworkers, smoothing=smoothing, symmetric = False, seq=seq, adaptive=adaptive,
          addSolverParam=addSolverParam)
     
     
 def ex_euler_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
         atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'no', seq=(lambda t: 2*(2*t-1)), p=4,
-        nworkers=None, adaptative="order"):
+        nworkers=None, adaptive="order"):
     ''' 
     Parallel extrapolation with euler semi-implicit method
     
@@ -1750,7 +1772,7 @@ def ex_euler_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0, r
 
     return __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=p, nworkers=nworkers, smoothing=smoothing, symmetric = False, seq=seq, adaptative=adaptative,
+         p=p, nworkers=nworkers, smoothing=smoothing, symmetric = False, seq=seq, adaptive=adaptive,
          addSolverParam=addSolverParam)
 
 '''
@@ -1819,9 +1841,9 @@ methods = {
         }
 
 def extrapolation_parallel(method_name, func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
-        atol=1.0e-8, h0=0.5, mxstep=10e4, p=4, nworkers=None, adaptative = 'order'):
+        atol=1.0e-8, h0=0.5, mxstep=10e4, p=4, nworkers=None, adaptive = 'order'):
         
         method_function = methods[method_name]
         return method_function(func, grad, y0, t, args=args, full_output=full_output,
                                rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p,
-                               nworkers=nworkers, adaptative=adaptative)
+                               nworkers=nworkers, adaptive=adaptive)
