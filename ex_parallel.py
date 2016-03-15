@@ -355,8 +355,8 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, j_nj
         Y[1], f_yj[0], fe_tot_, je_tot_ = method(func, grad, (None, Y[0]), tn, f_yn, step, args, addSolverParam, **methodargs)
         fe_tot += fe_tot_
         je_tot += je_tot_
-        for j in range(2,nj+1):
-            Y[j], f_yj[j-1], fe_tot_ , je_tot_= method(func, grad, (Y[j-2], Y[j-1]), tn + (j-1)*(h/nj), None, step, args, addSolverParam, **methodargs)
+        for i in range(2,nj+1):
+            Y[i], f_yj[i-1], fe_tot_ , je_tot_= method(func, grad, (Y[i-2], Y[i-1]), tn + (i-1)*(h/nj), None, step, args, addSolverParam, **methodargs)
             fe_tot += fe_tot_
             je_tot += je_tot_
         
@@ -375,7 +375,7 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, j_nj
                 Tj1 = 1/4*(Y[nj-1]+2*Y[nj]+nextStepSolution)
             elif(smoothing == 'semiimp'):
                 Tj1 = 1/2*(Y[nj-1]+nextStepSolution)
-        res += [(k, nj, Tj1, y_half, f_yj,Y, fe_tot, je_tot)]
+        res += [(j, nj, Tj1, y_half, f_yj,Y, fe_tot, je_tot)]
 
     return res
 
