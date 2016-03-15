@@ -380,7 +380,7 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, j_nj
     return res
 
 def __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=(), full_output=False,
-        rtol=1.0e-8, atol=1.0e-8, h0=0.5, mxstep=10e4, robustness_factor=2, p=4,
+        rtol=1.0e-8, atol=1.0e-8, h0=0.5, mxstep=10e4, robustness_factor=2, k=4,
         nworkers=None, smoothing='no', symmetric=True, seq=None, adaptive="order", addSolverParam={}):   
     '''
     Solves the system of IVPs dy/dt = func(y, t0, ...) with parallel extrapolation. 
@@ -402,7 +402,7 @@ def __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=(), ful
             integration point in t. Defaults to 10e4
     @param robustness_factor (int): multiplicative factor that limits the increase and decrease of the adaptive step
             (next step vs last step length ratio is limited by this factor).
-    @param p (int): the order of extrapolation if order is fixed, or the starting order otherwise.
+    @param k (int): the number of extrapolation steps if order is fixed, or the starting value otherwise.
     @param nworkers (int): the number of workers working in parallel. If nworkers==None, then 
         the the number of workers is set to the number of CPUs on the running machine.
     @param smoothing (string): specifies if a smoothing step should be performed:
@@ -430,7 +430,7 @@ def __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=(), ful
                         analytic Jacobian is provided) or Jacobian estimations
                         (when no analytic Jacobian is provided)
             'h_avg'     average step size
-            'k_avg'     average extrapolation order
+            'k_avg'     average number of extrapolation steps
 
     '''
     
@@ -459,7 +459,7 @@ def __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=(), ful
     t_index = 1
 
     #yn is the previous calculated step (at t_curr)
-    yn, t_curr, k = 1*y0, t0, p
+    yn, t_curr = 1*y0, t0
     h = min(h0, t_max-t0)
 
     sum_ks, sum_hs = 0, 0
@@ -577,6 +577,10 @@ def _ideal_speedup(k, seq, nworkers):
     Determine the maximum speedup that could possibly be achieved by using nworkers instead of just 1.
     
     This is only used for evaluating performance.
+
+    TODO: What is k here? is it the number of extrapolation steps or the order of extrapolation?
+    If it is the order of extrapolation, then this function if not correct as _balance_load takes in 
+    number of extrapolation steps
     """
     steps = [seq(j) for j in range(1,k+1)]
     serial_cost = sum(steps)
@@ -693,7 +697,7 @@ def _compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args, h
     @param args (tuple): extra arguments to pass to function.
     @param h (float): integration step to take (the output, without interpolation, will be calculated at t_curr+h)
             This value matches with the value H in ref I and ref II.
-    @param k (int): order of extrapolation to take in this step (determines the number of extrapolations performed
+    @param k (int): number of extrapolation steps to take in this step (determines the number of extrapolations performed
             to achieve a better integration output, equivalent to the size of the extrapolation tableau).
     @param pool: multiprocessing pool of workers (with as many workers as processors) that will parallelize the
             calculation of each of the initial values of the extrapolation tableau (T_{i,1} i=1...k).
@@ -888,7 +892,7 @@ def _compute_rs(yj, hs, k, seq=(lambda t: 4*t-2)):
     @param yj (3D array): array containing for each extrapolation value (1...k) an array with all the intermediate solution 
             values obtained to calculate each T_{i,1}. 
     @param hs (array): array containing for each extrapolation value (1...k) the inner step taken, H/nj (II.9.1 ref I) 
-    @param k (int): order of extrapolation to take in this step (determines the number of extrapolations performed
+    @param k (int): number of extrapolation steps to take in this step (determines the number of extrapolations performed
             to achieve a better integration output, equivalent to the size of the extrapolation tableau).    
     @param seq (callable(i), int i>=1): the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
 
@@ -928,7 +932,7 @@ def _compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
     @param f_yj (3D array): array containing for each extrapolation value (1...k) an array with all the function evaluations
             done at the intermediate solution values.
     @param hs (array): array containing for each extrapolation value (1...k) the inner step taken, H/nj (II.9.1 ref I) 
-    @param k (int): order of extrapolation to take in this step (determines the number of extrapolations performed
+    @param k (int): number of extrapolation steps to take in this step (determines the number of extrapolations performed
             to achieve a better integration output, equivalent to the size of the extrapolation tableau).    
     @param seq (callable(i), int i>=1): the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
 
@@ -1027,7 +1031,7 @@ def _interpolate_nonsym(y0, Tkk, yj, hs, H, k, atol, rtol,
     @param hs (array): array containing for each extrapolation value (1...k) the inner step taken, H/nj (II.9.1 ref I) 
     @param H (float): integration step to take (the output, without interpolation, will be calculated at t_curr+h)
             This value matches with the value H in ref I and ref II. 
-    @param k (int): order of extrapolation to take in this step (determines the number of extrapolations performed
+    @param k (int): number of extrapolation steps to take in this step (determines the number of extrapolations performed
             to achieve a better integration output, equivalent to the size of the extrapolation tableau).
     @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
             determine the error control performed by the solver. See  function _error_norm(y1, y2, atol, rtol).    
@@ -1079,7 +1083,7 @@ def _interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
     @param hs (array): array containing for each extrapolation value (1...k) the inner step taken, H/nj (II.9.1 ref I) 
     @param H (float): integration step to take (the output, without interpolation, will be calculated at t_curr+h)
             This value matches with the value H in ref I and ref II. 
-    @param k (int): order of extrapolation to take in this step (determines the number of extrapolations performed
+    @param k (int): number of extrapolation steps to take in this step (determines the number of extrapolations performed
             to achieve a better integration output, equivalent to the size of the extrapolation tableau).
     @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
             determine the error control performed by the solver. See  function _error_norm(y1, y2, atol, rtol).    
@@ -1238,7 +1242,7 @@ def _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptive, addSolverP
             (because it doesn't satisfy the asked tolerances)
         @return y : best solution at the end of the step
         @return h_new : new step to take
-        @return k_new :  new order to use
+        @return k_new : new number of extrapolation steps to use
  
     '''
     
@@ -1339,7 +1343,7 @@ def _solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args
     @param args (tuple): extra arguments to pass to function.
     @param h (float): integration step to take (the output, without interpolation, will be calculated at t_curr+h)
             This value matches with the value H in ref I and ref II.
-    @param k (int): order of extrapolation to take in this step (determines the number of extrapolations performed
+    @param k (int): number of extrapolation steps to take in this step (determines the number of extrapolations performed
             to achieve a better integration output, equivalent to the size of the extrapolation tableau).
     @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
             determine the error control performed by the solver. See  function _error_norm(y1, y2, atol, rtol).
@@ -1372,7 +1376,7 @@ def _solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn, args
         @return h (float): step taken in this step
         @return k (int): order taken in this step
         @return h_new (float): new suggested step to take in next integration step
-        @return k_new (int): new suggested order to take in next integration step
+        @return k_new (int): new suggested number of extrapolation steps in next integration step
         @return (fe_seq,fe_tot,je_tot):
             @return fe_seq (int): cumulative number of sequential derivative evaluations performed for this step
             @return fe_tot (int): cumulative number of total derivative evaluations performed for this step
@@ -1428,7 +1432,7 @@ def _interpolate_values_at_t(func, args, T, k, t_curr, t, t_index, h, hs, y_half
     @param args (tuple): extra arguments to pass to function.
     @param T (2D array): filled extrapolation tableau (size k) with all the T_{i,j} values in the lower 
             triangular side
-    @param k (int): order of extrapolation to take in this step (determines the number of extrapolations performed
+    @param k (int): number of extrapolation steps to take in this step (determines the number of extrapolations performed
             to achieve a better integration output, equivalent to the size of the extrapolation tableau).
     @param t_curr (float): current integration time (end time of the previous successful step taken)
     @param t (array): a sequence of time points for which to solve for y. The initial value point should be the first 
@@ -1617,7 +1621,7 @@ All this functions have the same structure, and their names explicitly say the t
                         analytic Jacobian is provided) or Jacobian estimations
                         (when no analytic Jacobian is provided)
             'h_avg'     average step size
-            'k_avg'     average extrapolation order
+            'p_avg'     average extrapolation order
 
 
     CHECK THIS:
@@ -1641,10 +1645,18 @@ def ex_midpoint_explicit_parallel(func, grad, y0, t, args=(), full_output=0, rto
     
     k=p//2
 
-    return __extrapolation_parallel(method,  {}, func, grad, y0, t, args=args,
-        full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptive=adaptive,
-         addSolverParam=addSolverParam)
+    if full_output:
+        (ys, infodict) = __extrapolation_parallel(method,  {}, func, grad, y0, t, args=args,
+            full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
+             k=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptive=adaptive,
+             addSolverParam=addSolverParam)
+        infodict['p_avg'] = 2*infodict.pop('k_avg')
+        return (ys, infodict) 
+    else:       
+        return __extrapolation_parallel(method,  {}, func, grad, y0, t, args=args,
+            full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
+            k=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptive=adaptive,
+            addSolverParam=addSolverParam)
 
 
 
@@ -1662,10 +1674,18 @@ def ex_midpoint_implicit_parallel(func, grad, y0, t, args=(), full_output=0, rto
     
     addSolverParam = _getAdditionalSolverParameters(len(y0), atol, rtol, addWork=True)
 
-    return __extrapolation_parallel(method, {}, func, grad, y0, t, args=args,
-        full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptive=adaptive,
-         addSolverParam=addSolverParam)
+    if full_output:
+        (ys, infodict) = __extrapolation_parallel(method, {}, func, grad, y0, t, args=args,
+            full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
+             k=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptive=adaptive,
+             addSolverParam=addSolverParam)
+        infodict['p_avg'] = 2*infodict.pop('k_avg')
+        return (ys, infodict)
+    else:
+        return __extrapolation_parallel(method, {}, func, grad, y0, t, args=args,
+            full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
+             k=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptive=adaptive,
+             addSolverParam=addSolverParam)
 
 
 def ex_midpoint_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
@@ -1688,10 +1708,18 @@ def ex_midpoint_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0
     methodargs["I"] = np.identity(len(y0), dtype=float)
     methodargs["Isparse"] = np.identity(len(y0), dtype=float)  
 
-    return __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=args,
-        full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=k, nworkers=nworkers, smoothing=smoothing, symmetric = True, seq=seq, adaptive=adaptive,
-         addSolverParam=addSolverParam)
+    if full_output:
+        (ys, infodict) = __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=args,
+            full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
+             k=k, nworkers=nworkers, smoothing=smoothing, symmetric = True, seq=seq, adaptive=adaptive,
+             addSolverParam=addSolverParam)
+        infodict['p_avg'] = 2*infodict.pop('k_avg')
+        return (ys, infodict)
+    else:
+        return __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=args,
+            full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
+             k=k, nworkers=nworkers, smoothing=smoothing, symmetric = True, seq=seq, adaptive=adaptive,
+             addSolverParam=addSolverParam)
 
 
 def ex_euler_explicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
@@ -1709,7 +1737,7 @@ def ex_euler_explicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1
 
     return __extrapolation_parallel(method, {}, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=p, nworkers=nworkers, smoothing=smoothing, symmetric = False, seq=seq, adaptive=adaptive,
+         k=p, nworkers=nworkers, smoothing=smoothing, symmetric = False, seq=seq, adaptive=adaptive,
          addSolverParam=addSolverParam)
     
     
@@ -1736,7 +1764,7 @@ def ex_euler_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0, r
 
     return __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=args,
         full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         p=p, nworkers=nworkers, smoothing=smoothing, symmetric = False, seq=seq, adaptive=adaptive,
+         k=p, nworkers=nworkers, smoothing=smoothing, symmetric = False, seq=seq, adaptive=adaptive,
          addSolverParam=addSolverParam)
 
 '''
@@ -1792,7 +1820,7 @@ parameters are set to the 'optimal').
                         analytic Jacobian is provided) or Jacobian estimations
                         (when no analytic Jacobian is provided)
             'h_avg'     average step size
-            'k_avg'     average extrapolation order
+            'p_avg'     average extrapolation order
 
 '''
 
