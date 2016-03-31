@@ -89,6 +89,7 @@ def compare_performance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6
         y, infodict = ex_p.ex_midpoint_explicit_parallel(func, None, y0, [t0, tf], atol=tol[i], rtol=tol[i], mxstep=nsteps, adaptive="order", full_output=True)
         py_runtime[i] = time.time() - start_time
         py_fe_seq[i], py_fe_tot[i], py_nstp[i] = infodict['fe_seq'], infodict['nfe'], infodict['nst']
+        y[-1] = solout(y[-1])
         py_yerr[i] = relative_error(y[-1], y_ref)
         print 'Runtime: ', py_runtime[i], ' s   Error: ', py_yerr[i], '   fe_seq: ', py_fe_seq[i], '   fe_tot: ', py_fe_tot[i], '   nstp: ', py_nstp[i]
         print ''

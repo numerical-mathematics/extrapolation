@@ -25,7 +25,7 @@ def kdv_reference():
     # r.integrate(r.t+(tf-t0))
     # assert r.t == tf, "Integration did not converge. Try increasing the max number of steps"
     # y = kdv_solout(r.y)
-    y = ex_p.ex_midpoint_parallel(kdv_func, y0, [t0, tf], atol=tol, rtol=tol, mxstep=nsteps)
+    y = ex_p.ex_midpoint_explicit_parallel(kdv_func, None, y0, [t0, tf], atol=tol, rtol=tol, mxstep=nsteps)
     y = kdv_solout(y[-1])
 
     np.savetxt("reference_kdv.txt", y)
@@ -48,7 +48,7 @@ def burgers_reference():
     # r.integrate(r.t+(tf-t0))
     # assert r.t == tf, "Integration did not converge. Try increasing the max number of steps"
     # y = burgers_solout(r.y)
-    y = ex_p.ex_midpoint_parallel(burgers_func, y0, [t0, tf], atol=tol, rtol=tol, mxstep=nsteps)
+    y = ex_p.ex_midpoint_explicit_parallel(burgers_func, None, y0, [t0, tf], atol=tol, rtol=tol, mxstep=nsteps)
     y = burgers_solout(y[-1])
     
     np.savetxt("reference_burgers.txt", y)
