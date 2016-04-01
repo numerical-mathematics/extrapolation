@@ -1,8 +1,7 @@
 import numpy as np
 from compare_test import kdv_init, kdv_func, kdv_solout, burgers_init, burgers_func, burgers_solout
 import time
-from scipy.integrate import ode
-from scipy.integrate import complex_ode
+from scipy.integrate import ode, complex_ode
 import ex_parallel as ex_p
 
 def relative_error(y, y_ref):
@@ -19,12 +18,6 @@ def kdv_reference():
         return kdv_func(y,t)
     print 'computing reference solution to kdv problem'
     start_time = time.time()
-
-    # r = ode(func2, jac=None).set_integrator('zvode', atol=tol, rtol=tol, method='adams', nsteps=nsteps)
-    # r.set_initial_value(y0, t0)
-    # r.integrate(r.t+(tf-t0))
-    # assert r.t == tf, "Integration did not converge. Try increasing the max number of steps"
-    # y = kdv_solout(r.y)
     y = ex_p.ex_midpoint_explicit_parallel(kdv_func, None, y0, [t0, tf], atol=tol, rtol=tol, mxstep=nsteps)
     y = kdv_solout(y[-1])
 
@@ -43,11 +36,6 @@ def burgers_reference():
         return burgers_func(y,t)
     print 'computing reference solution to burgers problem'
     start_time = time.time()
-    # r = ode(func2, jac=None).set_integrator('zvode', atol=tol, rtol=tol, method='adams', nsteps=nsteps)
-    # r.set_initial_value(y0, t0)
-    # r.integrate(r.t+(tf-t0))
-    # assert r.t == tf, "Integration did not converge. Try increasing the max number of steps"
-    # y = burgers_solout(r.y)
     y = ex_p.ex_midpoint_explicit_parallel(burgers_func, None, y0, [t0, tf], atol=tol, rtol=tol, mxstep=nsteps)
     y = burgers_solout(y[-1])
     
