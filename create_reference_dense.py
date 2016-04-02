@@ -1,5 +1,5 @@
 import numpy as np
-from compare_test_dense import nbod_func, kdv_init, kdv_func, kdv_solout_dense, burgers_init, burgers_func, burgers_solout_dense
+from compare_test import nbod_func, kdv_init, kdv_func, burgers_init, burgers_func
 import time
 from scipy.integrate import ode, complex_ode
 import ex_parallel as ex_p
@@ -24,6 +24,16 @@ def nbod_dense_reference(num):
     return y
 
 # reference for kdv problem  
+def kdv_solout_dense(U_hat, ts):
+    y = np.zeros_like(U_hat)
+    N = 256
+    for i in range(len(ts)): 
+        t = ts[i]
+        k = np.array(range(0,int(N/2)) + [0] + range(-int(N/2)+1,0))
+        E = np.exp(1j * k**3 * t)
+        y[i] = np.squeeze(np.real(np.fft.ifft(E*U_hat[i])))
+    return y
+
 def kdv_dense_reference(num):
     t0 = 0
     tf = 0.003
@@ -42,6 +52,17 @@ def kdv_dense_reference(num):
 
 
 # reference for burgers problem  
+def burgers_solout_dense(U_hat, ts):
+    y = np.zeros_like(U_hat)
+    epslison = 0.1
+    N = 64
+    for i in range(len(ts)): 
+        t = ts[i]
+        k = np.array(range(0,int(N/2)) + [0] + range(-int(N/2)+1,0))
+        E_ = np.exp(-epslison * k**2 * t)
+        y[i] = np.squeeze(np.real(np.fft.ifft(E_*U_hat[i])))
+    return y
+
 def burgers_dense_reference(num):
     t0 = 0
     tf = 3.
