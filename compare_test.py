@@ -17,27 +17,17 @@ def relative_error(y, y_ref):
 
 def compare_performance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6), is_complex=False, nsteps=10e5, solout=(lambda t: t)):
     print 'RUNNING COMPARISON TEST FOR ' + problem_name
-    tol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
+    tol = [1.e-3,1.e-5,1.e-7]#,1.e-9,1.e-11,1.e-13]
     a, b = tol_boundary
     tol = tol[a:b]
 
-    py_runtime = np.zeros(len(tol))
-    py_fe_seq = np.zeros(len(tol))
-    py_fe_tot = np.zeros(len(tol))
-    py_yerr = np.zeros(len(tol))
-    py_nstp = np.zeros(len(tol))
+    parex = {}
+    dopri5 = {}
+    dop853 = {}
 
-    dopri5_runtime = np.zeros(len(tol))
-    dopri5_fe_seq = np.zeros(len(tol))
-    dopri5_fe_tot = np.zeros(len(tol))
-    dopri5_yerr = np.zeros(len(tol))
-    dopri5_nstp = np.zeros(len(tol))
-
-    dop853_runtime = np.zeros(len(tol))
-    dop853_fe_seq = np.zeros(len(tol))
-    dop853_fe_tot = np.zeros(len(tol))
-    dop853_yerr = np.zeros(len(tol))
-    dop853_nstp = np.zeros(len(tol))
+    for method in [parex, dopri5, dop853]:
+        for diagnostic in ['runtime','fe_seq','fe_tot','yerr','nstp']:
+            method[diagnostic] = np.zeros(len(tol))
 
     def func2(t,y):
         return func(y,t)
@@ -45,70 +35,50 @@ def compare_performance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6
     for i in range(len(tol)):
         print 'Tolerance: ', tol[i]
 
-        # run Python extrapolation code 
-        print 'running ParEx'
-        start_time = time.time()
-        y, infodict = ex_p.ex_midpoint_explicit_parallel(func, None, y0, [t0, tf], atol=tol[i], rtol=tol[i], mxstep=nsteps, adaptive="order", full_output=True)
-        py_runtime[i] = time.time() - start_time
-        py_fe_seq[i], py_fe_tot[i], py_nstp[i] = infodict['fe_seq'], infodict['nfe'], infodict['nst']
-        y[-1] = solout(y[-1])
-        py_yerr[i] = relative_error(y[-1], y_ref)
-        print 'Runtime: ', py_runtime[i], ' s   Error: ', py_yerr[i], '   fe_seq: ', py_fe_seq[i], '   fe_tot: ', py_fe_tot[i], '   nstp: ', py_nstp[i]
-        print ''
-        
-        # run DOPRI5 (scipy)
-        print 'running DOPRI5 (scipy)'
-        start_time = time.time()
-        if is_complex:
-            r = complex_ode(func2).set_integrator('dopri5', atol=tol[i], rtol=tol[i], verbosity=10, nsteps=nsteps)
-        else:
-            r = ode(func2).set_integrator('dopri5', atol=tol[i], rtol=tol[i], verbosity=10, nsteps=nsteps)
-        r.set_initial_value(y0, t0)
-        r.integrate(r.t+(tf-t0))
-        assert r.t == tf, "Integration did not converge. Try increasing the max number of steps"
-        dopri5_runtime[i] = time.time() - start_time
-        y = solout(r.y)
-        dopri5_yerr[i] = relative_error(y, y_ref)
-        print 'Runtime: ', dopri5_runtime[i], ' s   Error: ', dopri5_yerr[i], '   fe_seq: ', dopri5_fe_seq[i], '   fe_tot: ', dopri5_fe_tot[i], '   nstp: ', dopri5_nstp[i]
-        print ''
+        for method, name in [(parex,'ParEx'), (dopri5,'DOPRI5'), (dop853,'DOP853')]:
+            print 'running ' + name
+            start_time = time.time()
+            if name == 'ParEx':
+                y, infodict = ex_p.ex_midpoint_explicit_parallel(func, None, y0, [t0, tf], atol=tol[i], rtol=tol[i], mxstep=nsteps, adaptive="order", full_output=True)
+                y[-1] = solout(y[-1])
+                method['yerr'][i] = relative_error(y[-1], y_ref)
+            else: # scipy solvers DOPRI5 and DOP853
+                if is_complex:
+                    r = complex_ode(func2, jac=None).set_integrator(name.lower(), atol=tol[i], rtol=tol[i], verbosity=10, nsteps=nsteps)
+                else:
+                    r = ode(func2, jac=None).set_integrator(name.lower(), atol=tol[i], rtol=tol[i], verbosity=10, nsteps=nsteps)
+                r.set_initial_value(y0, t0)
+                r.integrate(r.t+(tf-t0))
+                assert r.t == tf, "Integration did not converge. Try increasing the max number of steps"
+                y = solout(r.y)
+                method['yerr'][i] = relative_error(y, y_ref)
 
-        # run DOP853 (scipy)
-        print 'running DOP853 (scipy)'
-        start_time = time.time()
-        if is_complex:
-            r = complex_ode(func2, jac=None).set_integrator('dop853', atol=tol[i], rtol=tol[i], verbosity=10, nsteps=nsteps)
-        else:
-            r = ode(func2, jac=None).set_integrator('dop853', atol=tol[i], rtol=tol[i], verbosity=10, nsteps=nsteps)
-        r.set_initial_value(y0, t0)
-        r.integrate(r.t+(tf-t0))
-        assert r.t == tf, "Integration did not converge. Try increasing the max number of steps"
-        dop853_runtime[i] = time.time() - start_time
-        y = solout(r.y)
-        dop853_yerr[i] = relative_error(y, y_ref)
-        print 'Runtime: ', dop853_runtime[i], ' s   Error: ', dop853_yerr[i], '   fe_seq: ', dop853_fe_seq[i], '   fe_tot: ', dop853_fe_tot[i], '   nstp: ', dop853_nstp[i]
-        print ''
+            method['runtime'][i] = time.time() - start_time
+            method['fe_seq'][i], method['fe_tot'][i], method['nstp'][i] = infodict['fe_seq'], infodict['nfe'], infodict['nst']
+            print 'Runtime: ', method['runtime'][i], ' s   Error: ', method['yerr'][i], '   fe_seq: ', method['fe_seq'][i], '   fe_tot: ', method['fe_tot'][i], '   nstp: ', method['nstp'][i]
+            print ''
         
         print ''
 
-    print "Final data: ParEx"
-    print py_runtime, py_fe_seq, py_fe_tot, py_yerr, py_nstp
-    print "Final data: DOPRI5 (scipy)"
-    print dopri5_runtime, dopri5_fe_seq, dopri5_fe_tot, dopri5_yerr, dopri5_nstp
-    print "Final data: DOP853 (scipy)"
-    print dop853_runtime, dop853_fe_seq, dop853_fe_tot, dop853_yerr, dop853_nstp
+    for method, name in [(parex,'ParEx'), (dopri5,'DOPRI5'), (dop853,'DOP853')]:
+        print "Final data: " + name
+        print method['runtime'], method['fe_seq'], method['fe_tot'], method['yerr'], method['nstp']
     print ''
     print ''
 
-    # plot performance graphs
+    return (parex, dopri5, dop853)
+
+def plot_results(methods,problem_name):
     import matplotlib
     matplotlib.use('agg')
     import matplotlib.pyplot as plt
     plt.hold('true')
 
-    py_line,   = plt.loglog(py_yerr, py_runtime, "s-")
-    dopri5_line, = plt.loglog(dopri5_yerr, dopri5_runtime, "s-")
-    dop853_line, = plt.loglog(dop853_yerr, dop853_runtime, "s-")
-    plt.legend([py_line, dopri5_line, dop853_line], ["ParEx", "DOPRI5 (scipy)", "DOP853 (scipy)"], loc=1)
+    parex, dopri5, dop853 = methods
+
+    for method in [parex, dopri5, dop853]:
+        method['line'],   = plt.loglog(method['yerr'], method['runtime'], "s-")
+    plt.legend([parex['line'], dopri5['line'], dop853['line']], ["ParEx", "DOPRI5 (scipy)", "DOP853 (scipy)"], loc=1)
     plt.xlabel('Error')
     plt.ylabel('Wall clock time (seconds)')
     plt.title(problem_name)
@@ -130,7 +100,8 @@ def nbod_problem():
     tf = 0.08
     y0 = fnbod.init_fnbod(2400)
     y_ref = np.loadtxt("reference.txt")
-    compare_performance(nbod_func, y0, t0, tf, y_ref, "nbod_problem")
+    results = compare_performance(nbod_func, y0, t0, tf, y_ref, "nbod_problem")
+    return results
 
 ###### kdv Problem ######
 def kdv_init(t0):
@@ -164,7 +135,8 @@ def kdv_problem():
     tf = 0.003
     y0 = kdv_init(t0)
     y_ref = np.loadtxt("reference_kdv.txt")
-    compare_performance(kdv_func, y0, t0, tf, y_ref, "kdv_problem", is_complex=True, solout=kdv_solout)
+    results = compare_performance(kdv_func, y0, t0, tf, y_ref, "kdv_problem", is_complex=True, solout=kdv_solout)
+    return results
 
 ###### Burgers' Problem ######
 def burgers_init(t0):
@@ -201,13 +173,16 @@ def burgers_problem():
     tf = 3.
     y0 = burgers_init(t0)
     y_ref = np.loadtxt("reference_burgers.txt")
-    compare_performance(burgers_func, y0, t0, tf, y_ref, "burgers_problem", tol_boundary=(0,4), nsteps=10e4, is_complex=True, solout=burgers_solout)
+    results = compare_performance(burgers_func, y0, t0, tf, y_ref, "burgers_problem", tol_boundary=(0,4), nsteps=10e4, is_complex=True, solout=burgers_solout)
+    return results
 
 
 ########### RUN TESTS ###########
 if __name__ == "__main__":
-    nbod_problem()
-    kdv_problem()
-    burgers_problem()
-
-
+    import pickle
+    for problem, name in ( (nbod_problem, 'N-body'), (kdv_problem, 'KdV'), (burgers_problem, 'Burgers') ):
+        results = problem()
+        f = open(name+'.data','w')
+        pickle.dump(results,f)
+        f.close()
+        plot_results(results, name + ' problem')
