@@ -16,6 +16,7 @@ import math
 from scipy import optimize
 import scipy
 import forward_diff
+gmres = scipy.sparse.linalg.gmres
 
 #This global variable does not limit multiprocessing performance
 #as it is used always in the sequential part of the code.
@@ -147,29 +148,28 @@ def _semi_implicit_midpoint(ode_fun, jac_fun, y_olds, t_old, f_old, dt, args,
         f_yj = f_old
         fe_tot=0
     
-    if(addSolverParam['initialGuess']): # Use Euler for initial guess
-        xval, f_yj, fe_tot_,je_tot=_explicit_euler(ode_fun, jac_fun, y_olds,
-                                                   t_old, f_yj, dt,
-                                                   args, addSolverParam)
-        fe_tot += fe_tot_
-    else:
-        xval=None
-
     b = np.dot(-(I+dt*J00),(y_old-y_older)) + 2*dt*f_yj
 
     A = _I_minus_dt_J(I,Isparse,J00,dt)
     if(addSolverParam['iterative']):  # Use iterative solver
-        sol, info = scipy.sparse.linalg.gmres(A, b,
-                                              tol=addSolverParam['min_tol'],
-                                              x0=xval, maxiter=100)
+        if(addSolverParam['initialGuess']): # Use Euler for initial guess
+            x0, f_yj, fe_tot_,je_tot=_explicit_euler(ode_fun, jac_fun, y_olds,
+                                                       t_old, f_yj, dt,
+                                                       args, addSolverParam)
+            fe_tot += fe_tot_
+        else:
+            x0=None
+
+        dy, info = gmres(A, b, tol=addSolverParam['min_tol'], x0=x0,
+                         maxiter=100)
         if info >0:
             print("Info: maximum iterations reached for sparse system solver (GMRES).")
     else:
-        sol = direct_solve(A, b)
+        dy = direct_solve(A, b)
             
-    x = y_old + sol
+    y_new = y_old + dy
     
-    return (x, f_yj, fe_tot, je_tot)
+    return (y_new, f_yj, fe_tot, je_tot)
 
 def direct_solve(A, b):
         if(scipy.sparse.issparse(A)):
@@ -179,7 +179,7 @@ def direct_solve(A, b):
 
 def _I_minus_dt_J(I,Isparse,J00,dt):
     """
-    Calculates matrix needed for semi implicit methods.
+    Calculate matrix needed for semi-implicit methods.
     
     @param I (2D array): identity matrix
     @param J00 (2D array): Jacobian matrix
@@ -206,7 +206,6 @@ def _semi_implicit_euler(ode_fun, jac_fun, y_olds, t_old,
     IMPORTANT: changes in this function will be probably also wanted in
                midpoint_semiimplicit code (beware!).
     """
-    
     y_older, y_old = y_olds
     je_tot = 0
     if(f_old is None):
@@ -216,35 +215,34 @@ def _semi_implicit_euler(ode_fun, jac_fun, y_olds, t_old,
         f_yj = f_old
         fe_tot = 0
         
-    if(addSolverParam['initialGuess']):
-        # TODO: The option of doing an explicit step doesn't seem to be
-        # effective (maybe because with extrapolation we are taking too big
-        # steps for the explicit solver to be close to the solution).
-        # xval, f_yj, fe_tot_,je_tot=_explicit_euler(ode_fun, jac_fun, y_olds, t_old, f_yj, dt, args, addSolverParam)
-        # fe_tot += fe_tot_
-        xval = y_old
-    else:
-        xval = None
-    
     b = dt*f_yj
     
     A = _I_minus_dt_J(I,Isparse,J00,dt)
     # TODO: change this checking of the sparsity type of the matrix only once
     # at the beginning of the ODE solving 
     if(addSolverParam['iterative']):
+        if(addSolverParam['initialGuess']):
+            # TODO: The option of doing an explicit step doesn't seem to be
+            # effective (maybe because with extrapolation we are taking too big
+            # steps for the explicit solver to be close to the solution).
+            # x0, f_yj, fe_tot_,je_tot=_explicit_euler(ode_fun, jac_fun, y_olds, t_old, f_yj, dt, args, addSolverParam)
+            # fe_tot += fe_tot_
+            x0 = y_old
+        else:
+            x0 = None
+     
         # TODO: choose an appropriate maxiter parameter to distribute work
         # between taking more steps and having a more accurate solution
-        sol, info = scipy.sparse.linalg.gmres(A, b,
-                                             tol=addSolverParam['min_tol'],
-                                             x0=xval, maxiter=100)
+        dy, info = gmres(A, b, tol=addSolverParam['min_tol'], x0=x0,
+                         maxiter=100)
         if info >0:
             print("Info: maximum iterations reached for sparse system solver (GMRES).")
     else:
-        sol = direct_solve(A, b)
+        dy = direct_solve(A, b)
     
-    x = y_old + sol
+    y_new = y_old + dy
 
-    return (x, f_yj, fe_tot, je_tot)
+    return (y_new, f_yj, fe_tot, je_tot)
 
 
 def _implicit_midpoint(ode_fun, jac_fun, y_olds, t_old, f_old,
@@ -277,14 +275,14 @@ def _implicit_midpoint(ode_fun, jac_fun, y_olds, t_old, f_old,
                 y_olds, t_old, f_old, dt, args,
                 addSolverParam)
         
-    x, fe_tot_, je_tot_ = _solve_implicit_step(zero_func, zero_grad,
+    y_new, fe_tot_, je_tot_ = _solve_implicit_step(zero_func, zero_grad,
                                                estimatedValue, addSolverParam)
     fe_tot += fe_tot_
     je_tot += je_tot_
     
     f_yj = ode_fun(*(y_old,t_old)+args)
     fe_tot += 1
-    return (x, f_yj, fe_tot, je_tot)
+    return (y_new, f_yj, fe_tot, je_tot)
 
 
 def _explicit_midpoint(ode_fun, jac_fun, y_olds, t_old, f_old,
@@ -374,7 +372,7 @@ def _compute_stages((solver, solver_args, ode_fun, jac_fun, tn, yn, f_yn, args, 
         fe_tot += fe_tot_
         je_tot += je_tot_
         for i in range(2,nj+1):
-            Y[i], f_yj[i-1], fe_tot_ , je_tot_= solver(ode_fun, jac_fun, 
+            Y[i], f_yj[i-1], fe_tot_, je_tot_ = solver(ode_fun, jac_fun,
                                                        (Y[i-2], Y[i-1]), 
                                                        tn + (i-1)*(h/nj), 
                                                        None,
