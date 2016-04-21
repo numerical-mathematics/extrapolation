@@ -164,16 +164,18 @@ def _semi_implicit_midpoint(ode_fun, jac_fun, y_olds, t_old, f_old, dt, args,
                                               x0=xval, maxiter=100)
         if info >0:
             print("Info: maximum iterations reached for sparse system solver (GMRES).")
-    else: # Use direct solver
-        if(scipy.sparse.issparse(J00)):
-            sol = scipy.sparse.linalg.spsolve(A, b)
-        else:
-            sol = np.linalg.solve(A, b)
+    else:
+        sol = direct_solve(A, b)
             
     x = y_old + sol
     
     return (x, f_yj, fe_tot, je_tot)
 
+def direct_solve(A, b):
+        if(scipy.sparse.issparse(A)):
+            return scipy.sparse.linalg.spsolve(A, b)
+        else:
+            return np.linalg.solve(A, b)
 
 def _I_minus_dt_J(I,Isparse,J00,dt):
     """
@@ -238,10 +240,7 @@ def _semi_implicit_euler(ode_fun, jac_fun, y_olds, t_old,
         if info >0:
             print("Info: maximum iterations reached for sparse system solver (GMRES).")
     else:
-        if(scipy.sparse.issparse(J00)):
-            sol = scipy.sparse.linalg.spsolve(A, b)
-        else:
-            sol = np.linalg.solve(A, b)
+        sol = direct_solve(A, b)
     
     x = y_old + sol
 
@@ -500,20 +499,20 @@ def _extrapolation_parallel(ode_fun, tspan, y0, solver_args, solver=None,
 
     sum_ks, sum_hs = 0, 0
     
-    #Initialize rejectStep so that Jacobian is updated
-    rejectStep = True
+    #Initialize reject_step so that Jacobian is updated
+    reject_step = True
     previousStepSolution = ()
 
     #Iterate until you reach final time
     while t_curr < t_max:
-        rejectStep, y_temp, ysolution, f_yn, h, k, h_new, k_new, (fe_seq_, fe_tot_, je_tot_) = _solve_one_step(
+        reject_step, y_temp, ysolution, f_yn, h, k, h_new, k_new, (fe_seq_, fe_tot_, je_tot_) = _solve_one_step(
                 solver, solver_args, ode_fun, jac_fun, t_curr, tspan, t_index, yn, args, h, k, 
-                atol, rtol, pool, smoothing, symmetric, seq, adaptive, rejectStep, previousStepSolution, addSolverParam)
+                atol, rtol, pool, smoothing, symmetric, seq, adaptive, reject_step, previousStepSolution, addSolverParam)
         #previousStepSolution is used for Jacobian updating
         previousStepSolution = (yn, f_yn)
 
         #Store values if step is not rejected
-        if(not rejectStep):
+        if(not reject_step):
             yn = 1*y_temp
             #ysolution includes all intermediate solutions in interval
             if(len(ysolution)!=0):
@@ -1300,14 +1299,12 @@ def _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptive, addSolverP
         Should not be empty, for more information see _getAdditionalSolverParameters(..) function.
     
     @return
-        @return rejectStep : whether to reject the step and the solution obtained
+        @return reject_step : whether to reject the step and the solution obtained
             (because it doesn't satisfy the asked tolerances)
         @return y : best solution at the end of the step
         @return h_new : new step to take
         @return k_new : new number of extrapolation steps to use
- 
     """
-    
     if(adaptive == "fixed"):
         return (False, T[k,k], h, k)
     
@@ -1354,7 +1351,7 @@ def _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptive, addSolverP
         k_new = k if w_k_1 < 0.9*w_k_2 else k-1
         h_new = h_k_1 if k_new <= k-1 else h_k_1*A_k(k)/A_k(k-1)
             
-        rejectStep=False
+        reject_step=False
 
     elif err_k <= 1:
         # convergence in line k
@@ -1365,22 +1362,22 @@ def _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptive, addSolverP
         h_new = h_k_1 if k_new == k-1 else (
                 h_k if k_new == k else h_k*A_k(k+1)/A_k(k))
             
-        rejectStep = False
+        reject_step = False
     else: 
         # no convergence
         # reject (h, k) and restart with new values accordingly
         k_new = k-1 if w_k_1 < 0.9*w_k else k
         h_new = min(h_k_1 if k_new == k-1 else h_k, h)
         y = None
-        rejectStep = True
+        reject_step = True
     
     #Extra protection for the cases where there has been an
     #overflow. Make sure the step is rejected (there is cases
     #where err_k_x is not nan
     if(math.isnan(h_new)):
-        rejectStep = True
+        reject_step = True
         
-    return (rejectStep, y, h_new, k_new)
+    return (reject_step, y, h_new, k_new)
 
 
 def _solve_one_step(solver, solver_args, ode_fun, jac_fun, t_curr, t, t_index, yn,
@@ -1429,13 +1426,13 @@ def _solve_one_step(solver, solver_args, ode_fun, jac_fun, t_curr, t, t_index, y
     @param addSolverParam (dict): extra arguments needed to define completely the solver's behavior.
             Should not be empty, for more information see _getAdditionalSolverParameters(..) function.
     
-    @return (rejectStep, y, y_solution, f_yn, h, k, h_new, k_new, (fe_seq, fe_tot, je_tot)):
-        @return rejectStep (bool): whether this step should be rejected or not. True when this step was not successful
+    @return (reject_step, y, y_solution, f_yn, h, k, h_new, k_new, (fe_seq, fe_tot, je_tot)):
+        @return reject_step (bool): whether this step should be rejected or not. True when this step was not successful
                 (estimated error of the final solution or the interpolation solutions too large for the tolerances 
                 required) and has to be recalculated (with a new step size h_new and order k_new).
         @return y (array): final solution obtained for this integration step, at t_curr+h.
         @return y_solution (2D array): array containing the solution for every output value required (in t parameter)
-                 that fell in this integration interval (t_curr,t_curr+h). This values were interpolated.
+                 that fell in this integration interval (t_curr,t_curr+h). These values were interpolated.
         @return f_yn (array): function evaluation at yn (initial point solution)
         @return h (float): step taken in this step
         @return k (int): order taken in this step
@@ -1461,17 +1458,17 @@ def _solve_one_step(solver, solver_args, ode_fun, jac_fun, t_curr, t, t_index, y
     T, y_half, f_yj,yj, f_yn, hs, (fe_seq, fe_tot, je_tot) = _compute_extrapolation_table(solver, solver_args, ode_fun, jac_fun, 
                 t_curr, yn, args, h, k, pool, rejectPreviousStep, previousStepSolution, seq, smoothing, symmetric,addSolverParam)
     
-    rejectStep, y, h_new, k_new = _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptive, addSolverParam)
+    reject_step, y, h_new, k_new = _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptive, addSolverParam)
     
     y_solution=[]
-    if((not rejectStep) & dense):
-        rejectStep, y_solution, h_int, (fe_tot_, fe_seq_) = _interpolate_values_at_t(ode_fun, 
+    if((not reject_step) & dense):
+        reject_step, y_solution, h_int, (fe_tot_, fe_seq_) = _interpolate_values_at_t(ode_fun,
                 args, T, k, t_curr, t, t_index, h, hs, y_half, f_yj,yj, yn, atol, rtol, seq, adaptive, symmetric)
         fe_tot += fe_tot_
         fe_seq += fe_seq_
         
         if(not adaptive=="fixed"):
-            if(rejectStep):
+            if(reject_step):
                 h_new = 1*h_int
                 # Use same order if step is rejected by the interpolation (do
                 # not use the k_new of the adapted order)
@@ -1480,7 +1477,7 @@ def _solve_one_step(solver, solver_args, ode_fun, jac_fun, t_curr, t, t_index, y
                 h_new = 1*h_int
             
 
-    return (rejectStep, y, y_solution, f_yn, h, k, h_new, k_new, (fe_seq, fe_tot, je_tot))
+    return (reject_step, y, y_solution, f_yn, h, k, h_new, k_new, (fe_seq, fe_tot, je_tot))
 
 
 def _interpolate_values_at_t(ode_fun, args, T, k, t_curr, t, t_index, h, hs,
@@ -1493,7 +1490,7 @@ def _interpolate_values_at_t(ode_fun, args, T, k, t_curr, t, t_index, h, hs,
     the interpolation error is not good enough the step can be forced to be
     rejected.
     
-    This operation has to be done once the extrapolation "big" step has been
+    This operation has to be done after the "big" extrapolation step has been
     taken.
     
     @param ode_fun (callable(y, t,args)): computes the derivative of y at t (i.e. the right hand side of the IVP).
@@ -1526,12 +1523,12 @@ def _interpolate_values_at_t(ode_fun, args, T, k, t_curr, t, t_index, h, hs,
     @param symmetric (bool): whether the solver to solve one step is symmetric (midpoint/trapezoidal)
             or non-symmetric (euler).
     
-    @return (rejectStep, y_solution, h_int, (fe_tot, fe_seq)):
-        @return rejectStep (bool): whether this step should be rejected or not. True when the interpolation was not successful
+    @return (reject_step, y_solution, h_int, (fe_tot, fe_seq)):
+        @return reject_step (bool): whether this step should be rejected or not. True when the interpolation was not successful
                 for some of the interpolated values (estimated error of the interpolation too large for the tolerances 
                 required) and the step has to be recalculated (with a new step size h_int).
         @return y_solution (2D array): array containing the solution for every output value required (in t parameter)
-                 that fell in this integration interval (t_curr,t_curr+h). This values were interpolated.
+                 that fell in this integration interval (t_curr,t_curr+h). These values were interpolated.
         @return h_int (float): new suggested step to take in next integration step (based on interpolation error
                 estimation) if step is rejected due to interpolation large error. See ref I, II.9...
         @return (fe_tot, fe_seq):
@@ -1543,14 +1540,14 @@ def _interpolate_values_at_t(ode_fun, args, T, k, t_curr, t, t_index, h, hs,
         
     Tkk = T[k,k]
     f_Tkk = ode_fun(*(Tkk, t_curr+h) + args)
-    fe_seq +=1
-    fe_tot +=1
+    fe_seq += 1
+    fe_tot += 1
     
     # Calculate interpolating polynomial
     if(symmetric):
         # Do last evaluations to construct polynomials
         # they are done here to avoid extra function evaluations if
-        # interpolation is not needed This extra function evaluations are only
+        # interpolation is not needed. These extra function evaluations are only
         # needed for the symmetric interpolation
         for j in range(1,len(T[:,1])):
             Tj1 = T[j,1]
@@ -1581,11 +1578,11 @@ def _interpolate_values_at_t(ode_fun, args, T, k, t_curr, t, t_index, h, hs,
         else:
             h = h_int
             t_index = old_index
-            rejectStep = True
-            return (rejectStep, y_solution, h_int, (fe_tot, fe_seq))
+            reject_step = True
+            return (reject_step, y_solution, h_int, (fe_tot, fe_seq))
              
-    rejectStep=False
-    return (rejectStep, y_solution, h_int, (fe_tot, fe_seq))
+    reject_step=False
+    return (reject_step, y_solution, h_int, (fe_tot, fe_seq))
 
 def _getAdditionalSolverParameters(N,atol,rtol,addWork):
     """
