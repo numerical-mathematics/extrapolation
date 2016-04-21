@@ -331,8 +331,11 @@ def non_dense_output_tests():
             output_times = [t0, tf]
             for tol in tolerances:
                 print("       Tolerance: " + str(tol))
-                ys, infodict = ex_parallel.extrapolation_parallel(method,f, None, y0, output_times, atol=tol,
-                    rtol=tol, mxstep=1.e6, full_output=True, nworkers=2)
+                ys, infodict = ex_parallel.solve(f, output_times, y0,
+                                                 solver=method.lower(),
+                                                 atol=tol, rtol=tol,
+                                                 mxstep=1.e6, full_output=True,
+                                                 nworkers=2)
                 y = ys[-1][0]
                 assert np.allclose(y, reference_solutions[method][f][tol])
      
@@ -351,8 +354,11 @@ def dense_output_tests():
             y0 = exact(t0)
             for tol in tolerances:
                 print("       Tolerance: " + str(tol))
-                ys, infodict = ex_parallel.extrapolation_parallel(method,f, None, y0, output_times, atol=tol,
-                    rtol=tol, mxstep=1.e6, full_output=True, nworkers=2)
+                ys, infodict = ex_parallel.solve(f, output_times, y0, 
+                                                 solver=method.lower(),
+                                                 atol=tol, rtol=tol,
+                                                 mxstep=1.e6, full_output=True,
+                                                 nworkers=2)
                 y = ys[-2][0]
                 assert np.allclose(y, dense_reference_solutions[method][f][tol])
                 
@@ -378,10 +384,13 @@ def convergence_test(method_name, test, step_sizes, order, dense=False):
     error_per_step=[]
     for step in step_sizes:
         #rtol and atol are not important as we are fixing the step size
-        ys, infodict = ex_parallel.extrapolation_parallel(method_name,test.RHSFunction, None,
-                                                          test.initialValue, dense_output, atol=1e-1,
-                                                          rtol=1e-1, mxstep=10000000, full_output=True,
-                                                          nworkers=4, adaptive='fixed', p=order, h0=step)
+        ys, infodict = ex_parallel.solve(test.RHSFunction, dense_output,
+                                         test.initialValue,
+                                         solver=method_name.lower(), 
+                                         atol=1e-1, rtol=1e-1, mxstep=1000000,
+                                         full_output=True,
+                                         adaptive='fixed', p=order, h0=step,
+                                         nworkers=4)
         
         ys=ys[1:len(ys)]
         if(dense):

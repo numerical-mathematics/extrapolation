@@ -425,7 +425,7 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h,
 
     return res
 
-def __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=(), full_output=False,
+def _extrapolation_parallel(method, methodargs, func, grad, y0, t, solver=None, args=(), full_output=False,
         rtol=1.0e-8, atol=1.0e-8, h0=0.5, mxstep=10e4, robustness_factor=2, k=4,
         nworkers=None, smoothing='no', symmetric=True, seq=None, adaptive="order", addSolverParam={}):   
     """
@@ -478,6 +478,8 @@ def __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=(), ful
             'h_avg'     average step size
             'k_avg'     average number of extrapolation steps
     """
+    method = method_fcns[solver]
+
     #Initialize pool of workers to parallelize extrapolation table calculations
     set_NUM_WORKERS(nworkers)  
     pool = mp.Pool(NUM_WORKERS)
@@ -1642,281 +1644,138 @@ def _getAdditionalSolverParameters(N,atol,rtol,addWork):
     
     return addSolverParam
 
-"""
-BEGINNING BLOCK 2: General extrapolation solver functions. These functions
-can be used to solve any ODE.  These are recommended to use for developing and
-testing purposes.
-    
-Each function solves the system of IVPs dy/dt = func(y, t0, ...) with parallel
-extrapolation.
+class Solvers(object):
+    EXPLICIT_MIDPOINT = 'explicit midpoint'
+    IMPLICIT_MIDPOINT = 'implicit midpoint'
+    SEMI_IMPLICIT_MIDPOINT = 'semi-implicit midpoint'
+    EXPLICIT_EULER = 'explicit euler'
+    SEMI_IMPLICIT_EULER = 'semi-implicit euler'
 
-Important: the default values of the functions are set to achieve the optimal
-performance, it is highly recommended to use such default values (this applies
-to robustness, adaptive, seq and smoothing parameters).
-
-All this functions have the same structure, and their names explicitly say the
-type of solver method used (midpoint,euler/explicit,semiimplicit,implicit).
-Structure:
-
-    @param func (callable(y, t,args)): computes the derivative of y at t (i.e. the right hand side of the IVP).
-    @param grad (callable(y,t,args)): computes analytically the Jacobian of the func function parameter.
-    @param y0 (array): initial condition on y (can be a vector).
-    @param t (array): a sequence of time points for which to solve for y. The initial value point should be the first 
-            element of this sequence. And the last one the final time.
-    @param args (tuple): extra arguments to pass to function.
-    @param full_output (bool): true if user wants a dictionary of optional outputs as the second output.
-    @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
-            determine the error control performed by the solver. See  function _error_norm(y1, y2, atol, rtol).
-    @param h0 (float):the step size to be attempted on the first step.
-    @param mxstep (int): maximum number of (internally defined) steps allowed for each
-            integration point in t. Defaults to 10e4
-    @param robustness (int): multiplicative factor that limits the increase and decrease of the adaptive step
-            (next step vs last step length ratio is limited by this factor).
-    @param smoothing (string): specifies if a smoothing step should be performed:
-        -'no': no smoothing step performed
-        -'gbs': three point smoothing step (based on GBS method), II.9.13c ref I and IV.9.9 ref II.
-        -'semiimp': two point smoothing step (for semiimplicit midpoint), IV.9.16c ref II.
-    @param p (int): the order of extrapolation if order is fixed, or the starting order otherwise.
-    @param nworkers (int): the number of workers working in parallel. If nworkers==None, then 
-        the the number of workers is set to the number of CPUs on the running machine.
-    @param seq (callable(i), int i>=1): the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
-        The step number sequence can be changed forcefully in some cases for interpolation purposes.
-        See _getDenseAndSequence(.) function.
-    @param adaptive (string): specifies the strategy of integration. Can take three values:
-        - "fixed" = use fixed step size and order strategy.
-        - "order" or any other string = use adaptive step size and adaptive order strategy (recommended).
-
-    @return: 
-        @return ys (2D-array, shape (len(t), len(y0))): array containing the value of y for each desired time in t, with 
-            the initial value y0 in the first row.
-        @return infodict (dict): only returned if full_output == True. Dictionary containing additional output information
-             KEY        MEANING
-            'fe_seq'    cumulative number of sequential derivative evaluations
-            'nfe'       cumulative number of total derivative evaluations
-            'nst'       cumulative number of successful time steps
-            'nje'       cumulative number of either Jacobian evaluations (when 
-                        analytic Jacobian is provided) or Jacobian estimations
-                        (when no analytic Jacobian is provided)
-            'h_avg'     average step size
-            'p_avg'     average extrapolation order
-
-    CHECK THIS:
-        IMPORTANT: all input parameters should be float types; this solver
-        doesn't work properly if for example y0 is not a float but an int
-        variable (i.e. 1 instead of 1.) TODO: add protection so that int inputs
-        are formated to floats (and algorithm works)
-
-"""
-
-def ex_midpoint_explicit_parallel(func, grad, y0, t, args=(), full_output=0,
-                                  rtol=1.0e-8, atol=1.0e-8, h0=0.5,
-                                  mxstep=10e4, robustness=2, smoothing = 'no',
-                                  seq=(lambda t: 2*t), p=4, nworkers=None,
-                                  adaptive="order"):
-    """
-    Parallel extrapolation with midpoint explicit method
-    """
-    
-    method = _midpoint_explicit
-    
-    addSolverParam = _getAdditionalSolverParameters(len(y0), atol, rtol, addWork=False)
-    
-    k=p//2
-
-    if full_output:
-        (ys, infodict) = __extrapolation_parallel(method,  {}, func, grad, y0, t, args=args,
-            full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-             k=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptive=adaptive,
-             addSolverParam=addSolverParam)
-        infodict['p_avg'] = 2*infodict.pop('k_avg')
-        return (ys, infodict) 
-    else:       
-        return __extrapolation_parallel(method,  {}, func, grad, y0, t, args=args,
-            full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-            k=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptive=adaptive,
-            addSolverParam=addSolverParam)
-
-
-def ex_midpoint_implicit_parallel(func, grad, y0, t, args=(), full_output=0,
-                                  rtol=1.0e-8, atol=1.0e-8, h0=0.5,
-                                  mxstep=10e4, robustness=2, smoothing = 'gbs',
-                                  seq=(lambda t: 2*(2*t-1)), p=4,
-                                  nworkers=None, adaptive="order"):
-    """
-    Parallel extrapolation with midpoint implicit method
-    """
-    
-    method = _midpoint_implicit
-    
-    k=p//2
-    
-    addSolverParam = _getAdditionalSolverParameters(len(y0), atol, rtol, addWork=True)
-
-    if full_output:
-        (ys, infodict) = __extrapolation_parallel(method, {}, func, grad, y0, t, args=args,
-            full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-             k=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptive=adaptive,
-             addSolverParam=addSolverParam)
-        infodict['p_avg'] = 2*infodict.pop('k_avg')
-        return (ys, infodict)
-    else:
-        return __extrapolation_parallel(method, {}, func, grad, y0, t, args=args,
-            full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-             k=k, nworkers=nworkers, smoothing=smoothing, symmetric=True, seq=seq, adaptive=adaptive,
-             addSolverParam=addSolverParam)
-
-
-def ex_midpoint_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
-        atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'semiimp', seq=(lambda t: 2*(2*t-1)), p=4,
-        nworkers=None, adaptive="order"):
-    """
-    Parallel extrapolation with midpoint semi-implicit method
-    
-    """
-    
-    method = _midpoint_semiimplicit
-    
-    k=p//2
-    
-    addSolverParam = _getAdditionalSolverParameters(len(y0), atol, rtol, addWork=True)
-    
-    methodargs = {}
-    methodargs["J00"] = None
-    
-    methodargs["I"] = np.identity(len(y0), dtype=float)
-    methodargs["Isparse"] = np.identity(len(y0), dtype=float)  
-
-    if full_output:
-        (ys, infodict) = __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=args,
-            full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-             k=k, nworkers=nworkers, smoothing=smoothing, symmetric = True, seq=seq, adaptive=adaptive,
-             addSolverParam=addSolverParam)
-        infodict['p_avg'] = 2*infodict.pop('k_avg')
-        return (ys, infodict)
-    else:
-        return __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=args,
-            full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-             k=k, nworkers=nworkers, smoothing=smoothing, symmetric = True, seq=seq, adaptive=adaptive,
-             addSolverParam=addSolverParam)
-
-
-def ex_euler_explicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
-        atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'no', seq=(lambda t: t), p=4,
-        nworkers=None, adaptive="order"):
-    """
-    Parallel extrapolation with euler explicit method
-    
-    #TODO: this method hasn't been properly tested and optimized (sequence is not known as optimal)
-    """
-    
-    method = _euler_explicit
-    
-    addSolverParam = _getAdditionalSolverParameters(len(y0), atol, rtol, addWork=False)
-
-    return __extrapolation_parallel(method, {}, func, grad, y0, t, args=args,
-        full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         k=p, nworkers=nworkers, smoothing=smoothing, symmetric = False, seq=seq, adaptive=adaptive,
-         addSolverParam=addSolverParam)
-    
-    
-def ex_euler_semi_implicit_parallel(func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
-        atol=1.0e-8, h0=0.5, mxstep=10e4, robustness=2, smoothing = 'no', seq=(lambda t: 2*(2*t-1)), p=4,
-        nworkers=None, adaptive="order"):
-    """
-    Parallel extrapolation with euler semi-implicit method
-    
-    """
-    
-    method = _euler_semiimplicit
-    
-    addSolverParam = _getAdditionalSolverParameters(len(y0), atol, rtol, addWork=True)
-    
-    methodargs = {}
-    methodargs["J00"] = None
-    
-    #The identity matrices are created here so that they can be reused (and are not 
-    #recalculated), and also because global variables cause problems with multiprocessing
-    #(processes would lock on the I or Isparse global variable)
-    methodargs["I"] = np.identity(len(y0), dtype=float)
-    methodargs["Isparse"] = np.identity(len(y0), dtype=float)  
-
-    return __extrapolation_parallel(method, methodargs, func, grad, y0, t, args=args,
-        full_output=full_output, rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, robustness_factor=robustness,
-         k=p, nworkers=nworkers, smoothing=smoothing, symmetric = False, seq=seq, adaptive=adaptive,
-         addSolverParam=addSolverParam)
-
-"""
-END BLOCK 2: General extrapolation solvers' functions. These functions can be
-used to solve any ODE.  These are the user interface functions.
-"""
-    
-"""
-USER INTERFACE Main Function: ODE solver based on extrapolation methods based
-on II.9 ref I (non stiff problems) and IV.9 ref II (stiff problems).
-
-General function similar to BLOCK 2 functions, with less parameters, thus for a
-general user. To develop and test use BLOCK 2 functions as those functions have
-more parameters to be chosen (if this functions is used such parameters are set
-to the 'optimal').
-
-(method, func, grad, y0, t, args=(), full_output=0, rtol=1.0e-8,
-        atol=1.0e-8, h0=0.5, mxstep=10e4, p=4)
-        
-    @param method (string): which method does the user want to use. Options:
-        -'midpoint explicit': non-stiff solver
-        -'midpoint implicit': stiff solver
-        -'midpoint semi implicit': stiff solver
-        -'euler explicit': non-stiff solver
-        -other strings: 'euler semi implicit' stiff solver
-    @param func (callable(y, t,args)): computes the derivative of y at t (i.e. the right hand side of the IVP).
-    @param grad (callable(y,t,args)): computes analytically the Jacobian of the func function parameter.
-    @param y0 (array): initial condition on y (can be a vector).
-    @param t (array): a sequence of time points for which to solve for y. The initial value point should be the first 
-            element of this sequence. And the last one the final time.
-    @param args (tuple): extra arguments to pass to function.
-    @param full_output (bool): true if user wants a dictionary of optional outputs as the second output.
-    @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
-            determine the error control performed by the solver. See  function _error_norm(y1, y2, atol, rtol).
-    @param h0 (float):the step size to be attempted on the first step.
-    @param mxstep (int): maximum number of (internally defined) steps allowed for each
-            integration point in t. Defaults to 10e4
-    @param p (int): the order of extrapolation if order is fixed, or the starting order otherwise.
-    @param nworkers (int): the number of workers working in parallel. If nworkers==None, then 
-            the the number of workers is set to the number of CPUs on the running machine.
-    @param adaptive (string): specifies the strategy of integration. Can take three values:
-        - "fixed" = use fixed step size and order strategy.
-        - "order" or any other string = use adaptive step size and adaptive order strategy (recommended).
-
-    @return: 
-        @return ys (2D-array, shape (len(t), len(y0))): array containing the value of y for each desired time in t, with 
-            the initial value y0 in the first row.
-        @return infodict (dict): only returned if full_output == True. Dictionary containing additional output information
-             KEY        MEANING
-            'fe_seq'    cumulative number of sequential derivative evaluations
-            'nfe'       cumulative number of total derivative evaluations
-            'nst'       cumulative number of successful time steps
-            'nje'       cumulative number of either Jacobian evaluations (when 
-                        analytic Jacobian is provided) or Jacobian estimations
-                        (when no analytic Jacobian is provided)
-            'h_avg'     average step size
-            'p_avg'     average extrapolation order
-
-"""
-
-methods = {
-        'explicit midpoint' : ex_midpoint_explicit_parallel,
-        'implicit midpoint' : ex_midpoint_implicit_parallel,
-        'semi-implicit midpoint' : ex_midpoint_semi_implicit_parallel,
-        'explicit Euler' : ex_euler_explicit_parallel,
-        'semi-implicit Euler' : ex_euler_semi_implicit_parallel
+method_fcns = {
+        Solvers.EXPLICIT_MIDPOINT : _midpoint_explicit,
+        Solvers.IMPLICIT_MIDPOINT : _midpoint_implicit,
+        Solvers.SEMI_IMPLICIT_MIDPOINT : _midpoint_semiimplicit,
+        Solvers.EXPLICIT_EULER : _euler_explicit,
+        Solvers.SEMI_IMPLICIT_EULER : _euler_semiimplicit,
         }
 
-def extrapolation_parallel(method_name, func, grad, y0, t, args=(),
-                           full_output=0, rtol=1.0e-8, atol=1.0e-8, h0=0.5,
-                           mxstep=10e4, p=4, nworkers=None, adaptive =
-                           'order'):
+defaults = {
+            'solver' : Solvers.EXPLICIT_MIDPOINT,
+            'atol'   : 1.e-8,
+            'rtol'   : 1.e-8,
+            'h0'     : 0.5,
+            'mxstep' : 10e4,
+            'robustness_factor' : 2,
+            'adaptive' : 'order',
+            'full_output' : False,
+            'nworkers' : None,
+            'grad' : None,
+            'p' : 4,
+            'smoothing' : 'no',
+            'symmetric' : False,
+        }
+
+def solve(odefun, tspan, y0, **kwargs):
+    """
+    General extrapolation solver function. 
         
-    method_function = methods[method_name]
-    return method_function(func, grad, y0, t, args=args, full_output=full_output,
-                           rtol=rtol, atol=atol, h0=h0, mxstep=mxstep, p=p,
-                           nworkers=nworkers, adaptive=adaptive)
+    Solves the system of IVPs dy/dt = func(y, t0, ...) with parallel
+    extrapolation.
+
+    Important: the default values of the functions are set to achieve the optimal
+    performance.  It is highly recommended to use such default values (this
+    applies to robustness, adaptive, seq and smoothing parameters).
+
+    Structure:
+
+        @param func (callable(y, t,args)): computes the derivative of y at t (i.e. the right hand side of the IVP).
+        @param grad (callable(y,t,args)): computes analytically the Jacobian of the func function parameter.
+        @param y0 (array): initial condition on y (can be a vector).
+        @param t (array): a sequence of time points for which to solve for y. The initial value point should be the first 
+                element of this sequence. And the last one the final time.
+        @param args (tuple): extra arguments to pass to function.
+        @param full_output (bool): true if user wants a dictionary of optional outputs as the second output.
+        @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
+                determine the error control performed by the solver. See  function _error_norm(y1, y2, atol, rtol).
+        @param h0 (float):the step size to be attempted on the first step.
+        @param mxstep (int): maximum number of (internally defined) steps allowed for each
+                integration point in t. Defaults to 10e4
+        @param robustness (int): multiplicative factor that limits the increase and decrease of the adaptive step
+                (next step vs last step length ratio is limited by this factor).
+        @param smoothing (string): specifies if a smoothing step should be performed:
+            -'no': no smoothing step performed
+            -'gbs': three point smoothing step (based on GBS method), II.9.13c ref I and IV.9.9 ref II.
+            -'semiimp': two point smoothing step (for semiimplicit midpoint), IV.9.16c ref II.
+        @param p (int): the order of extrapolation if order is fixed, or the starting order otherwise.
+        @param nworkers (int): the number of workers working in parallel. If nworkers==None, then 
+            the the number of workers is set to the number of CPUs on the running machine.
+        @param seq (callable(i), int i>=1): the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
+            The step number sequence can be changed forcefully in some cases for interpolation purposes.
+            See _getDenseAndSequence(.) function.
+        @param adaptive (string): specifies the strategy of integration. Can take three values:
+            - "fixed" = use fixed step size and order strategy.
+            - "order" or any other string = use adaptive step size and adaptive order strategy (recommended).
+
+        @return: 
+            @return ys (2D-array, shape (len(t), len(y0))): array containing the value of y for each desired time in t, with 
+                the initial value y0 in the first row.
+            @return infodict (dict): only returned if full_output == True. Dictionary containing additional output information
+                 KEY        MEANING
+                'fe_seq'    cumulative number of sequential derivative evaluations
+                'nfe'       cumulative number of total derivative evaluations
+                'nst'       cumulative number of successful time steps
+                'nje'       cumulative number of either Jacobian evaluations (when 
+                            analytic Jacobian is provided) or Jacobian estimations
+                            (when no analytic Jacobian is provided)
+                'h_avg'     average step size
+                'p_avg'     average extrapolation order
+
+        CHECK THIS:
+            IMPORTANT: all input parameters should be float types; this solver
+            doesn't work properly if for example y0 is not a float but an int
+            variable (i.e. 1 instead of 1.) TODO: add protection so that int inputs
+            are formated to floats (and algorithm works)
+
+    """
+    # Set per-method defaults
+    if kwargs['solver'] == Solvers.EXPLICIT_MIDPOINT:
+        kwargs.setdefault('seq', lambda t: 2*t)
+        kwargs.setdefault('symmetric', True)
+    elif kwargs['solver'] == Solvers.IMPLICIT_MIDPOINT:
+        kwargs.setdefault('smoothing', 'gbs')
+        kwargs.setdefault('seq', lambda t : 2*(2*t-1))
+        kwargs.setdefault('symmetric', True)
+    elif kwargs['solver'] == Solvers.SEMI_IMPLICIT_MIDPOINT:
+        kwargs.setdefault('smoothing', 'semiimp')
+        kwargs.setdefault('seq', lambda t : 2*(2*t-1))
+        kwargs.setdefault('symmetric', True)
+    elif kwargs['solver'] == Solvers.EXPLICIT_EULER:
+        kwargs.setdefault('seq', lambda t : t)
+    elif kwargs['solver'] == Solvers.SEMI_IMPLICIT_EULER:
+        kwargs.setdefault('seq', lambda t : 2*(2*t-1))
+
+    # Set universal defaults
+    for key, value in defaults.iteritems():
+        if not key in kwargs.iterkeys():
+            kwargs[key] = value
+
+    if kwargs['solver'] in (Solvers.SEMI_IMPLICIT_EULER, Solvers.SEMI_IMPLICIT_MIDPOINT):
+        methodargs = {}
+        methodargs["J00"] = None
+        methodargs["I"] = np.identity(len(y0), dtype=float)
+        methodargs["Isparse"] = np.identity(len(y0), dtype=float)  
+    else:
+        methodargs = {}
+
+
+    # Fix this:
+    addSolverParam = _getAdditionalSolverParameters(len(y0), kwargs['atol'], kwargs['rtol'], addWork=False)
+    kwargs['addSolverParam'] = addSolverParam
+
+    if kwargs['solver'] in (Solvers.EXPLICIT_EULER, Solvers.SEMI_IMPLICIT_EULER):
+        kwargs['k'] = kwargs.pop('p')
+    else:
+        kwargs['k'] = kwargs.pop('p')//2
+
+    #return _extrapolation_parallel(odefun, tspan, y0, kwargs)
+    return _extrapolation_parallel(None, methodargs, odefun, kwargs.pop('grad'), y0, tspan, **kwargs)
