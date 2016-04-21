@@ -57,14 +57,14 @@ solvers(explicit, implicit and semi-implicit).
 Obs: semi-implicit is also called in the reference books as linearly implicit.
 
 Methods' common structure:
-def method_implicit/explicit/semi-implicit(f, jac_fun, previous_values, t_old, f_previousValue, dt, args)
-    @param f (callable f(y,t,args)): derivative of u(t) (ODE RHS, f(u,t))
-    @param jac_fun (callable jac_fun(y,t,args)): Jacobian of f.
-    @param previous_values (2-tuple) : previous solution values (two previous values, at t_n-2 and t_n-1) 
+def method_implicit/explicit/semi-implicit(ode_fun, jac_fun, y_olds, t_old, f_old, dt, args)
+    @param ode_fun (callable ode_fun(y,t,args)): derivative of u(t) (ODE RHS, ode_fun(u,t))
+    @param jac_fun (callable jac_fun(y,t,args)): Jacobian of ode_fun.
+    @param y_olds (2-tuple) : previous solution values (two previous values, at t_n-2 and t_n-1) 
             used to obtain the next point (using two previous values because midpoint explicit
             method needs the previous two points, otherwise the t_n-2 value can remain unused)
     @param t_old (float): time at which previous solution is found
-    @param f_previousValue (array): function evaluation at the previousValue (at t_n-1), so that it can be
+    @param f_old (array): function evaluation at the y_old (at t_n-1), so that it can be
             reused if it was already calculated for other purposes (Jacobian estimation or dense output interpolation)
     @param dt (float): step length
     @param args (tuple): extra arguments
@@ -77,7 +77,7 @@ def method_implicit/explicit/semi-implicit(f, jac_fun, previous_values, t_old, f
         
     @return (yj, f_yj, fe_tot, je_tot):
         @return yj (array): solution calculated at t_old+dt
-        @return f_yj (array): function evaluation value at previousValue, t_old
+        @return f_yj (array): function evaluation value at y_old, t_old
         @return fe_tot (int): number of function evaluations done in this method
         @return je_tot (int): number of Jacobian evaluations done in this method
 """
@@ -125,64 +125,57 @@ def _solve_implicit_step(zero_f, zero_grad, estimatedValue, addSolverParam):
 #     return (optObject.x, optObject.nfev)
 
 
-def _midpoint_semiimplicit(f, jac_fun, previous_values, t_old,
-                           f_previousValue, dt, args, addSolverParam, J00, I,
-                           Isparse):
+def _semi_implicit_midpoint(ode_fun, jac_fun, y_olds, t_old, f_old, dt, args,
+                            addSolverParam, J00, I, Isparse):
     """
     Calculates solution at t_old+dt doing one dt with a midpoint
     semiimplicit formula (linearly implicit midpoint) Based on IV.9.16a-b 
     (ref II).
     """
-    
-    previousPreviousValue, previousValue = previous_values
+    y_older, y_old = y_olds
     je_tot=0
        
-    if(previousPreviousValue is None):
-        return _euler_semiimplicit(f, jac_fun, previous_values, t_old,
-                                   f_previousValue, dt, args, addSolverParam,
+    if(y_older is None):  # Use Euler to get starting value
+        return _semi_implicit_euler(ode_fun, jac_fun, y_olds, t_old,
+                                   f_old, dt, args, addSolverParam,
                                    J00, I, Isparse)
     
-    if(f_previousValue is None):
-        f_yj = f(*(previousValue,t_old)+args)
+    if(f_old is None):
+        f_yj = ode_fun(*(y_old,t_old)+args)
         fe_tot = 1
-    else:
-        f_yj = f_previousValue
+    else:  # We already computed it and can just reuse it
+        f_yj = f_old
         fe_tot=0
     
-    if(not addSolverParam['initialGuess']):
-        xval=None
-    else:
-        xval, f_yj, fe_tot_,je_tot=_euler_explicit(f, jac_fun, previous_values,
+    if(addSolverParam['initialGuess']): # Use Euler for initial guess
+        xval, f_yj, fe_tot_,je_tot=_explicit_euler(ode_fun, jac_fun, y_olds,
                                                    t_old, f_yj, dt,
                                                    args, addSolverParam)
         fe_tot += fe_tot_
-
-    b = np.dot(-(I+dt*J00),(previousValue-previousPreviousValue)) + 2*dt*f_yj
-    
-    if(scipy.sparse.issparse(J00)):
-        A=_calculateMatrix(Isparse,J00,dt)
-        if(addSolverParam['iterative']):
-            sol, info = scipy.sparse.linalg.gmres(A, b, 
-                                                  tol=addSolverParam['min_tol'],
-                                                  x0=xval, maxiter=100)                             
-            if info >0:
-                print("Info: maximum iterations reached for sparse system solver (GMRES).")
-        else:
-            sol = scipy.sparse.linalg.spsolve(A, b)
-            
     else:
-        A=_calculateMatrix(I,J00,dt)
-        if(not addSolverParam['iterative']):
-            sol = np.linalg.solve(A, b)
+        xval=None
+
+    b = np.dot(-(I+dt*J00),(y_old-y_older)) + 2*dt*f_yj
+
+    A = _I_minus_dt_J(I,Isparse,J00,dt)
+    if(addSolverParam['iterative']):  # Use iterative solver
+        sol, info = scipy.sparse.linalg.gmres(A, b,
+                                              tol=addSolverParam['min_tol'],
+                                              x0=xval, maxiter=100)
+        if info >0:
+            print("Info: maximum iterations reached for sparse system solver (GMRES).")
+    else: # Use direct solver
+        if(scipy.sparse.issparse(J00)):
+            sol = scipy.sparse.linalg.spsolve(A, b)
         else:
-            sol, info= scipy.sparse.linalg.gmres(A, b, tol=addSolverParam['min_tol'],x0=xval, maxiter=100)    
+            sol = np.linalg.solve(A, b)
             
-    x = previousValue + sol
+    x = y_old + sol
     
     return (x, f_yj, fe_tot, je_tot)
 
 
-def _calculateMatrix(I,J00,dt):
+def _I_minus_dt_J(I,Isparse,J00,dt):
     """
     Calculates matrix needed for semi implicit methods.
     
@@ -192,11 +185,13 @@ def _calculateMatrix(I,J00,dt):
     
     @return I-dt*J00 (matrix).
     """
-    
-    return I-dt*J00
+    if(scipy.sparse.issparse(J00)):
+        return Isparse-dt*J00
+    else:
+        return I-dt*J00
 
-def _euler_semiimplicit(f, jac_fun, previous_values, t_old, 
-                        f_previousValue,dt, args, addSolverParam, J00, I,
+def _semi_implicit_euler(ode_fun, jac_fun, y_olds, t_old, 
+                        f_old,dt, args, addSolverParam, J00, I,
                         Isparse):
     """
     Calculates solution at t_old+dt doing one dt with a euler
@@ -210,67 +205,60 @@ def _euler_semiimplicit(f, jac_fun, previous_values, t_old,
                midpoint_semiimplicit code (beware!).
     """
     
-    previousPreviousValue, previousValue = previous_values
+    y_older, y_old = y_olds
     je_tot = 0
-    if(f_previousValue is None):
-        f_yj = f(*(previousValue, t_old)+args)
+    if(f_old is None):
+        f_yj = ode_fun(*(y_old, t_old)+args)
         fe_tot = 1
     else:
-        f_yj = f_previousValue
+        f_yj = f_old
         fe_tot = 0
         
-    if(not addSolverParam['initialGuess']):
-        xval = None
-    else:
+    if(addSolverParam['initialGuess']):
         # TODO: The option of doing an explicit step doesn't seem to be
         # effective (maybe because with extrapolation we are taking too big
         # steps for the explicit solver to be close to the solution).
-        # xval, f_yj, fe_tot_,je_tot=_euler_explicit(f, jac_fun, previous_values, t_old, f_yj, dt, args, addSolverParam)
+        # xval, f_yj, fe_tot_,je_tot=_explicit_euler(ode_fun, jac_fun, y_olds, t_old, f_yj, dt, args, addSolverParam)
         # fe_tot += fe_tot_
-        xval = previousValue
+        xval = y_old
+    else:
+        xval = None
     
     b = dt*f_yj
     
+    A = _I_minus_dt_J(I,Isparse,J00,dt)
     # TODO: change this checking of the sparsity type of the matrix only once
     # at the beginning of the ODE solving 
-    if(scipy.sparse.issparse(J00)):
-        A = _calculateMatrix(Isparse,J00,dt)
-        if(addSolverParam['iterative']):
-            # TODO: choose an appropriate maxiter parameter to distribute work
-            # between taking more steps and having a more accurate solution
-            sol, info = scipy.sparse.linalg.gmres(A, b,
-                                                 tol=addSolverParam['min_tol'],
-                                                 x0=xval, maxiter=100)
-            if info >0:
-                print("Info: maximum iterations reached for sparse system solver (GMRES).")
-        else:
-            sol = scipy.sparse.linalg.spsolve(A, b)
-            
+    if(addSolverParam['iterative']):
+        # TODO: choose an appropriate maxiter parameter to distribute work
+        # between taking more steps and having a more accurate solution
+        sol, info = scipy.sparse.linalg.gmres(A, b,
+                                             tol=addSolverParam['min_tol'],
+                                             x0=xval, maxiter=100)
+        if info >0:
+            print("Info: maximum iterations reached for sparse system solver (GMRES).")
     else:
-        A =_calculateMatrix(I,J00,dt)
-        if(not addSolverParam['iterative']):
-            sol = np.linalg.solve(A, b)
+        if(scipy.sparse.issparse(J00)):
+            sol = scipy.sparse.linalg.spsolve(A, b)
         else:
-            sol, info = scipy.sparse.linalg.gmres(A, b,
-                                                 tol=addSolverParam['min_tol'], 
-                                                 x0=xval, maxiter=100)                             
+            sol = np.linalg.solve(A, b)
     
-    x = previousValue + sol
+    x = y_old + sol
 
     return (x, f_yj, fe_tot, je_tot)
 
 
-def _midpoint_implicit(f, jac_fun, previous_values, t_old, f_previousValue,
+def _implicit_midpoint(ode_fun, jac_fun, y_olds, t_old, f_old,
                        dt, args, addSolverParam):
     """
     Calculates solution at t_old+dt doing one dt with a midpoint implicit
     Based on IV.9.2 (ref II).
     """
-    previousPreviousValue, previousValue = previous_values
+    y_older, y_old = y_olds
     
     def zero_func(x):
-        fval = f(*((previousValue+x)/2, t_old+dt/2) + args)
-        return x - previousValue - dt * fval
+        fval = ode_fun(*((y_old+x)/2, t_old+dt/2) + args)
+        return x - y_old - dt * fval
     
     def zero_grad(x):
         II = np.identity(len(x), dtype=float)
@@ -281,13 +269,13 @@ def _midpoint_implicit(f, jac_fun, previous_values, t_old, f_previousValue,
         zero_grad = None
         
     if(not addSolverParam['initialGuess']):
-        estimatedValue = previousValue
+        estimatedValue = y_old
         fe_tot = 0
         je_tot = 0
     else:
         #Estimation of the value as the starting point for the zero solver 
-        estimatedValue, f_yj, fe_tot, je_tot = _euler_explicit(f, jac_fun,
-                previous_values, t_old, f_previousValue, dt, args,
+        estimatedValue, f_yj, fe_tot, je_tot = _explicit_euler(ode_fun, jac_fun,
+                y_olds, t_old, f_old, dt, args,
                 addSolverParam)
         
     x, fe_tot_, je_tot_ = _solve_implicit_step(zero_func, zero_grad,
@@ -295,42 +283,42 @@ def _midpoint_implicit(f, jac_fun, previous_values, t_old, f_previousValue,
     fe_tot += fe_tot_
     je_tot += je_tot_
     
-    f_yj = f(*(previousValue,t_old)+args)
+    f_yj = ode_fun(*(y_old,t_old)+args)
     fe_tot += 1
     return (x, f_yj, fe_tot, je_tot)
 
 
-def _midpoint_explicit(f, jac_fun, previous_values, t_old, f_previousValue,
+def _explicit_midpoint(ode_fun, jac_fun, y_olds, t_old, f_old,
                        dt, args, addSolverParam):
     """
     Calculates solution at t_old+dt doing one dt with a midpoint explicit
     Based on II.9.13b (ref I).
     """
-    previousPreviousValue, previousValue = previous_values
-    if(previousPreviousValue is None):
-        return _euler_explicit(f, jac_fun, previous_values, t_old,
-                               f_previousValue, dt, args, addSolverParam)
+    y_older, y_old = y_olds
+    if(y_older is None): # Use Euler to get additional starting value
+        return _explicit_euler(ode_fun, jac_fun, y_olds, t_old,
+                               f_old, dt, args, addSolverParam)
     
-    f_yj = f(*(previousValue, t_old)+args)
+    f_yj = ode_fun(*(y_old, t_old)+args)
     fe_tot = 1
-    return (previousPreviousValue + (2*dt)*f_yj, f_yj, fe_tot,0)
+    return (y_older + (2*dt)*f_yj, f_yj, fe_tot,0)
 
-def _euler_explicit(f, jac_fun, previous_values, t_old, f_previousValue,
+def _explicit_euler(ode_fun, jac_fun, y_olds, t_old, f_old,
                     dt, args, addSolverParam):
     """
-    Calculates solution at t_old+dt doing one dt with a euler explicit
+    Calculates solution at t_old+dt doing one step with explicit Euler.
     Based on II.9.13a (ref I).
     """
-    previousPreviousValue, previousValue = previous_values
+    y_older, y_old = y_olds
     
-    if(f_previousValue is None):
-        f_yj = f(*(previousValue, t_old)+args)
+    if(f_old is None):
+        f_yj = ode_fun(*(y_old, t_old)+args)
         fe_tot = 1
     else:
-        f_yj = f_previousValue
+        f_yj = f_old
         fe_tot = 0
     
-    return (previousValue + dt*f_yj, f_yj, fe_tot,0)
+    return (y_old + dt*f_yj, f_yj, fe_tot,0)
 
 
 #END BLOCK 1: ODE numerical methods formulas (explicit, implicit and semi-implicit)
@@ -345,8 +333,8 @@ def _compute_stages((solver, solver_args, ode_fun, jac_fun, tn, yn, f_yn, args, 
     
     @param solver: ODE solver to solve one step (midpoint,euler/implicit,semiimplicit,explicit)
     @param solver_args: extra arguments to be passed to the solver
-    @param ode_fun (callable ode_fun(y,t,args)): derivative of u(t) (ODE RHS, f(u,t))
-    @param jac_fun (callable jac_fun(y,t,args)): Jacobian of f.
+    @param ode_fun (callable ode_fun(y,t,args)): derivative of u(t) (ODE RHS, ode_fun(u,t))
+    @param jac_fun (callable jac_fun(y,t,args)): Jacobian of ode_fun.
     @param tn (float): initial time
     @param yn (array): solution value at tn
     @param f_yn (array): function evaluation (ode_fun) at yn,tn
@@ -1655,11 +1643,11 @@ class Solvers(object):
     SEMI_IMPLICIT_EULER = 'semi-implicit euler'
 
 method_fcns = {
-        Solvers.EXPLICIT_MIDPOINT : _midpoint_explicit,
-        Solvers.IMPLICIT_MIDPOINT : _midpoint_implicit,
-        Solvers.SEMI_IMPLICIT_MIDPOINT : _midpoint_semiimplicit,
-        Solvers.EXPLICIT_EULER : _euler_explicit,
-        Solvers.SEMI_IMPLICIT_EULER : _euler_semiimplicit,
+        Solvers.EXPLICIT_MIDPOINT : _explicit_midpoint,
+        Solvers.IMPLICIT_MIDPOINT : _implicit_midpoint,
+        Solvers.SEMI_IMPLICIT_MIDPOINT : _semi_implicit_midpoint,
+        Solvers.EXPLICIT_EULER : _explicit_euler,
+        Solvers.SEMI_IMPLICIT_EULER : _semi_implicit_euler,
         }
 
 defaults = {
