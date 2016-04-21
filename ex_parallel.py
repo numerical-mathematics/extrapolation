@@ -56,9 +56,9 @@ BEGINNING BLOCK 1: ODE numerical methods formulas and one step solvers(explicit,
 Obs: semi-implicit is also called in the reference books as linearly implicit.
 
 Methods' common structure:
-def method_implicit/explicit/semi-implicit(f, grad, previous_values, previousTime, f_previousValue, step, args)
+def method_implicit/explicit/semi-implicit(f, jac_fcn, previous_values, previousTime, f_previousValue, step, args)
     @param f (callable f(y,t,args)): derivative of u(t) (ODE RHS, f(u,t))
-    @param grad (callable grad(y,t,args)): Jacobian of f.
+    @param jac_fcn (callable jac_fcn(y,t,args)): Jacobian of f.
     @param previous_values (2-tuple) : previous solution values (two previous values, at t_n-2 and t_n-1) 
             used to obtain the next point (using two previous values because midpoint explicit
             method needs the previous two points, otherwise the t_n-2 value can remain unused)
@@ -124,7 +124,7 @@ def _solve_implicit_step(zero_f, zero_grad, estimatedValue, addSolverParam):
 #     return (optObject.x, optObject.nfev)
 
 
-def _midpoint_semiimplicit(f, grad, previous_values, previousTime,
+def _midpoint_semiimplicit(f, jac_fcn, previous_values, previousTime,
                            f_previousValue, step, args, addSolverParam, J00, I,
                            Isparse):
     """
@@ -137,7 +137,7 @@ def _midpoint_semiimplicit(f, grad, previous_values, previousTime,
     je_tot=0
        
     if(previousPreviousValue is None):
-        return _euler_semiimplicit(f, grad, previous_values, previousTime,
+        return _euler_semiimplicit(f, jac_fcn, previous_values, previousTime,
                                    f_previousValue, step, args, addSolverParam,
                                    J00, I, Isparse)
     
@@ -151,7 +151,7 @@ def _midpoint_semiimplicit(f, grad, previous_values, previousTime,
     if(not addSolverParam['initialGuess']):
         xval=None
     else:
-        xval, f_yj, fe_tot_,je_tot=_euler_explicit(f, grad, previous_values,
+        xval, f_yj, fe_tot_,je_tot=_euler_explicit(f, jac_fcn, previous_values,
                                                    previousTime, f_yj, step,
                                                    args, addSolverParam)
         fe_tot += fe_tot_
@@ -194,7 +194,7 @@ def _calculateMatrix(I,J00,step):
     
     return I-step*J00
 
-def _euler_semiimplicit(f, grad, previous_values, previousTime, 
+def _euler_semiimplicit(f, jac_fcn, previous_values, previousTime, 
                         f_previousValue,step, args, addSolverParam, J00, I,
                         Isparse):
     """
@@ -224,7 +224,7 @@ def _euler_semiimplicit(f, grad, previous_values, previousTime,
         # TODO: The option of doing an explicit step doesn't seem to be
         # effective (maybe because with extrapolation we are taking too big
         # steps for the explicit solver to be close to the solution).
-        # xval, f_yj, fe_tot_,je_tot=_euler_explicit(f, grad, previous_values, previousTime, f_yj, step, args, addSolverParam)
+        # xval, f_yj, fe_tot_,je_tot=_euler_explicit(f, jac_fcn, previous_values, previousTime, f_yj, step, args, addSolverParam)
         # fe_tot += fe_tot_
         xval = previousValue
     
@@ -259,7 +259,7 @@ def _euler_semiimplicit(f, grad, previous_values, previousTime,
     return (x, f_yj, fe_tot, je_tot)
 
 
-def _midpoint_implicit(f, grad, previous_values, previousTime, f_previousValue,
+def _midpoint_implicit(f, jac_fcn, previous_values, previousTime, f_previousValue,
                        step, args, addSolverParam):
     """
     Calculates solution at previousTime+step doing one step with a midpoint implicit
@@ -273,10 +273,10 @@ def _midpoint_implicit(f, grad, previous_values, previousTime, f_previousValue,
     
     def zero_grad(x):
         II = np.identity(len(x), dtype=float)
-        return  np.matrix(II - step*grad(x,previousTime+step/2))
+        return  np.matrix(II - step*jac_fcn(x,previousTime+step/2))
 
     
-    if(grad is None):
+    if(jac_fcn is None):
         zero_grad = None
         
     if(not addSolverParam['initialGuess']):
@@ -285,7 +285,7 @@ def _midpoint_implicit(f, grad, previous_values, previousTime, f_previousValue,
         je_tot = 0
     else:
         #Estimation of the value as the starting point for the zero solver 
-        estimatedValue, f_yj, fe_tot, je_tot = _euler_explicit(f, grad,
+        estimatedValue, f_yj, fe_tot, je_tot = _euler_explicit(f, jac_fcn,
                 previous_values, previousTime, f_previousValue, step, args,
                 addSolverParam)
         
@@ -299,7 +299,7 @@ def _midpoint_implicit(f, grad, previous_values, previousTime, f_previousValue,
     return (x, f_yj, fe_tot, je_tot)
 
 
-def _midpoint_explicit(f, grad, previous_values, previousTime, f_previousValue,
+def _midpoint_explicit(f, jac_fcn, previous_values, previousTime, f_previousValue,
                        step, args, addSolverParam):
     """
     Calculates solution at previousTime+step doing one step with a midpoint explicit
@@ -307,14 +307,14 @@ def _midpoint_explicit(f, grad, previous_values, previousTime, f_previousValue,
     """
     previousPreviousValue, previousValue = previous_values
     if(previousPreviousValue is None):
-        return _euler_explicit(f, grad, previous_values, previousTime,
+        return _euler_explicit(f, jac_fcn, previous_values, previousTime,
                                f_previousValue, step, args, addSolverParam)
     
     f_yj = f(*(previousValue, previousTime)+args)
     fe_tot = 1
     return (previousPreviousValue + (2*step)*f_yj, f_yj, fe_tot,0)
 
-def _euler_explicit(f, grad, previous_values, previousTime, f_previousValue,
+def _euler_explicit(f, jac_fcn, previous_values, previousTime, f_previousValue,
                     step, args, addSolverParam):
     """
     Calculates solution at previousTime+step doing one step with a euler explicit
@@ -334,7 +334,7 @@ def _euler_explicit(f, grad, previous_values, previousTime, f_previousValue,
 
 #END BLOCK 1: ODE numerical methods formulas (explicit, implicit and semi-implicit)
 
-def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h,
+def _compute_stages((method, methodargs, func, jac_fcn, tn, yn, f_yn, args, h,
                     j_nj_list, smoothing, addSolverParam)):
     """
     Compute extrapolation tableau values with the order specified and number of steps specified in j_nj_list.
@@ -345,7 +345,7 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h,
     @param method: ODE solver method to solve one step (midpoint,euler/implicit,semiimplicit,explicit)
     @param methodargs: extra arguments to be passed to the solver method
     @param func (callable func(y,t,args)): derivative of u(t) (ODE RHS, f(u,t))
-    @param grad (callable grad(y,t,args)): Jacobian of f.
+    @param jac_fcn (callable jac_fcn(y,t,args)): Jacobian of f.
     @param tn (float): initial time
     @param yn (array): solution value at tn
     @param f_yn (array): function evaluation (func) at yn,tn
@@ -380,13 +380,13 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h,
         Y[0] = yn
         step = h/nj
 
-        Y[1], f_yj[0], fe_tot_, je_tot_ = method(func, grad, (None, Y[0]), tn,
+        Y[1], f_yj[0], fe_tot_, je_tot_ = method(func, jac_fcn, (None, Y[0]), tn,
                                                  f_yn, step, args,
                                                  addSolverParam, **methodargs)
         fe_tot += fe_tot_
         je_tot += je_tot_
         for i in range(2,nj+1):
-            Y[i], f_yj[i-1], fe_tot_ , je_tot_= method(func, grad, 
+            Y[i], f_yj[i-1], fe_tot_ , je_tot_= method(func, jac_fcn, 
                                                        (Y[i-2], Y[i-1]), 
                                                        tn + (i-1)*(h/nj), 
                                                        None,
@@ -407,7 +407,7 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h,
             # it should be adequately saved in f_yj so function evaluations are
             # not repeated.
             nextStepSolution, f_yj_unused, fe_tot_, je_tot_ = method(func,
-                                                                     grad, 
+                                                                     jac_fcn, 
                                                                      (Y[nj-1], Y[nj]), 
                                                                      tn + h, 
                                                                      None, 
@@ -425,7 +425,7 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h,
 
     return res
 
-def _extrapolation_parallel(method, methodargs, func, grad, y0, t, solver=None, args=(), full_output=False,
+def _extrapolation_parallel(method, methodargs, func, jac_fcn, y0, t, solver=None, args=(), full_output=False,
         rtol=1.0e-8, atol=1.0e-8, h0=0.5, max_steps=10e4, robustness_factor=2, k=4,
         nworkers=None, smoothing='no', symmetric=True, seq=None, adaptive="order", addSolverParam={}):   
     """
@@ -435,7 +435,7 @@ def _extrapolation_parallel(method, methodargs, func, grad, y0, t, solver=None, 
     @param method (callable(...)): the method on which the extrapolation is based (euler,mipoint/explicit,implicit,semiimplicit)
     @param methodargs (dict): dictionary with extra parameters to be passed to the solver method.
     @param func (callable(y, t,args)): computes the derivative of y at t (i.e. the right hand side of the IVP).
-    @param grad (callable(y,t,args)): computes the Jacobian of the func function parameter.
+    @param jac_fcn (callable(y,t,args)): computes the Jacobian of the func function parameter.
     @param y0 (array): initial condition on y (can be a vector).
     @param t (array): a sequence of time points for which to solve for y. The initial value point should be the first 
             element of this sequence. And the last one the final time.
@@ -516,7 +516,7 @@ def _extrapolation_parallel(method, methodargs, func, grad, y0, t, solver=None, 
     #Iterate until you reach final time
     while t_curr < t_max:
         rejectStep, y_temp, ysolution, f_yn, h, k, h_new, k_new, (fe_seq_, fe_tot_, je_tot_) = _solve_one_step(
-                method, methodargs, func, grad, t_curr, t, t_index, yn, args, h, k, 
+                method, methodargs, func, jac_fcn, t_curr, t, t_index, yn, args, h, k, 
                 atol, rtol, pool, smoothing, symmetric, seq, adaptive, rejectStep, previousStepSolution, addSolverParam)
         #previousStepSolution is used for Jacobian updating
         previousStepSolution = (yn, f_yn)
@@ -665,11 +665,11 @@ def _updateJ00(previousJ00, func, yn, tn, yn_1, f_yn_1, args):
     return (updatedJ00, f_yn)
 
 previousJ00 = 0
-def _getJacobian(func, args, yn, tn, grad, methodargs, rejectPreviousStep,
+def _getJacobian(func, args, yn, tn, jac_fcn, methodargs, rejectPreviousStep,
                  previousStepSolution,addSolverParam): 
     """
     Obtains the Jacobian approximation at yn,tn of func. Different possibilities:
-        - If grad (analytical Jacobian) is available grad is used to obtain the Jacobian at yn,tn
+        - If jac_fcn (analytical Jacobian) is available jac_fcn is used to obtain the Jacobian at yn,tn
         - Otherwise (if not freeze) the Jacobian is estimated with a forward difference formula (see forward_diff.Jacobian)
         - Otherwise (if freeze) the last Jacobian approximation is used (unless the previous step was rejected).
             This freezing idea was taken from LSODE solver.
@@ -680,7 +680,7 @@ def _getJacobian(func, args, yn, tn, grad, methodargs, rejectPreviousStep,
     @param args (tuple): extra arguments for func
     @param yn (array): solution at tn (current time)
     @param tn (array): current time
-    @param grad (callable(y,t,args)): computes analytically the Jacobian of the func function parameter.
+    @param jac_fcn (callable(y,t,args)): computes analytically the Jacobian of the func function parameter.
     @param methodargs (dict): contains solver methods' additional parameters.
             In this function methodargs['J00'] is updated with the Jacobian estimation at yn,tn
     @param rejectPreviousStep (bool): whether previously taken step was rejected or not 
@@ -703,7 +703,7 @@ def _getJacobian(func, args, yn, tn, grad, methodargs, rejectPreviousStep,
     if(not methodargs=={}):
         def func_at_tn(y, args):
             return func(*(y,tn)+args)
-        if(grad is None):
+        if(jac_fcn is None):
             
             global previousJ00
             if(addSolverParam['freezeJac'] and not rejectPreviousStep):
@@ -723,13 +723,13 @@ def _getJacobian(func, args, yn, tn, grad, methodargs, rejectPreviousStep,
             methodargs['J00'] =J00 
             previousJ00 = J00
         else:            
-            J00 = grad(yn, tn)
+            J00 = jac_fcn(yn, tn)
             je_tot = 1
             fe_tot = 0
             methodargs['J00'] =J00 
     return (f_yn, fe_tot,je_tot) 
 
-def _compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args,
+def _compute_extrapolation_table(method, methodargs, func, jac_fcn, tn, yn, args,
                                  h, k, pool, rejectPreviousStep,
                                  previousStepSolution, seq, smoothing,
                                  symmetric, addSolverParam):
@@ -744,7 +744,7 @@ def _compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args,
            the solver method.
     @param func (callable(y, t,args)): computes the derivative of y at t (i.e.
            the right hand side of the IVP).
-    @param grad (callable(y,t,args)): computes the Jacobian of the func
+    @param jac_fcn (callable(y,t,args)): computes the Jacobian of the func
            function parameter.
     @param tn (float): starting integration time
     @param yn (array): solution at tn (current time)
@@ -799,16 +799,16 @@ def _compute_extrapolation_table(method, methodargs, func, grad, tn, yn, args,
     T = np.zeros((k+1,k+1, len(yn)), dtype=(type(yn[0])))
     j_nj_list = _balance_load(k, NUM_WORKERS, seq=seq)
     
-    f_yn, fe_tot, je_tot = _getJacobian(func, args, yn, tn, grad, methodargs,
+    f_yn, fe_tot, je_tot = _getJacobian(func, args, yn, tn, jac_fcn, methodargs,
                                         rejectPreviousStep, previousStepSolution,
                                         addSolverParam)
     
-    jobs = [(method, methodargs, func, grad, tn, yn, f_yn, args, h, k_nj,
+    jobs = [(method, methodargs, func, jac_fcn, tn, yn, f_yn, args, h, k_nj,
              smoothing, addSolverParam) for k_nj in j_nj_list]
     results = pool.map(_compute_stages, jobs, chunksize=1)
 
     # Here's how this would be done in serial:
-    # res = _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, j_nj_list, smoothing))
+    # res = _compute_stages((method, methodargs, func, jac_fcn, tn, yn, f_yn, args, h, j_nj_list, smoothing))
     
     # At this stage fe_tot has only counted the function evaluations for the
     # jacobian estimation (which are not parallelized)
@@ -1392,7 +1392,7 @@ def _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptive, addSolverP
     return (rejectStep, y, h_new, k_new)
 
 
-def _solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn,
+def _solve_one_step(method, methodargs, func, jac_fcn, t_curr, t, t_index, yn,
                     args, h, k, atol, rtol, pool, smoothing, symmetric, seq,
                     adaptive, rejectPreviousStep, previousStepSolution,
                     addSolverParam):
@@ -1406,7 +1406,7 @@ def _solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn,
             implicit,semiimplicit)
     @param methodargs (dict): dictionary with extra parameters to be passed to the solver method.
     @param func (callable(y, t,args)): computes the derivative of y at t (i.e. the right hand side of the IVP).
-    @param grad (callable(y,t,args)): computes the Jacobian of the func function parameter.
+    @param jac_fcn (callable(y,t,args)): computes the Jacobian of the func function parameter.
     @param t_curr (float): current integration time (end time of the previous successful step taken)
     @param t (array): a sequence of time points for which to solve for y. The initial value point should be the first 
             element of this sequence. And the last one the final time.
@@ -1467,7 +1467,7 @@ def _solve_one_step(method, methodargs, func, grad, t_curr, t, t_index, yn,
         k_min = 3
         k = min(k_max, max(k_min, k))
 
-    T, y_half, f_yj,yj, f_yn, hs, (fe_seq, fe_tot, je_tot) = _compute_extrapolation_table(method, methodargs, func, grad, 
+    T, y_half, f_yj,yj, f_yn, hs, (fe_seq, fe_tot, je_tot) = _compute_extrapolation_table(method, methodargs, func, jac_fcn, 
                 t_curr, yn, args, h, k, pool, rejectPreviousStep, previousStepSolution, seq, smoothing, symmetric,addSolverParam)
     
     rejectStep, y, h_new, k_new = _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptive, addSolverParam)
@@ -1669,7 +1669,7 @@ defaults = {
             'adaptive' : 'order',
             'full_output' : False,
             'nworkers' : None,
-            'grad' : None,
+            'jac_fcn' : None,
             'p' : 4,
             'smoothing' : 'no',
             'symmetric' : False,
@@ -1689,7 +1689,7 @@ def solve(odefun, tspan, y0, **kwargs):
     Structure:
 
         @param func (callable(y, t,args)): computes the derivative of y at t (i.e. the right hand side of the IVP).
-        @param grad (callable(y,t,args)): computes analytically the Jacobian of the func function parameter.
+        @param jac_fcn (callable(y,t,args)): computes analytically the Jacobian of the func function parameter.
         @param y0 (array): initial condition on y (can be a vector).
         @param t (array): a sequence of time points for which to solve for y. The initial value point should be the first 
                 element of this sequence. And the last one the final time.
@@ -1778,4 +1778,4 @@ def solve(odefun, tspan, y0, **kwargs):
         kwargs['k'] = kwargs.pop('p')//2
 
     #return _extrapolation_parallel(odefun, tspan, y0, kwargs)
-    return _extrapolation_parallel(None, methodargs, odefun, kwargs.pop('grad'), y0, tspan, **kwargs)
+    return _extrapolation_parallel(None, methodargs, odefun, kwargs.pop('jac_fcn'), y0, tspan, **kwargs)
