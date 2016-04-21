@@ -426,7 +426,7 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h,
     return res
 
 def _extrapolation_parallel(method, methodargs, func, grad, y0, t, solver=None, args=(), full_output=False,
-        rtol=1.0e-8, atol=1.0e-8, h0=0.5, mxstep=10e4, robustness_factor=2, k=4,
+        rtol=1.0e-8, atol=1.0e-8, h0=0.5, max_steps=10e4, robustness_factor=2, k=4,
         nworkers=None, smoothing='no', symmetric=True, seq=None, adaptive="order", addSolverParam={}):   
     """
     Solves the system of IVPs dy/dt = func(y, t0, ...) with parallel
@@ -444,7 +444,7 @@ def _extrapolation_parallel(method, methodargs, func, grad, y0, t, solver=None, 
     @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
             determine the error control performed by the solver. See  function _error_norm(y1, y2, atol, rtol).
     @param h0 (float):the step size to be attempted on the first step.
-    @param mxstep (int): maximum number of (internally defined) steps allowed for each
+    @param max_steps (int): maximum number of (internally defined) steps allowed for each
             integration point in t. Defaults to 10e4
     @param robustness_factor (int): multiplicative factor that limits the increase and decrease of the adaptive step
             (next step vs last step length ratio is limited by this factor).
@@ -546,7 +546,7 @@ def _extrapolation_parallel(method, methodargs, func, grad, y0, t, solver=None, 
         nstp += 1
         cur_stp += 1
 
-        if cur_stp > mxstep:
+        if cur_stp > max_steps:
             raise Exception('Reached Max Number of Steps. Current t = ' 
                 + str(t_curr))
         
@@ -1664,7 +1664,7 @@ defaults = {
             'atol'   : 1.e-8,
             'rtol'   : 1.e-8,
             'h0'     : 0.5,
-            'mxstep' : 10e4,
+            'max_steps' : 10e4,
             'robustness_factor' : 2,
             'adaptive' : 'order',
             'full_output' : False,
@@ -1698,7 +1698,7 @@ def solve(odefun, tspan, y0, **kwargs):
         @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
                 determine the error control performed by the solver. See  function _error_norm(y1, y2, atol, rtol).
         @param h0 (float):the step size to be attempted on the first step.
-        @param mxstep (int): maximum number of (internally defined) steps allowed for each
+        @param max_steps (int): maximum number of (internally defined) steps allowed for each
                 integration point in t. Defaults to 10e4
         @param robustness (int): multiplicative factor that limits the increase and decrease of the adaptive step
                 (next step vs last step length ratio is limited by this factor).
@@ -1763,7 +1763,7 @@ def solve(odefun, tspan, y0, **kwargs):
         methodargs = {}
         methodargs["J00"] = None
         methodargs["I"] = np.identity(len(y0), dtype=float)
-        methodargs["Isparse"] = np.identity(len(y0), dtype=float)  
+        methodargs["Isparse"] = scipy.sparse.identity(len(y0), dtype=float, format='csr')
     else:
         methodargs = {}
 

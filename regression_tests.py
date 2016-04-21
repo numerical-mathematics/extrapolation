@@ -334,7 +334,7 @@ def non_dense_output_tests():
                 ys, infodict = ex_parallel.solve(f, output_times, y0,
                                                  solver=method.lower(),
                                                  atol=tol, rtol=tol,
-                                                 mxstep=1.e6, full_output=True,
+                                                 max_steps=1.e6, full_output=True,
                                                  nworkers=2)
                 y = ys[-1][0]
                 assert np.allclose(y, reference_solutions[method][f][tol])
@@ -357,7 +357,7 @@ def dense_output_tests():
                 ys, infodict = ex_parallel.solve(f, output_times, y0, 
                                                  solver=method.lower(),
                                                  atol=tol, rtol=tol,
-                                                 mxstep=1.e6, full_output=True,
+                                                 max_steps=1.e6, full_output=True,
                                                  nworkers=2)
                 y = ys[-2][0]
                 assert np.allclose(y, dense_reference_solutions[method][f][tol])
@@ -387,7 +387,7 @@ def convergence_test(method_name, test, step_sizes, order, dense=False):
         ys, infodict = ex_parallel.solve(test.RHSFunction, dense_output,
                                          test.initialValue,
                                          solver=method_name.lower(), 
-                                         atol=1e-1, rtol=1e-1, mxstep=1000000,
+                                         atol=1e-1, rtol=1e-1, max_steps=1000000,
                                          full_output=True,
                                          adaptive='fixed', p=order, h0=step,
                                          nworkers=4)
