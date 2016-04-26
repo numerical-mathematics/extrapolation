@@ -389,7 +389,7 @@ def convergence_test(method_name, test, step_sizes, order, dense=False):
                                          solver=method_name.lower(), 
                                          atol=1e-1, rtol=1e-1, max_steps=1000000,
                                          diagnostics=True,
-                                         adaptive='fixed', p=order, h0=step,
+                                         adaptive=False, p=order, h0=step,
                                          nworkers=4)
         
         ys=ys[1:len(ys)]
