@@ -1,9 +1,9 @@
 from __future__ import division
+from collections import namedtuple
 import numpy as np
 import math 
 import parex
 import matplotlib.pyplot as plt
-import twelve_tests as tst
 
 #Whether to do convergence plots to see if they are straight lines (to choose the steps)
 plot_convergence=False
@@ -316,6 +316,30 @@ dense_reference_solutions = {
 
     }
 
+TestProblemDefinition = namedtuple("TestProblemDefinition", 
+            ["problemName","RHSFunction", "RHSGradient","initialTime",
+                "initialValue", "denseOutput", "atolfact", "atol"])
+
+def Linearf(y,t):
+    lam = -1.
+    return lam*y
+
+def LinearProblem():
+    denseOutput = np.array([0,0.1,0.2,0.3,0.4,0.5,0.536498185, 0.6,0.7,0.8,0.9,1.])    
+    return TestProblemDefinition("Linear", Linearf, None, 0, np.array([1.]),denseOutput ,1.,None)
+
+def VDPOLEasyf(y,t):
+    epsilon=1
+    second_dim=1/epsilon*(((1-y[0]**2)*y[1])-y[0])
+    return np.array([y[1],second_dim])
+
+def VDPOLEasyProblem():
+    denseOutput = np.array([0.,1.,2.,3.,4.,5.,6.,6.4456913297,7.,8.,9.,10.,11.,12.])    
+    return TestProblemDefinition("VDPOLEasy", VDPOLEasyf, None, 0, np.array([2.,0]),denseOutput,1.,None)
+ 
+def getReferenceFile(problemName):
+    return "reference_" + problemName + ".txt"
+      
 ########### RUN TESTS ###########
 
 tolerances = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
@@ -370,7 +394,7 @@ def convergence_test(method_name, test, step_sizes, order, dense=False):
    Perform a convergence test by applying the specified method to the specified
    the test problem with the specified step sizes.
     """
-    y_ref = np.loadtxt(tst.getReferenceFile(test.problemName))
+    y_ref = np.loadtxt(getReferenceFile(test.problemName))
     dense_output = test.denseOutput
 
     if(not dense):
@@ -464,22 +488,22 @@ def run_convergence_tests(methods):
             print("   Testing method of order " + str(p))
             print("     Linear test problem, no dense output")
             step_sizes = method['linear problem step sizes'][p]
-            coeff = convergence_test(method_name, tst.LinearProblem(),step_sizes,p,False)
+            coeff = convergence_test(method_name, LinearProblem(),step_sizes,p,False)
             check_convergence_rate(coeff, p-method['smoothing'], "Test Linear non dense")
             if not (p in method['skip vanderpol']):
                 print("     Vanderpol test problem, no dense output")
                 step_sizes = method['vanderpol step sizes'][p]
-                coeff = convergence_test(method_name, tst.VDPOLEasyProblem(),step_sizes,p,False)
+                coeff = convergence_test(method_name, VDPOLEasyProblem(),step_sizes,p,False)
                 check_convergence_rate(coeff, p-method['smoothing'], "Test VPOL non dense")
             if not (p in method['skip linear dense']):
                 print("     Linear test problem, dense output")
                 step_sizes = method['linear problem step sizes'][p]
-                coeff = convergence_test(method_name, tst.LinearProblem(),step_sizes,p,True)
+                coeff = convergence_test(method_name, LinearProblem(),step_sizes,p,True)
                 check_convergence_rate(coeff, p-method['smoothing'], "Test Linear non dense")
             if not (p in method['skip vanderpol dense']):
                 print("     Vanderpol test problem, dense output")
                 step_sizes = method['vanderpol step sizes'][p]
-                coeff = convergence_test(method_name, tst.VDPOLEasyProblem(),step_sizes,p,True)
+                coeff = convergence_test(method_name, VDPOLEasyProblem(),step_sizes,p,True)
                 check_convergence_rate(coeff, p-method['smoothing'], "Test VPOL dense")
 
     print("All convergence tests passed")

@@ -5,7 +5,6 @@ import numpy as np
 from collections import namedtuple
 import time
 import parex
-import ex_parallel_original
 import matplotlib.pyplot as plt
 import math
 from compare_test import kdv_func, kdv_init, kdv_solout
@@ -425,8 +424,6 @@ def comparisonTest():
     useOptimal = True
     solverFunctions = [
 #         parex.ex_midpoint_explicit_parallel
-#         ,
-#         ex_parallel_original.ex_midpoint_parallel
 #         ,
 #         parex.ex_midpoint_implicit_parallel
 #         ,
