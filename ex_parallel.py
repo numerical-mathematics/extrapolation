@@ -530,7 +530,7 @@ def _extrapolation_parallel(ode_fun, tspan, y0, solver_args, solver=None,
         y_old, f_old = (yn, f_yn)
 
         # Store values if step is not rejected
-        if(not reject_step):
+        if (not reject_step) or (not adaptive):
             yn = 1*y_temp
             # ysolution includes all output values in step interval
             if(len(ysolution)!=0):
@@ -687,7 +687,7 @@ def _update_jacobian(jacobian_old, ode_fun, yn, tn, yn_1, f_yn_1, args):
     return (jacobian, f_yn)
 
 
-def _get_jacobian(ode_fun, args, yn, tn, jac_fun, solver_args,
+def _get_jacobian(ode_fun, args, yn, tn, jac_fun,
                   last_step_rejected, y_old, f_old, freeze):
     """
     Return the Jacobian approximation J(yn,tn) where J is the deriviative of
@@ -709,8 +709,6 @@ def _get_jacobian(ode_fun, args, yn, tn, jac_fun, solver_args,
         current time
     jac_fun : callable(y,t,args)
         computes analytically the Jacobian of the ode_fun function parameter.
-    solver_args : dict
-        contains solver methods' additional parameters.
     last_step_rejected : bool
         True if last step was rejected
     y_old, f_old : 2-tuple
@@ -759,7 +757,7 @@ def _get_jacobian(ode_fun, args, yn, tn, jac_fun, solver_args,
     return (J00, f_yn, fun_evals, jac_evals)
 
 
-def _compute_extrapolation_table(solver, solver_args, ode_fun, jac_fun, tn, yn, args,
+def _extrap_table(solver, solver_args, ode_fun, jac_fun, tn, yn, args,
                                  h, k, pool, last_step_rejected,
                                  y_old, f_old, seq, smoothing,
                                  solver_parameters):
@@ -768,69 +766,82 @@ def _compute_extrapolation_table(solver, solver_args, ode_fun, jac_fun, tn, yn, 
     sequence. The values T_{1,i} are computed concurrently, taking all the
     inner steps necessary and then extrapolating the final value at tn+h.
 
-    @param solver (callable(...)): the solver on which the extrapolation is
-           based (euler,mipoint/explicit, implicit,semiimplicit)
-    @param solver_args (dict): dictionary with extra parameters to be passed to
-           the solver solver.
-    @param ode_fun (callable(y, t,args)): computes the derivative of y at t (i.e.
-           the right hand side of the IVP).
-    @param jac_fun (callable(y,t,args)): computes the Jacobian of the ode_fun
-           function parameter.
-    @param tn (float): starting integration time
-    @param yn (array): solution at tn (current time)
-    @param args (tuple): extra arguments to pass to function.
-    @param h (float): integration step to take (the output, without
-           interpolation, will be calculated at t_curr+h) This value matches
-           with the value H in ref I and ref II.
-    @param k (int): number of extrapolation steps to take in this step
-           (determines the number of extrapolations performed to achieve a
-           better integration output, equivalent to the size of the
-           extrapolation tableau).
-    @param pool: multiprocessing pool of workers (with as many workers as
-           processors) that will parallelize the calculation of each of the initial
-           values of the extrapolation tableau (T_{i,1} i=1...k).
-    @param last_step_rejected (bool): whether previously taken step was
-           rejected or not
-    @param y_old, f_old (2-tuple): tuple containing the solution at the
-           previous step (tn-1) and its function evaluation, (yn_1, f_yn_1)
-    @param seq (callable(i), int i>=1): the step-number sequence (examples
-           II.9.1 , 9.6, 9.35 ref I).
-    @param smoothing (string): specifies if a smoothing step should be
-           performed:
-            -'no': no smoothing step performed
-            -'gbs': three point smoothing step (based on GBS method), II.9.13c
-             ref I and IV.9.9 ref II.
-            -'semiimp': two point smoothing step (for semiimplicit midpoint),
-             IV.9.16c ref II.
-    @param solver_parameters (dict): extra arguments needed to define completely
-           the solver's behavior.  Should not be empty, for more information see
-           _set_default_solver_parameters(..) function.
+    Parameters
+    ----------
+    solver : callable(...)
+        the solver on which the extrapolation is based (euler,mipoint/explicit,
+        implicit,semiimplicit) solver_args : dict dictionary with extra
+        parameters to be passed to the solver solver.
+    ode_fun : callable(y, t,args)
+        computes the derivative of y at t (i.e.  the right hand side of the
+        IVP).
+    jac_fun : callable(y,t,args)
+        computes the Jacobian of the ode_fun function parameter.
+    tn : float
+        starting integration time
+    yn : array
+        solution at tn (current time)
+    args : tuple
+        extra arguments to pass to function.
+    h : float
+        integration step to take (the output, without interpolation, will be
+        calculated at t_curr+h) This value matches with the value H in ref I
+        and ref II.
+    k : int
+        number of extrapolation steps to take in this step (determines the
+        number of extrapolations performed to achieve a better integration
+        output, equivalent to the size of the extrapolation tableau).  
+    pool :
+        multiprocessing pool of workers (with as many workers as processors)
+        that will parallelize the calculation of each of the initial values of
+        the extrapolation tableau (T_{i,1} i=1...k).
+    last_step_rejected : bool
+        True if last step was rejected
+    y_old, f_old : arrays
+        the solution at the previous step (tn-1) and its derivative
+    seq : callable(i), int i>=1
+        the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
+    smoothing : string
+        specifies if a smoothing step should be performed:
+         -'no': no smoothing step performed
+         -'gbs': three point smoothing step (based on GBS method), II.9.13c ref
+                 I and IV.9.9 ref II.
+         -'semiimp': two point smoothing step (for semiimplicit midpoint),
+                     IV.9.16c ref II.
+    solver_parameters : dict
+        extra arguments needed to define completely the solver's behavior.
+        Should not be empty; for more information see
+        _set_default_solver_parameters().
 
-    @return (T, y_half, f_yj, yj, f_yn, hs,(fe_seq, fe_tot, je_tot)):
-        @return T (2D array): filled extrapolation tableau (size k) with all the T_{i,j} values in the lower
-                triangular side
-        @return y_half (2D array): array containing for each extrapolation value (1...k) an array with the intermediate (at half
-                the integration interval) solution value.
-        @return f_yj (3D array): array containing for each extrapolation value (1...k) an array with all the function evaluations
-                done at the intermediate solution values.
-        @return yj (3D array): array containing for each extrapolation value (1...k) an array with all the intermediate solution
-                values obtained to calculate each T_{i,1}.
-        @return f_yn (array): function (RHS) evaluation at yn,tn
-        @return hs (array): array containing for each extrapolation value (1...k) the inner step taken, H/nj (ref I)
-        @return (fe_seq, fe_tot,je_tot):
-            @return fe_seq (int): cumulative number of sequential derivative evaluations performed for this step
-            @return fe_tot (int): cumulative number of total derivative evaluations performed for this step
-            @return je_tot (int): cumulative number of either Jacobian evaluations (when analytic Jacobian is
-                    provided) or Jacobian estimations (when no analytic Jacobian is provided) performed
-                    for this step
+    Returns
+    -------
+    T : 2D array
+        filled extrapolation tableau (size k) with all the T_{i,j} values in
+        the lower triangle
+    y_half : 2D array
+        array containing for each extrapolation value (1...k) an array with the
+        intermediate (at half the integration interval) solution value.
+    f_yj : 3D array
+        array containing for each extrapolation value (1...k) an array with all
+        the function evaluations done at the intermediate solution values.
+    yj : 3D array
+        array containing for each extrapolation value (1...k) an array with all
+        the intermediate solution values obtained to calculate each T_{i,1}.
+    f_yn : array
+        function (RHS) evaluation at yn, tn
+    hs : array
+        array containing for each extrapolation value (1...k) the inner step
+        taken, H/nj (ref I)
+    fe_seq, fe_tot, je_tot : int
+        diagnostics: number of sequential derivative, derivative, and jacobian
+        evaluations performed for this step
     """
-    T = np.zeros((k+1,k+1, len(yn)), dtype=(type(yn[0])))
     j_nj_list = _balance_load(k, NUM_WORKERS, seq=seq)
 
     if solver in ( method_fcns[Solvers.SEMI_IMPLICIT_EULER], 
                    method_fcns[Solvers.SEMI_IMPLICIT_MIDPOINT]):
         jac, f_yn, fe_tot, je_tot = _get_jacobian(ode_fun, args, yn, tn, jac_fun,
-                                             solver_args, last_step_rejected,
+                                             last_step_rejected,
                                              y_old, f_old,
                                              solver_parameters['freezeJac'])
         solver_args['J00'] = jac
@@ -849,12 +860,13 @@ def _compute_extrapolation_table(solver, solver_args, ode_fun, jac_fun, tn, yn, 
     # At this stage fe_tot has only counted the function evaluations for the
     # jacobian estimation (which are not parallelized)
     fe_seq = 1*fe_tot
-    fe_tot_stage_max=0
+    fe_tot_stage_max = 0
     # process the results returned from the pool
     y_half = (k+1)*[None]
     f_yj = (k+1)*[None]
     yj = (k+1)*[None]
     hs = (k+1)*[None]
+    T = np.zeros((k+1, k+1, len(yn)), dtype=(type(yn[0])))
 
     for res in results:
         fe_tot_stage = 0
@@ -885,14 +897,23 @@ def _fill_extrapolation_table(T, j_initshift, seq, symmetric):
     method to compute T_{i,1} was symmetric or not (See Section II.9 of Ref.
     I).
 
-    @param T (2D array): extrapolation table (lower triangular) containing
-            the first column calculated and to be filled
-    @param j_initshift (int): step sequence index matching the number of steps taken to compute the first
-            value T_{1,1} of this extrapolation tableau. I.e. if step sequence is {2,6,10,14...} and
-            T_{1,1} was calculated with 6 steps then j_initshift=1 and T_{i,1} are assumed to be calculated
-            with seq(i+j_initshift), thus {6,10,14...}
-    @param seq (callable(i) int i>=1): step sequence of the first column values
-    @param symmetric (bool): whether the solver used to compute the first column of T is symmetric or not.
+    Parameters
+    ----------
+    T : 2D array
+        extrapolation table (lower triangular) containing the first column
+        calculated and the rest to be filled
+    j_initshift : int
+        step sequence index matching the number of steps taken to compute the
+        first value T_{1,1} of this extrapolation tableau. I.e. if step
+        sequence is {2,6,10,14...} and T_{1,1} was calculated with 6 steps then
+        j_initshift=1 and T_{i,1} are assumed to be calculated with
+        seq(i+j_initshift), thus {6,10,14...}
+    seq : callable seq(i), int i>=1
+        step sequence of the first column values
+    symmetric : bool
+        True if the solver used to compute the first column of T is symmetric
+
+    Returns None.
     """
     for i in range(2, T.shape[0]):
         for j in range(i, T.shape[0]):
@@ -903,19 +924,24 @@ def _fill_extrapolation_table(T, j_initshift, seq, symmetric):
 
 def _centered_diff(j, f_yj, hj):
     """
-    Computes through the centered differentiation formula different order
-    derivatives of y for a given extrapolation step (for every T{1,j}). In
-    other words, it calculates II.9.39 of Ref. I (step 1) for all kappa for a
+    Compute approximate derivatives of y using centered differences.
+    Specifically, calculate II.9.39 of Ref. I (step 1) for all kappa for a
     fixed j (i.e. for a fixed extrapolation step).
 
     Used by _interpolate_sym.
 
-    @param j (int): which extrapolation inner-stage is used
-    @param f_yj (2D array): array with all the function evaluations of all the intermediate solution
-            values obtained to calculate each T_{j,1}.
-    @param hj (array): inner step taken in the j-th extrapolation step, H/nj (II.9.1 ref I).
+    Parameters
+    ----------
+    j : int
+        which extrapolation inner stage is used
+    f_yj : 2D array
+        array with all the function evaluations of all the intermediate
+        solution values obtained to calculate each T_{j,1}.
+    hj : array
+        inner step taken in the j-th extrapolation step, H/nj (II.9.1 ref I).
 
-    @return dj (2D array): array containing for each kappa=1...2j the kappa-th derivative of y estimated
+    dj : 2D array
+        contains, for each kappa=1...2j, the kappa-th derivative of y estimated
         using the j-th extrapolation step values
     """
     max_order = 2*j
@@ -926,11 +952,10 @@ def _centered_diff(j, f_yj, hj):
     dj[2] = (f_yj[nj/2+1] - f_yj[nj/2-1])/(2*hj) # Second derivative
 
     for order in range(2,max_order):  # Higher-order derivatives
+        # Binomial coefficients
         coeff = [1] + [coeff[j] + coeff[j+1] for j in range(len(coeff)-1)] + [1]
-        index = [nj/2 + order - 2*i for i in range(order+1)]
-        sum_ = 0
-        for i in range(order+1):
-            sum_ += ((-1)**i)*coeff[i]*f_yj[index[i]]
+        index = range(nj//2+order, nj//2-order-2, -2)
+        sum_ = sum([((-1)**i)*coeff[i]*f_yj[index[i]] for i in range(order+1)])
         dj[order+1] = sum_ / (2*hj)**order
 
     return dj
@@ -942,14 +967,23 @@ def _backward_diff(j, yj, hj, lam):
     other words, it calculates VI.5.43 ref II (step 1) for all kappa for a
     fixed j (for a fixed extrapolation step).
 
-    Used for _interpolate_nonsym.
+    Used by _interpolate_nonsym.
 
-    @param j (int): which extrapolation inner-stage is used
-    @param yj (2D array): array with all the intermediate solution values obtained to calculate each T_{j,1}.
-    @param hj (array): inner step taken in the j-th extrapolation step, H/nj (II.9.1 ref I).
-    @param lam (int): either 0 or 1, check definition and use in ref II pg 439
+    Parameters
+    ----------
+    j : int
+        which extrapolation inner-stage is used
+    yj : 2D array
+        array with all the intermediate solution values obtained to calculate each T_{j,1}.
+    hj : array
+        inner step taken in the j-th extrapolation step, H/nj (II.9.1 ref I).
+    lam : int
+        either 0 or 1, check definition and use in ref II pg 439
 
-    @return rj (2D array): array containing for each kappa=1...j-lam the kappa-th derivative of y estimated
+    Returns
+    -------
+    rj : 2D array
+        contains, for each kappa=1...j-lam, the kappa-th derivative of y estimated
         using the j-th extrapolation step values
     """
     max_order = j-lam
@@ -959,12 +993,10 @@ def _backward_diff(j, yj, hj, lam):
     rj[1] = (yj[nj] - yj[nj-1])/hj
 
     for order in range(2,max_order+1):
+        # Binomial coefficients
         coeff = [1] + [coeff[j] + coeff[j+1] for j in range(len(coeff)-1)] + [1]
-        index = [nj - i for i in range(order+1)]
-
-        sum_ = 0
-        for i in range(order+1):
-            sum_ += ((-1)**i)*coeff[i]*yj[index[i]]
+        index = range(nj, nj-order-1, -1)
+        sum_ = sum([((-1)**i)*coeff[i]*yj[index[i]] for i in range(order+1)])
         rj[order] = sum_ /hj**order
 
     return rj
@@ -976,7 +1008,7 @@ def _compute_rs(yj, hs, k, seq=(lambda t: 4*t-2)):
     here performs the extrapolation of the derivatives. Follows VI.5.44
     ref II (step 2).
 
-    Used for _interpolate_nonsym.
+    Used by _interpolate_nonsym.
 
     Note: compared to the reference, k and kappa are interchanged in this code,
     to maintain the same notation as ref I (see _compute_ds function)
@@ -987,15 +1019,26 @@ def _compute_rs(yj, hs, k, seq=(lambda t: 4*t-2)):
     given the global error committed. Theorem VI.5.7 ref II (interpolation
     error).
 
-    @param yj (3D array): array containing for each extrapolation value (1...k) an array with all the intermediate solution
-            values obtained to calculate each T_{i,1}.
-    @param hs (array): array containing for each extrapolation value (1...k) the inner step taken, H/nj (II.9.1 ref I)
-    @param k (int): number of extrapolation steps to take in this step (determines the number of extrapolations performed
-            to achieve a better integration output, equivalent to the size of the extrapolation tableau).
-    @param seq (callable(i), int i>=1): the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
+    Parameters
+    ----------
+    yj : 3D array
+        array containing for each extrapolation value (1...k) an array with all
+        the intermediate solution values obtained to calculate each T_{i,1}.
+    hs : array
+        array containing for each extrapolation value (1...k) the inner step
+        taken, H/nj (II.9.1 ref I)
+    k : int
+        number of extrapolation steps to take in this step (determines the
+        number of extrapolations performed to achieve a better integration
+        output, equivalent to the size of the extrapolation tableau).
+    seq : callable(i), int i>=1
+        the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
 
-    @return rs (2D array): array containing for each kappa=1...k the kappa-th derivative of y
-            (extrapolated k-kappa-lam times)
+    Returns
+    -------
+    rs : 2D array
+        array containing for each kappa=1...k the kappa-th derivative of y
+        (extrapolated k-kappa-lam times)
     """
     lam=1
     dj_kappa = np.zeros((k+1-lam, k+1), dtype=(type(yj[1][0])))
@@ -1009,10 +1052,10 @@ def _compute_rs(yj, hs, k, seq=(lambda t: 4*t-2)):
     for kappa in range(1,k+1-lam):
         numextrap = k+1-kappa-lam
         T = np.zeros((numextrap+1, numextrap+1), dtype=(type(yj[1][0])))
-        T[:,1] = 1*dj_kappa[kappa, (kappa+lam-1):]
+        T[:,1] = dj_kappa[kappa, (kappa+lam-1):]
         _fill_extrapolation_table(T, lam+kappa-1, seq, symmetric=False)
 
-        rs[kappa] = 1*T[numextrap,numextrap]
+        rs[kappa] = T[numextrap,numextrap]
 
     return rs
 
@@ -1024,19 +1067,31 @@ def _compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
     here it performs the extrapolation of the derivatives. It follows II.9 step
     2 ref I.
 
-    Used for _interpolate_sym.
+    Used by _interpolate_sym.
 
-    @param y_half (2D array): array containing for each extrapolation value (1...k) an array with the intermediate (at half
-            the integration interval) solution value.
-    @param f_yj (3D array): array containing for each extrapolation value (1...k) an array with all the function evaluations
-            done at the intermediate solution values.
-    @param hs (array): array containing for each extrapolation value (1...k) the inner step taken, H/nj (II.9.1 ref I)
-    @param k (int): number of extrapolation steps to take in this step (determines the number of extrapolations performed
-            to achieve a better integration output, equivalent to the size of the extrapolation tableau).
-    @param seq (callable(i), int i>=1): the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
+    Parameters
+    ----------
+    y_half : 2D array
+        array containing for each extrapolation value (1...k) an array with the
+        intermediate (at half the integration interval) solution value.
+    f_yj : 3D array
+        array containing for each extrapolation value (1...k) an array with all
+        the function evaluations done at the intermediate solution values.
+    hs : array
+        array containing for each extrapolation value (1...k) the inner step
+        taken, H/nj (II.9.1 ref I)
+    k : int
+        number of extrapolation steps to take in this step (determines the
+        number of extrapolations performed to achieve a better integration
+        output, equivalent to the size of the extrapolation tableau).
+    seq : callable(i), int i>=1
+        the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
 
-    @return ds (2D array): array containing for each kappa=0...2k the kappa-th derivative of y
-            (extrapolated k-l times where l see definition at II.9 step 2 ref I)
+    Returns
+    -------
+    ds : 2D array
+        array containing for each kappa=0...2k the kappa-th derivative of y
+        (extrapolated k-l times where l see definition at II.9 step 2 ref I)
     """
     dj_kappa = np.zeros((2*k+1, k+1), dtype=(type(y_half[1])))
     ds = np.zeros((2*k+1), dtype=(type(y_half[1])))
@@ -1047,17 +1102,17 @@ def _compute_ds(y_half, f_yj, hs, k, seq=(lambda t: 4*t-2)):
         for kappa in range(1,2*j+1):
             dj_kappa[kappa,j] = 1*dj_[kappa]
 
-    #skip value is used because extrapolation is required
-    #(k-l) times for dj_(2l-1) and dj_(2l)
+    # skip value is used because extrapolation is required
+    # (k-l) times for dj_(2l-1) and dj_(2l)
     skip = 0
     for kappa in range(2*k+1):
         numextrap = k-int(skip/2)
         T = np.zeros((numextrap+1, numextrap+1), dtype=(type(y_half[1])))
-        T[:,1] = 1*dj_kappa[kappa, int(skip/2):]
+        T[:,1] = dj_kappa[kappa, int(skip/2):]
 
         _fill_extrapolation_table(T, int(skip/2), seq, symmetric=True)
 
-        ds[kappa] = 1*T[numextrap,numextrap]
+        ds[kappa] = T[numextrap,numextrap]
         if (kappa != 0):
             skip += 1
 
@@ -1070,31 +1125,53 @@ def _interpolation_poly(a_u, a_u_1, H, shift, atol, rtol):
     theta in (0,1) the interpolation value at x0+theta*H.  See theorem II.9.5
     ref I and theorem VI.5.7 ref II.
 
-    @param a_u (array): coefficients of the interpolation polynomial
-    @param a_u_1 (array): coefficients of the interpolation polynomial of one degree less (for error estimation)
-    @param H (float): step taken by solver (coefficients a_u and a_u_1 were calculated on (0,1) interval)
-    @param degree (int): degree of polynomial a_u (should match len(a_u)-1)
-    @param shift (float): variable change that was made to calculate a_u and a_u_1, i.e. x-shift,
-            because coefficients a_u and a_u_1 were calculated on (0-shift,1-shift) interval.
-    @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
-            determine the error control performed by the solver. See  function _error_norm(y1, y2, atol, rtol).
+    Parameters
+    ----------
+    a_u : array
+        coefficients of the interpolation polynomial
+    a_u_1 : array
+        coefficients of the interpolation polynomial of one degree less (for
+        error estimation)
+    H : float
+        step taken by solver (coefficients a_u and a_u_1 were calculated on
+        (0,1) interval)
+    degree : int
+        degree of polynomial a_u (should match len(a_u)-1)
+    shift : float
+        variable change that was made to calculate a_u and a_u_1, i.e. x-shift,
+        because coefficients a_u and a_u_1 were calculated on (0-shift,1-shift)
+        interval.
+    rtol, atol : float
+        the input parameters rtol (relative tolerance) and atol (absolute
+        tolerance) determine the error control performed by the solver. See
+        function _error_norm(y1, y2, atol, rtol).
 
-    @return poly (callable(t)): interpolation polynomial (see definition of poly(t) function)
+    Returns
+    -------
+    poly : callable(t)
+        interpolation polynomial (see definition of poly(t) function)
     """
 
     def poly(t):
         """
         Interpolation polynomial
 
-        @param t(float): value in interval (0,1)
+        Parameters
+        ----------
+        t : float
+            value in interval (0,1)
 
-        @return (res, errint, h_int):
-            @return res (float): interpolation result at x0+theta*H, P(theta).
-                    See theorem II.9.5 ref I and theorem VI.5.7 ref II.
-            @return errint (float): estimated interpolation error (uses the one degree less polynomial to
-                    estimate the interpolation error). See II.9.45 ref I.
-            @return h_int (float): suggested next step (in case of rejected interpolation).
-                    See formula after II.9.45 ref I.
+        Returns
+        -------
+        res : float
+            interpolation result at x0+theta*H, P(theta).  See theorem II.9.5
+            ref I and theorem VI.5.7 ref II.
+        errint : float
+            estimated interpolation error (uses the one degree less polynomial
+            to estimate the interpolation error). See II.9.45 ref I.
+        h_int : float
+            suggested next step (in case of rejected interpolation).  See
+            formula after II.9.45 ref I.
         """
         degree = len(a_u) - 1
 
@@ -1112,29 +1189,46 @@ def _interpolation_poly(a_u, a_u_1, H, shift, atol, rtol):
 def _interpolate_nonsym(y0, Tkk, yj, hs, H, k, atol, rtol,
                         seq=(lambda t: 4*t-2)):
     """
-    Non symmetrical formula (for example used for Euler's method) to
-    interpolate dense output values. It calculates a polynomial to interpolate
-    any value from t0 (time at y0) to t0+H (time at Tkk). Based on Dense
-    Output, VI.5 pg 438-439.
+    Non-symmetric dense output formula, used for example with Euler's method.
+    It calculates a polynomial to interpolate any value from t0 (time at y0) to
+    t0+H (time at Tkk). Based on Dense Output, VI.5 pg 438-439.
 
     Returns a polynomial that fulfills the conditions at VI.5.44 (step 3). To
-    take into account: this coefficients were calculated for the shifted
+    take into account: these coefficients were calculated for the shifted
     polynomial with x -> x-1.
 
-    @param y0 (float): solution of ODE at the previous step, at t0
-    @param Tkk (float): solution of ODE once the step was taken, at t0+H
-    @param yj (3D array): array containing for each extrapolation value (1...k) an array with all the intermediate solution
-            values obtained to calculate each T_{i,1}.
-    @param hs (array): array containing for each extrapolation value (1...k) the inner step taken, H/nj (II.9.1 ref I)
-    @param H (float): integration step to take (the output, without interpolation, will be calculated at t_curr+h)
-            This value matches with the value H in ref I and ref II.
-    @param k (int): number of extrapolation steps to take in this step (determines the number of extrapolations performed
-            to achieve a better integration output, equivalent to the size of the extrapolation tableau).
-    @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
-            determine the error control performed by the solver. See  function _error_norm(y1, y2, atol, rtol).
-    @param seq (callable(i), int i>=1): the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
+    Parameters
+    ----------
+    y0 : float
+        solution of ODE at beginning of step
+    Tkk : float
+        solution of ODE at end of step
+    yj : 3D array
+        array containing for each extrapolation value (1...k) an array with all
+        the intermediate solution values obtained to calculate each T_{i,1}.
+    hs : array
+        array containing for each extrapolation value (1...k) the inner step
+        taken, H/nj (II.9.1 ref I)
+    H : float
+        integration step to take (the output, without interpolation, will be
+        calculated at t_curr+h) This value matches with the value H in ref I
+        and ref II.
+    k : int
+        number of extrapolation steps to take in this step (determines the
+        number of extrapolations performed to achieve a better integration
+        output, equivalent to the size of the extrapolation tableau).
+    rtol, atol : float
+        the input parameters rtol (relative tolerance) and atol (absolute
+        tolerance) determine the error control performed by the solver. See
+        function _error_norm(y1, y2, atol, rtol).
+    seq : callable(i), int i>=1
+        the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
 
-    @return poly (callable(t)): interpolation polynomial (see definition of poly(t) function in _interpolation_poly(.))
+    Returns
+    -------
+    poly : callable(t)
+        interpolation polynomial (see definition of poly(t) function in
+        _interpolation_poly())
     """
     u = k
     u_1 = u - 1
@@ -1162,33 +1256,52 @@ def _interpolate_nonsym(y0, Tkk, yj, hs, H, k, atol, rtol,
 def _interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
                      seq=(lambda t: 4*t-2)):
     """
-    Symmetrical formula (for example used for the midpoint method) to interpolate
-    dense output values. It calculates a polynomial to interpolate any value
-    from t0 (time at y0) to t0+H (time at Tkk). Based on Dense Output for the
-    GBS Method, II.9 pg 237-239.
+    Symmetric dense output formula; used for example with the midpoint method.
+    It calculates a polynomial to interpolate any value from t0 (time at y0) to
+    t0+H (time at Tkk). Based on Dense Output for the GBS Method, II.9 pg
+    237-239.
 
     Returns a polynomial that fulfills the conditions at II.9.40 (step 3). To
     take into account: this coefficients were calculated for the shifted
     polynomial with x -> x-1/2.
 
-    @param y0 (float): solution of ODE at the previous step, at t0
-    @param Tkk (float): solution of ODE once the step was taken, at t0+H
-    @param f_Tkk (float): function evaluation at Tkk, t0+H
-    @param y_half (2D array): array containing for each extrapolation value (1...k) an array with the intermediate (at half
-            the integration interval) solution value.
-    @param f_yj (3D array): array containing for each extrapolation value (1...k) an array with all the function evaluations
-            done at the intermediate solution values.
-    @param hs (array): array containing for each extrapolation value (1...k) the inner step taken, H/nj (II.9.1 ref I)
-    @param H (float): integration step to take (the output, without interpolation, will be calculated at t_curr+h)
-            This value matches with the value H in ref I and ref II.
-    @param k (int): number of extrapolation steps to take in this step (determines the number of extrapolations performed
-            to achieve a better integration output, equivalent to the size of the extrapolation tableau).
-    @param rtol, atol (float): the input parameters rtol (relative tolerance) and atol (absolute tolerance)
-            determine the error control performed by the solver. See  function _error_norm(y1, y2, atol, rtol).
-    @param seq (callable(i), int i>=1): the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
+    Parameters
+    ----------
+    y0 : float
+        solution of ODE at the previous step, at t0
+    Tkk : float
+        solution of ODE once the step was taken, at t0+H
+    f_Tkk : float
+        function evaluation at Tkk, t0+H
+    y_half : 2D array
+        array containing for each extrapolation value (1...k) an array with the
+        intermediate (at half the integration interval) solution value.
+    f_yj : 3D array
+        array containing for each extrapolation value (1...k) an array with all
+        the function evaluations done at the intermediate solution values.
+    hs : array
+        array containing for each extrapolation value (1...k) the inner step
+        taken, H/nj (II.9.1 ref I)
+    H : float
+        integration step to take (the output, without interpolation, will be
+        calculated at t_curr+h) This value matches with the value H in ref I
+        and ref II.
+    k : int
+        number of extrapolation steps to take in this step (determines the
+        number of extrapolations performed to achieve a better integration
+        output, equivalent to the size of the extrapolation tableau).
+    rtol, atol : float
+        the input parameters rtol (relative tolerance) and atol (absolute
+        tolerance) determine the error control performed by the solver. See
+        function _error_norm(y1, y2, atol, rtol).
+    seq : callable(i), int i>=1
+        the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
 
-    @return poly (callable(t)): interpolation polynomial (see definition of poly(t) function in _interpolation_poly(.))
-
+    Returns
+    -------
+    poly (callable(t)
+        interpolation polynomial (see definition of poly(t) function in
+        _interpolation_poly())
     """
     u = 2*k-3
     u_1 = u - 1
@@ -1211,41 +1324,37 @@ def _interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
                  [(-16*(2 + u))*(-1)**u,  -8*(-1)**u,  -16*(2 + u),   8]]
                 )
 
-
     A_inv_u = A_inv(u)
-
     A_inv_u_1 = A_inv(u_1)
 
-    b1_u = 1*y0
+    b1_u   = 1*y0
     b1_u_1 = 1*y0
     for i in range(u_1+1):
-        b1_u -= a_u[i]/(-2)**i
+        b1_u   -=   a_u[i]/(-2)**i
         b1_u_1 -= a_u_1[i]/(-2)**i
 
     b1_u -= a_u[u]/(-2)**u
 
-
-    b2_u = H*f_yj[1][0]
+    b2_u =   H*f_yj[1][0]
     b2_u_1 = H*f_yj[1][0]
     for i in range(1, u_1+1):
-        b2_u -= i*a_u[i]/(-2)**(i-1)
+        b2_u   -= i*  a_u[i]/(-2)**(i-1)
         b2_u_1 -= i*a_u_1[i]/(-2)**(i-1)
 
     b2_u -= u*a_u[u]/(-2)**(u-1)
 
-
-    b3_u = 1*Tkk
+    b3_u =   1*Tkk
     b3_u_1 = 1*Tkk
     for i in range(u_1+1):
-        b3_u -= a_u[i]/(2**i)
+        b3_u   -=   a_u[i]/(2**i)
         b3_u_1 -= a_u_1[i]/(2**i)
 
     b3_u -= a_u[u]/(2**u)
 
-    b4_u = H*f_Tkk
+    b4_u =   H*f_Tkk
     b4_u_1 = H*f_Tkk
     for i in range(1, u_1+1):
-        b4_u -= i*a_u[i]/(2**(i-1))
+        b4_u   -= i*  a_u[i]/(2**(i-1))
         b4_u_1 -= i*a_u_1[i]/(2**(i-1))
 
     b4_u -= u*a_u[u]/(2**(u-1))
@@ -1269,47 +1378,45 @@ def _interpolate_sym(y0, Tkk, f_Tkk, y_half, f_yj, hs, H, k, atol, rtol,
     a_u_1[u_1+3] = x_1[2]
     a_u_1[u_1+4] = x_1[3]
 
-    # polynomial of degree u+4 defined on [0,1] and centered about 1/2
-    # also returns the interpolation error (errint). If errint > 10, then
-    # reject step
     return _interpolation_poly(a_u, a_u_1, H, 0.5, atol, rtol)
 
 
-def _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptive, addWork):
+def _estimate_next_step_and_order(T, h, atol, rtol, seq, addWork):
     """
-    Estimates next step and order, and whether to reject step, from the results
-    obtained by the solver and the requested tolerance.
-    Based on the section Order and Step Size Control (II.9 Extrapolation Methods),
-    Solving Ordinary Differential Equations I (Hairer, Norsett & Wanner)
+    Estimates the optimal step size and order to use for the next step.
+    Also selects the new solution value from the extrapolation table, and
+    determines whether the step just taken should be rejected.
 
-    @param T: numpy.ndarray (bidimensional matrix)
+    Based on the section Order and Step Size Control (II.9 Extrapolation
+    Methods), Solving Ordinary Differential Equations I (Hairer, Norsett &
+    Wanner)
+
+    Parameters
+    ----------
+    T : numpy.ndarray (2D)
         Extrapolation tableau with all the extrapolation values
-    @param k : int
-        Initial condition on y (can be a vector). Must be a non-scalar
-        numpy.ndarray
-    @param h : float
-        An ordered sequence of time points for which to solve for y. The initial
-        value point should be the first element of this sequence.
-    @param atol, rtol : float
-        The input parameters atol and rtol (absolute tolerance and relative tolerance)
-        determine the error control performed by the solver.
-    @param seq: callable(k) (k: positive int)
+    k : int
+        Number of extrapolation steps used last
+    h : float
+        Step size used last
+    atol, rtol : float
+        absolute and relative error tolerances
+    seq: callable(i) (i: positive int)
         The step-number sequence used to compute T
-    @param adaptive: If True, automatically adapt the step size and order.
+    adaptive: If True, automatically adapt the step size and order.
 
-    @return
-        @return reject_step : whether to reject the step and the solution obtained
-            (because it doesn't satisfy the asked tolerances)
-        @return y : best solution at the end of the step
-        @return h_new : new step to take
-        @return k_new : new number of extrapolation steps to use
+    Returns
+    -------
+    reject_step : True if this step should be rejected
+    y : solution at the end of the step
+    h_new : new step size
+    k_new : new number of extrapolation steps to use
     """
-    if not adaptive:
-        return (False, T[k,k], h, k)
+    k = T.shape[0] - 1
 
-    sizeODE = 0
+    N = 0
     if(addWork):
-        sizeODE = len(T[k,k])
+        N = len(T[k,k])
 
     #Define work function (to minimize)
     def A_k(k):
@@ -1318,11 +1425,7 @@ def _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptive, addWork):
         extrapolation table.
         """
         sum_ = sum([seq(i+1) for i in range(k)])
-        # sizeODE is the length of the ODE
-        return max(seq(k), sum_/NUM_WORKERS)+sizeODE # The second value is only an estimate
-
-    H_k = lambda h, k, err_k: h*0.94*(0.65/err_k)**(1/(2*k-1))
-    W_k = lambda Ak, Hk: Ak/Hk
+        return max(seq(k), sum_/NUM_WORKERS) + N # The second value is only an estimate
 
     # compute the error and work function for the stages k-2, k-1 and k
     err_k = []
@@ -1331,8 +1434,8 @@ def _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptive, addWork):
 
     for i in range(3):
         err_k.append(_error_norm(T[k-i,k-i-1], T[k-i,k-i], atol, rtol))
-        h_k.append(H_k(h, k-i, err_k[i]))
-        w_k.append(W_k(A_k(k-i), h_k[i]))
+        h_k.append(h*0.94*(0.65/err_k[i])**(1./(2*(k-i)-1)))
+        w_k.append(A_k(k-i)/h_k[i])
 
     if err_k[1] <= 1: # convergence in line k-1
         if err_k[0] <= 1:
@@ -1408,12 +1511,12 @@ def _solve_one_step(solver, solver_args, ode_fun, jac_fun, t_curr, t, t_index, y
     @param solver_parameters (dict): extra arguments needed to define completely the solver's behavior.
             Should not be empty, for more information see _set_default_solver_parameters(..) function.
 
-    @return (reject_step, y, y_solution, f_yn, h, k, h_new, k_new, (fe_seq, fe_tot, je_tot)):
+    @return (reject_step, y, y_out, f_yn, h, k, h_new, k_new, (fe_seq, fe_tot, je_tot)):
         @return reject_step (bool): whether this step should be rejected or not. True when this step was not successful
                 (estimated error of the final solution or the interpolation solutions too large for the tolerances
                 required) and has to be recalculated (with a new step size h_new and order k_new).
         @return y (array): final solution obtained for this integration step, at t_curr+h.
-        @return y_solution (2D array): array containing the solution for every output value required (in t parameter)
+        @return y_out (2D array): array containing the solution for every output value required (in t parameter)
                  that fell in this integration interval (t_curr,t_curr+h). These values were interpolated.
         @return f_yn (array): function evaluation at yn (initial point solution)
         @return h (float): step taken in this step
@@ -1441,32 +1544,45 @@ def _solve_one_step(solver, solver_args, ode_fun, jac_fun, t_curr, t, t_index, y
         k_min = 3
         k = min(k_max, max(k_min, k))
 
-    T, y_half, f_yj,yj, f_yn, hs, (fe_seq, fe_tot, je_tot) = _compute_extrapolation_table(solver, solver_args, ode_fun, jac_fun,
-                t_curr, yn, args, h, k, pool, last_step_rejected, y_old, f_old, seq, smoothing, solver_parameters)
+    T, y_half, f_yj,yj, f_yn, hs, diag = _extrap_table(solver, solver_args,
+                                                       ode_fun, jac_fun,
+                                                       t_curr, yn, args, h, k,
+                                                       pool,
+                                                       last_step_rejected,
+                                                       y_old, f_old, seq,
+                                                       smoothing,
+                                                       solver_parameters)
+    fe_seq, fe_tot, je_tot = diag  # diagnostics
 
-    reject_step, y, h_new, k_new = _estimate_next_step_and_order(T, k, h, atol, rtol, seq, adaptive, solver_parameters['addWork'])
+    if adaptive:
+        reject_step, y, h_new, k_new = _estimate_next_step_and_order(T, h,
+                                                                    atol, rtol,
+                                                                    seq,
+                                                                    solver_parameters['addWork'])
+    else:
+        reject_step, y, h_new, k_new = False, T[k,k], h, k
 
-    y_solution=[]
+    y_out=[]
     if(dense_output_needed and (not reject_step)):
-        reject_step, y_solution, h_int, f_evals = _interpolate_values_at_t(ode_fun,
-                args, T, k, t_curr, t, t_index, h, hs, y_half, f_yj,yj, yn, atol, rtol, seq, adaptive, symmetric)
+        reject_step, y_out, h_int, f_evals = _interp(ode_fun, args, T, k,
+                                                     t_curr, t, t_index, h, hs,
+                                                     y_half, f_yj,yj, yn, atol,
+                                                     rtol, seq, adaptive,
+                                                     symmetric)
         fe_tot += f_evals
         fe_seq += f_evals
 
         if adaptive:
+            h_new = min(h_new, h_int)
             if reject_step: # Step rejected because of interpolation error
-                h_new = h_int
                 k_new = k   # Don't update the order
-            elif((h_int is not None) and h_int<h_new):
-                h_new = h_int
 
 
-    return (reject_step, y, y_solution, f_yn, h, k, h_new, k_new, (fe_seq, fe_tot, je_tot))
+    return (reject_step, y, y_out, f_yn, h, k, h_new, k_new, (fe_seq, fe_tot, je_tot))
 
 
-def _interpolate_values_at_t(ode_fun, args, T, k, t_curr, t, t_index, h, hs,
-                             y_half, f_yj,yj, yn, atol, rtol, seq, adaptive,
-                             symmetric):
+def _interp(ode_fun, args, T, k, t_curr, t, t_index, h, hs, y_half, f_yj,yj,
+            yn, atol, rtol, seq, adaptive, symmetric):
     """
     This function calculates all the intermediate solutions requested as dense
     output that fall within a given integration step. It generates an
@@ -1505,11 +1621,11 @@ def _interpolate_values_at_t(ode_fun, args, T, k, t_curr, t, t_index, h, hs,
     @param symmetric (bool): whether the solver to solve one step is symmetric (midpoint/trapezoidal)
             or non-symmetric (euler).
 
-    @return (reject_step, y_solution, h_int, f_evals):
+    @return (reject_step, y_out, h_int, f_evals):
         @return reject_step (bool): whether this step should be rejected or not. True when the interpolation was not successful
                 for some of the interpolated values (estimated error of the interpolation too large for the tolerances
                 required) and the step has to be recalculated (with a new step size h_int).
-        @return y_solution (2D array): array containing the solution for every output value required (in t parameter)
+        @return y_out (2D array): array containing the solution for every output value required (in t parameter)
                  that fell in this integration interval (t_curr,t_curr+h). These values were interpolated.
         @return h_int (float): new suggested step to take in next integration step (based on interpolation error
                 estimation) if step is rejected due to interpolation large error. See ref I, II.9...
@@ -1535,9 +1651,8 @@ def _interpolate_values_at_t(ode_fun, args, T, k, t_curr, t, t_index, h, hs,
     else:
         poly = _interpolate_nonsym(yn, Tkk, yj, hs, h, k, atol,rtol, seq)
 
-    y_solution=[]
+    y_out=[]
     old_index = t_index
-    h_int = None
 
     # Interpolate to requested output times within the current step
     while t_index < len(t) and t[t_index] < t_curr + h:
@@ -1545,16 +1660,16 @@ def _interpolate_values_at_t(ode_fun, args, T, k, t_curr, t, t_index, h, hs,
         y_poly, errint, h_int = poly((t[t_index] - t_curr)/h)
 
         if (errint <= 10) or (not adaptive): # Accept, so far
-            y_solution.append(y_poly)
+            y_out.append(y_poly)
             t_index += 1
         else: # Reject
             h = h_int
             t_index = old_index
             reject_step = True
-            return (reject_step, y_solution, h_int, f_evals)
+            return (reject_step, y_out, h_int, f_evals)
 
     reject_step=False
-    return (reject_step, y_solution, h_int, f_evals)
+    return (reject_step, y_out, h_int, f_evals)
 
 def _set_default_solver_parameters(N, atol, rtol, addWork):
     """
@@ -1647,60 +1762,78 @@ def solve(ode_fun, tspan, y0, **kwargs):
 
     Important: the default values of the functions are set to achieve the optimal
     performance.  It is highly recommended to use such default values (this
-    applies to robustness, adaptive, seq and smoothing parameters).
+    applies to step_ratio_limit, adaptive, seq and smoothing parameters).
 
-    Structure:
+    Parameters
+    ----------
+    ode_fun : callable(y, t, args)
+        computes the derivative of y at t (i.e. the right hand side of the
+        IVP).
+    jac_fun : callable(y,t,args)
+        computes analytically the Jacobian of the ode_fun function parameter.
+    y0 : array
+        initial condition on y (can be a vector).
+    t : 1D array
+        Times at which output will be given.  The initial value time should be
+        the first element of this array, and the last one the final time.
+    args : tuple
+        extra arguments to pass to ode_fun.
+    diagnostics : bool
+        If true, count and return # of function evaluations.
+    rtol, atol : float
+        relative tolerance and absolute tolerance; the solver attempts to
+        ensure that the local error satisfies this at each step.
+    h0 : float
+        The step size to be attempted on the first step.  Will be used
+        throughout if adaptive==False.
+    p : int
+        The initial extrapolation order.  Will be used throughout if adaptive==False.
+        The order of extrapolation if order is fixed, or the starting order otherwise.
+    max_steps : int
+        maximum number of (internally defined) steps allowed for each
+        integration point in t. Defaults to 10^5
+    step_ratio_limit : int
+        Ratio of successive step sizes cannot be greater than this.
+    smoothing : string
+        specifies if a smoothing step should be performed:
+            -'no': no smoothing
+            -'gbs': three-point smoothing (based on GBS method); see II.9.13c
+                    Ref. I and IV.9.9 Ref. II.
+            -'semiimp': two-point smoothing (for semiimplicit midpoint); see
+                        IV.9.16c Ref. II.
+    nworkers : int
+        The number of parallel processes to use. If nworkers==None (default),
+        then the the number of workers is set to the number of CPUs on the
+        machine.
+    seq : callable(i), int i>=1
+        the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).  The step
+        number sequence can be overridden in some cases for
+        interpolation purposes.
+    adaptive : string
+        If True (default), automatically adapt the step size and order.
 
-        @param ode_fun (callable(y, t,args)): computes the derivative of y at t (i.e. the right hand side of the IVP).
-        @param jac_fun (callable(y,t,args)): computes analytically the Jacobian of the ode_fun function parameter.
-        @param y0 (array): initial condition on y (can be a vector).
-        @param t (array): a sequence of time points for which to solve for y. The initial value point should be the first
-                element of this sequence. And the last one the final time.
-        @param args (tuple): extra arguments to pass to function.
-        @param diagnostics (bool): If true, count and return # of function
-                evaluations.
-        @param rtol, atol (float): relative tolerance and absolute tolerance;
-                                   the solver attempts to ensure that the local
-                                   error satisfies this at each step.
-        @param h0 (float):the step size to be attempted on the first step.
-        @param max_steps (int): maximum number of (internally defined) steps allowed for each
-                integration point in t. Defaults to 10e4
-        @param robustness (int): multiplicative factor that limits the increase and decrease of the adaptive step
-                (next step vs last step length ratio is limited by this factor).
-        @param smoothing (string): specifies if a smoothing step should be performed:
-            -'no': no smoothing step performed
-            -'gbs': three point smoothing step (based on GBS method), II.9.13c ref I and IV.9.9 ref II.
-            -'semiimp': two point smoothing step (for semiimplicit midpoint), IV.9.16c ref II.
-        @param p (int): the order of extrapolation if order is fixed, or the starting order otherwise.
-        @param nworkers (int): the number of workers working in parallel. If nworkers==None, then
-            the the number of workers is set to the number of CPUs on the running machine.
-        @param seq (callable(i), int i>=1): the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).
-            The step number sequence can be changed forcefully in some cases for interpolation purposes.
-            See _getDenseAndSequence(.) function.
-        @param adaptive (string): specifies the strategy of integration. Can take three values:
-            - "fixed" = use fixed step size and order strategy.
-            - "order" or any other string = use adaptive step size and adaptive order strategy (recommended).
+    Returns
+    -------
+    ys : 2D array, shape (len(t), len(y0))
+        array containing the value of y for each desired time in t, with the
+        initial value y0 in the first row.
+    infodict : dict
+        returned only if diagnostics == True. Dictionary containing additional output information
+         KEY        MEANING
+        'fe_seq'    cumulative number of sequential derivative evaluations
+        'nfe'       cumulative number of derivative evaluations
+        'nst'       cumulative number of successful time steps
+        'nje'       cumulative number of either Jacobian evaluations (when
+                    analytic Jacobian is provided) or Jacobian estimations
+                    (when no analytic Jacobian is provided)
+        'h_avg'     average step size
+        'p_avg'     average extrapolation order
 
-        @return:
-            @return ys (2D-array, shape (len(t), len(y0))): array containing the value of y for each desired time in t, with
-                the initial value y0 in the first row.
-            @return infodict (dict): only returned if diagnostics == True. Dictionary containing additional output information
-                 KEY        MEANING
-                'fe_seq'    cumulative number of sequential derivative evaluations
-                'nfe'       cumulative number of derivative evaluations
-                'nst'       cumulative number of successful time steps
-                'nje'       cumulative number of either Jacobian evaluations (when
-                            analytic Jacobian is provided) or Jacobian estimations
-                            (when no analytic Jacobian is provided)
-                'h_avg'     average step size
-                'p_avg'     average extrapolation order
-
-        CHECK THIS:
-            IMPORTANT: all input parameters should be float types; this solver
-            doesn't work properly if for example y0 is not a float but an int
-            variable (i.e. 1 instead of 1.) TODO: add protection so that int inputs
-            are formated to floats (and algorithm works)
-
+    CHECK THIS:
+        IMPORTANT: all input parameters should be float types; this solver
+        doesn't work properly if for example y0 is not a float but an int
+        variable (i.e. 1 instead of 1.) TODO: add protection so that int inputs
+        are formated to floats (and algorithm works)
     """
     # Set per-method defaults
     if kwargs['solver'] == Solvers.EXPLICIT_MIDPOINT:
