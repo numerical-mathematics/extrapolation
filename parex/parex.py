@@ -413,7 +413,7 @@ def _compute_stages((solver, solver_args, ode_fun, jac_fun, tn, yn, f_yn, args,
 
         # TODO: this y_half value is already returned inside Y. Remove and when
         # needed (for interpolation) extract from Y.
-        y_half = Y[nj/2]
+        y_half = Y[nj//2]
 
         #Perform smoothing step
         Tj1 = Y[nj]
