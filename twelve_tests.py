@@ -4,7 +4,7 @@ import scipy
 import numpy as np
 from collections import namedtuple
 import time
-import ex_parallel
+import parex
 import ex_parallel_original
 import matplotlib.pyplot as plt
 import math
@@ -424,15 +424,15 @@ def comparisonTest():
     resultDict={}
     useOptimal = True
     solverFunctions = [
-#         ex_parallel.ex_midpoint_explicit_parallel
+#         parex.ex_midpoint_explicit_parallel
 #         ,
 #         ex_parallel_original.ex_midpoint_parallel
 #         ,
-#         ex_parallel.ex_midpoint_implicit_parallel
+#         parex.ex_midpoint_implicit_parallel
 #         ,
-#         ex_parallel.ex_midpoint_semi_implicit_parallel
+#         parex.ex_midpoint_semi_implicit_parallel
 #         ,
-        ex_parallel.ex_euler_semi_implicit_parallel
+        parex.ex_euler_semi_implicit_parallel
         ,
         integrate.odeint
         ]
@@ -517,16 +517,16 @@ def comparisonTest():
 #                                     print("freeze jac " + str(first))
 
                                     #To use this external setting the number of workers
-                                    #disable the ex_parallel call to set_NUM_WORKERS function 
+                                    #disable the parex call to set_NUM_WORKERS function 
                                     #and I recommend changing the use of NUM_WORKERS variable
                                     #in A(k) to a fix number (to have a more accurate comparison of how
                                     #parallelization works).
-#                                     ex_parallel.set_NUM_WORKERS(worker)
+#                                     parex.set_NUM_WORKERS(worker)
 
-#                                     ex_parallel.setfrezeejacobian(True)
-#                                     ex_parallel.setwork(False)
-#                                     ex_parallel.setaddinitialguess(False)
-#                                     ex_parallel.setiterative(True)
+#                                     parex.setfrezeejacobian(True)
+#                                     parex.setwork(False)
+#                                     parex.setaddinitialguess(False)
+#                                     parex.setiterative(True)
 
                                     functionTuple=inputTuple(k,denseOutput, test,rtol,atol,firstStep,robustness,smoothing,seq,useOptimal, useGrad)
                                     startTime = time.time()

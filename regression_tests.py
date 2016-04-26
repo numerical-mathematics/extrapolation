@@ -1,7 +1,7 @@
 from __future__ import division
 import numpy as np
 import math 
-import ex_parallel
+import parex
 import matplotlib.pyplot as plt
 import twelve_tests as tst
 
@@ -331,7 +331,7 @@ def non_dense_output_tests():
             output_times = [t0, tf]
             for tol in tolerances:
                 print("       Tolerance: " + str(tol))
-                ys, infodict = ex_parallel.solve(f, output_times, y0,
+                ys, infodict = parex.solve(f, output_times, y0,
                                                  solver=method.lower(),
                                                  atol=tol, rtol=tol,
                                                  max_steps=1.e6, diagnostics=True,
@@ -354,7 +354,7 @@ def dense_output_tests():
             y0 = exact(t0)
             for tol in tolerances:
                 print("       Tolerance: " + str(tol))
-                ys, infodict = ex_parallel.solve(f, output_times, y0, 
+                ys, infodict = parex.solve(f, output_times, y0, 
                                                  solver=method.lower(),
                                                  atol=tol, rtol=tol,
                                                  max_steps=1.e6, diagnostics=True,
@@ -384,7 +384,7 @@ def convergence_test(method_name, test, step_sizes, order, dense=False):
     error_per_step=[]
     for step in step_sizes:
         #rtol and atol are not important as we are fixing the step size
-        ys, infodict = ex_parallel.solve(test.RHSFunction, dense_output,
+        ys, infodict = parex.solve(test.RHSFunction, dense_output,
                                          test.initialValue,
                                          solver=method_name.lower(), 
                                          atol=1e-1, rtol=1e-1, max_steps=1000000,
@@ -543,9 +543,9 @@ def test_interpolation_polynomial():
                 hs[i]=H/ni
             
             
-            poly = ex_parallel._interpolate_nonsym(y0, Tkk, yj, hs, H, order, atol=1e-5,rtol=1e-5, seq=seq)        
+            poly = parex.parex._interpolate_nonsym(y0, Tkk, yj, hs, H, order, atol=1e-5,rtol=1e-5, seq=seq)        
             
-            polysym = ex_parallel._interpolate_sym(y0, Tkk,f_Tkk, y_half, f_yj, hs, H, order, atol=1e-5,rtol=1e-5, seq=seq)
+            polysym = parex.parex._interpolate_sym(y0, Tkk,f_Tkk, y_half, f_yj, hs, H, order, atol=1e-5,rtol=1e-5, seq=seq)
             
             x=H/5;
              
@@ -564,7 +564,7 @@ def test_interpolation_polynomial():
         coefficients = np.polyfit(np.log10(steps), np.log10(error_per_step), 1)
         print("coefficients error " + str(coefficients) + "order is: " + str(order))
         # In this case order of interpolation for non symmetric should be order because lam=1
-        # see _compute_rs(..) in ex_parallel
+        # see _compute_rs(..) in parex.parex
         check_convergence_rate(coefficients[0], order+orderdisparity[idx][0], "Interpolation non symmetric")
         
         #TODO: this should be one order less of convergence (with lam=0 it works well)
@@ -651,9 +651,9 @@ def test_interpolated_derivatives():
         for i in range(dsnumder):
             ds[i]=expder(H/2, i)
         
-        dsapp = ex_parallel._compute_ds(y_half, f_yj, hs[0:orderds+1], orderds, seq=seq)
+        dsapp = parex.parex._compute_ds(y_half, f_yj, hs[0:orderds+1], orderds, seq=seq)
         
-        rsapp = ex_parallel._compute_rs(yj, hs, orderrs, seq=seq)
+        rsapp = parex.parex._compute_rs(yj, hs, orderrs, seq=seq)
     
         for der in range(1,rsnumder):
             errorrsPerDerandStep[der][k] = np.linalg.norm((rs[der]-rsapp[der]))

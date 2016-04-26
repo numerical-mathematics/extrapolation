@@ -9,7 +9,7 @@ import numpy as np
 import time
 from scipy.integrate import ode, complex_ode
 
-import ex_parallel as ex_p
+import parex
 import fnbod
 
 def relative_error(y, y_ref):
@@ -39,7 +39,7 @@ def compare_performance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6
             print 'running ' + name
             start_time = time.time()
             if name == 'ParEx':
-                y, infodict = ex_p.ex_midpoint_explicit_parallel(func, None, y0, [t0, tf], atol=tol[i], rtol=tol[i], mxstep=nsteps, adaptive="order", full_output=True)
+                y, infodict = parex.solve(func, [t0, tf], y0, solver=parex.Solvers.EXPLICIT_MIDPOINT, atol=tol[i], rtol=tol[i], mxstep=nsteps, adaptive="order", full_output=True)
                 y[-1] = solout(y[-1])
                 method['yerr'][i] = relative_error(y[-1], y_ref)
             else: # scipy solvers DOPRI5 and DOP853
