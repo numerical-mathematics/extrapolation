@@ -440,7 +440,7 @@ def _extrapolation_parallel(ode_fun, tspan, y0, solver_args, solver=None,
                             jac_fun=None, args=(), diagnostics=False,
                             rtol=1.0e-8, atol=1.0e-8, h0=0.5, max_steps=10e4,
                             step_ratio_limit=2, k=4, nworkers=None,
-                            smoothing='no', seq=None,
+                            smoothing='no', seq=None, parallel=True,
                             adaptive=True, solver_parameters={}):
     """
     Solve the system of ODEs dy/dt = ode_fun(y, t0, ...) by extrapolation.
@@ -489,9 +489,13 @@ def _extrapolation_parallel(ode_fun, tspan, y0, solver_args, solver=None,
     """
     solver = method_fcns[solver]
 
-    #Initialize pool of workers to parallelize extrapolation table calculations
-    _set_NUM_WORKERS(nworkers)
-    pool = mp.Pool(NUM_WORKERS)
+    if parallel:
+        #Initialize pool of workers to parallelize extrapolation table calculations
+        _set_NUM_WORKERS(nworkers)
+        pool = mp.Pool(NUM_WORKERS)
+    else:
+        _set_NUM_WORKERS(1)
+        pool = None
 
     assert len(tspan) > 1, ("""The array tspan must be of length at least 2.
     The initial value time should be the first element of tspan and the last
@@ -568,8 +572,8 @@ def _extrapolation_parallel(ode_fun, tspan, y0, solver_args, solver=None,
 
         k = k_new
 
-    #Close pool of workers and return results
-    pool.close()
+    if pool is not None:
+        pool.close()
 
     if diagnostics:
         infodict = {'fe_seq': fe_seq, 'nfe': fe_tot, 'nst': steps_taken,
@@ -852,10 +856,12 @@ def _extrap_table(solver, solver_args, ode_fun, jac_fun, tn, yn, args,
 
     jobs = [(solver, solver_args, ode_fun, jac_fun, tn, yn, f_yn, args, h, k_nj,
              smoothing, solver_parameters) for k_nj in j_nj_list]
-    results = pool.map(_compute_stages, jobs, chunksize=1)
+    if pool is None:  # Work in serial
+        results = [_compute_stages(job) for job in jobs]
+    else:
+        results = pool.map(_compute_stages, jobs, chunksize=1)
 
     # Here's how this would be done in serial:
-    # res = _compute_stages((solver, solver_args, ode_fun, jac_fun, tn, yn, f_yn, args, h, j_nj_list, smoothing))
 
     # At this stage fe_tot has only counted the function evaluations for the
     # jacobian estimation (which are not parallelized)
@@ -1746,6 +1752,7 @@ defaults = {
             'jac_fun' : None,
             'p' : 4,
             'smoothing' : 'no',
+            'parallel' : True,
         }
 
 symmetric_methods = (_explicit_midpoint,
@@ -1801,10 +1808,12 @@ def solve(ode_fun, tspan, y0, **kwargs):
                     Ref. I and IV.9.9 Ref. II.
             -'semiimp': two-point smoothing (for semiimplicit midpoint); see
                         IV.9.16c Ref. II.
+    parallel : bool
+        If True (default), use multiprocessing to run in parallel.
     nworkers : int
         The number of parallel processes to use. If nworkers==None (default),
         then the the number of workers is set to the number of CPUs on the
-        machine.
+        machine.  This has no effect if parallel == False.
     seq : callable(i), int i>=1
         the step-number sequence (examples II.9.1 , 9.6, 9.35 ref I).  The step
         number sequence can be overridden in some cases for
@@ -1877,5 +1886,4 @@ def solve(ode_fun, tspan, y0, **kwargs):
     else:
         kwargs['k'] = kwargs.pop('p')//2
 
-    #return _extrapolation_parallel(ode_fun, tspan, y0, kwargs)
     return _extrapolation_parallel(ode_fun, tspan, y0, solver_args, **kwargs)

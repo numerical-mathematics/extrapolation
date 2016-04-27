@@ -1,17 +1,17 @@
-'''
+"""
 Runs a performance test comparing the parallel speedup achieved by ParEx 
 for nworkers = 2, 4, 6, 8, and the theoretical expected speedup.
 Problem used for testing are N-body, KDV equation, and Burgers equation.
 It also compares the average extrapolation order and step size for each nworkers.
 
 Resulting graphs are saved in the `./images` folder
-'''
+"""
 
 from __future__ import division
 import numpy as np
 import time
 
-import ex_parallel as ex_p
+import parex
 import fnbod
 
 def relative_error(y, y_ref):
@@ -33,12 +33,12 @@ def compare_speedup(func, y0, t0, tf, y_ref, problem_name, tol = 1e-9, nsteps=10
     for i in range(len(nworkers)):
         print 'nworkers: ', nworkers[i]
         start_time = time.time()
-        y, infodict = ex_p.ex_midpoint_explicit_parallel(func, [t0, tf], y0, atol=tol,
+        y, infodict = parex.solve(func, [t0, tf], y0, solver=parex.Solvers.EXPLICIT_MIDPOINT, atol=tol,
                                                          rtol=tol, max_steps=nsteps, nworkers=nworkers[i],
                                                          adaptive=True, diagnostics=True)
         runtime[i] = time.time() - start_time
         y[-1] = solout(y[-1])
-        fe_seq[i], fe_tot[i], nstp[i], h_avg[i], p_avg[i] = infodict['fe_seq'], infodict['nfe'], infodict['nst'], infodict['h_avg'], infodict['p_avg']
+        fe_seq[i], fe_tot[i], nstp[i], h_avg[i], p_avg[i] = infodict['fe_seq'], infodict['nfe'], infodict['nst'], infodict['h_avg'], 2*infodict['k_avg']
         yerr[i] = relative_error(y[-1], y_ref)
         print 'Runtime: ', runtime[i], ' s   Error: ', yerr[i], '   fe_seq: ', fe_seq[i], '   fe_tot: ', fe_tot[i], '   nstp: ', nstp[i], '   h_avg: ', h_avg[i], '   p_avg: ', p_avg[i], 
         speedup[i]= runtime[0]/runtime[i]
@@ -90,16 +90,15 @@ def compare_speedup(func, y0, t0, tf, y_ref, problem_name, tol = 1e-9, nsteps=10
 ###############################################################
 
 ###### N-Body Problem ######
-def nbod_func(y,t):
+def nbody_f(y,t):
     return fnbod.fnbod(y,t)
 
-def nbod_problem():
+def nbody_problem():
     t0 = 0
     tf = 0.08
     y0 = fnbod.init_fnbod(2400)
     y_ref = np.loadtxt("reference.txt")
-    # compare_speedup(nbod_func, y0, t0, tf, y_ref, "nbod_problem", run_odex_code=True)
-    compare_speedup(nbod_func, y0, t0, tf, y_ref, "nbod_problem")
+    compare_speedup(nbody_f, y0, t0, tf, y_ref, "nbody")
 
 ###### kdv Problem ######
 def kdv_init(t0):
@@ -133,7 +132,7 @@ def kdv_problem():
     tf = 0.003
     y0 = kdv_init(t0)
     y_ref = np.loadtxt("reference_kdv.txt")
-    compare_speedup(kdv_func, y0, t0, tf, y_ref, "kdv_problem", solout=kdv_solout)
+    compare_speedup(kdv_func, y0, t0, tf, y_ref, "KdV", solout=kdv_solout)
 
 ###### Burgers' Problem ######
 def burgers_init(t0):
@@ -170,7 +169,7 @@ def burgers_problem():
     tf = 3.
     y0 = burgers_init(t0)
     y_ref = np.loadtxt("reference_burgers.txt")
-    compare_speedup(burgers_func, y0, t0, tf, y_ref, "burgers_problem", nsteps=10e4, solout=burgers_solout)
+    compare_speedup(burgers_func, y0, t0, tf, y_ref, "Burgers", nsteps=10e4, solout=burgers_solout)
 
 ########### RUN TESTS ###########
 if __name__ == "__main__":
