@@ -82,6 +82,47 @@ def compare_speedup(func, y0, t0, tf, y_ref, problem_name, tol = 1e-9, nsteps=10
     plt.savefig('images/' + problem_name + '_nworkers_vs_p_avg_and_h_avg.png')
     plt.close()
 
+    # Write latex table of results
+    texfile = open('tables/'+ problem_name + '.tex','w')
+    texfile.write(r'\begin{table}')
+    texfile.write('\n')
+    texfile.write(r'\tbl{Speedup for ' + problem_name + ' problem\label{tbl:'+problem_name+'}}{')
+    texfile.write('\n')
+    texfile.write(r'\begin{tabular}{l'+'c'*(len(nworkers))+'}')
+    texfile.write(r'\\')
+    texfile.write('\n')
+    texfile.write(r'Processes & ')
+    texfile.write(r' & '.join([str(n) for n in nworkers]))
+    texfile.write(r'\\ \hline')
+    texfile.write('\n')
+    texfile.write(r'Run time & ')
+    texfile.write(r' & '.join(['{:5.2f}'.format(t) for t in runtime]))
+    texfile.write(r' \\')
+    texfile.write('\n')
+    texfile.write(r'Average order & ')
+    texfile.write(r' & '.join(['{:5.2f}'.format(p) for p in p_avg]))
+    texfile.write(r' \\')
+    texfile.write('\n')
+    texfile.write(r'Ideal speedup & ')
+    texfile.write(r' & '.join(['{:5.2f}'.format(fe_tot[i]/fe_seq[i]) for i in range(len(nworkers))]))
+    texfile.write(r' \\')
+    texfile.write('\n')
+    texfile.write(r'Achieved speedup & ')
+    texfile.write(r' & '.join(['{:5.2f}'.format(speedup[i]) for i in range(len(nworkers))]))
+    texfile.write(r' \\')
+    texfile.write('\n')
+    texfile.write(r'\% of ideal & ')
+    texfile.write(r' & '.join(['{:5.2f}'.format(speedup[i]/(fe_tot[i]/fe_seq[i])) for i in range(len(nworkers))]))
+    texfile.write(r' \\')
+    texfile.write(r' \hline')
+    texfile.write('\n')
+
+    texfile.write(r'\end{tabular}}')
+    texfile.write('\n')
+    texfile.write(r'\end{table}')
+    texfile.write('\n')
+    texfile.close()
+
     print "FINISHED! Images were saved in ./images folder"
 
 
@@ -173,7 +214,7 @@ def burgers_problem():
 
 ########### RUN TESTS ###########
 if __name__ == "__main__":
-    nbod_problem()
+    nbody_problem()
     kdv_problem()
     burgers_problem()
 
