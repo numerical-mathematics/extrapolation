@@ -17,15 +17,15 @@ def relative_error(y, y_ref):
 
 def compare_performance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6), is_complex=False, nsteps=10e5, solout=(lambda t: t)):
     print 'RUNNING COMPARISON TEST FOR ' + problem_name
-    tol = [1.e-3,1.e-5,1.e-7]#,1.e-9,1.e-11,1.e-13]
+    tol = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
     a, b = tol_boundary
     tol = tol[a:b]
 
-    parex = {}
+    extrap = {}
     dopri5 = {}
     dop853 = {}
 
-    for method in [parex, dopri5, dop853]:
+    for method in [extrap, dopri5, dop853]:
         for diagnostic in ['runtime','fe_seq','fe_tot','yerr','nstp']:
             method[diagnostic] = np.zeros(len(tol))
 
@@ -35,11 +35,11 @@ def compare_performance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6
     for i in range(len(tol)):
         print 'Tolerance: ', tol[i]
 
-        for method, name in [(parex,'ParEx'), (dopri5,'DOPRI5'), (dop853,'DOP853')]:
+        for method, name in [(extrap,'ParEx'), (dopri5,'DOPRI5'), (dop853,'DOP853')]:
             print 'running ' + name
             start_time = time.time()
             if name == 'ParEx':
-                y, infodict = parex.solve(func, [t0, tf], y0, solver=parex.Solvers.EXPLICIT_MIDPOINT, atol=tol[i], rtol=tol[i], mxstep=nsteps, adaptive="order", full_output=True)
+                y, infodict = parex.solve(func, [t0, tf], y0, solver=parex.Solvers.EXPLICIT_MIDPOINT, atol=tol[i], rtol=tol[i], max_steps=nsteps, adaptive=True, diagnostics=True)
                 y[-1] = solout(y[-1])
                 method['yerr'][i] = relative_error(y[-1], y_ref)
             else: # scipy solvers DOPRI5 and DOP853
@@ -60,13 +60,13 @@ def compare_performance(func, y0, t0, tf, y_ref, problem_name, tol_boundary=(0,6
         
         print ''
 
-    for method, name in [(parex,'ParEx'), (dopri5,'DOPRI5'), (dop853,'DOP853')]:
+    for method, name in [(extrap,'ParEx'), (dopri5,'DOPRI5'), (dop853,'DOP853')]:
         print "Final data: " + name
         print method['runtime'], method['fe_seq'], method['fe_tot'], method['yerr'], method['nstp']
     print ''
     print ''
 
-    return (parex, dopri5, dop853)
+    return (extrap, dopri5, dop853)
 
 def plot_results(methods,problem_name):
     import matplotlib
@@ -74,11 +74,11 @@ def plot_results(methods,problem_name):
     import matplotlib.pyplot as plt
     plt.hold('true')
 
-    parex, dopri5, dop853 = methods
+    extrap, dopri5, dop853 = methods
 
-    for method in [parex, dopri5, dop853]:
+    for method in [extrap, dopri5, dop853]:
         method['line'],   = plt.loglog(method['yerr'], method['runtime'], "s-")
-    plt.legend([parex['line'], dopri5['line'], dop853['line']], ["ParEx", "DOPRI5 (scipy)", "DOP853 (scipy)"], loc=1)
+    plt.legend([extrap['line'], dopri5['line'], dop853['line']], ["ParEx", "DOPRI5 (scipy)", "DOP853 (scipy)"], loc=1)
     plt.xlabel('Error')
     plt.ylabel('Wall clock time (seconds)')
     plt.title(problem_name)

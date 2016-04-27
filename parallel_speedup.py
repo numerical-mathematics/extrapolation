@@ -33,9 +33,9 @@ def compare_speedup(func, y0, t0, tf, y_ref, problem_name, tol = 1e-9, nsteps=10
     for i in range(len(nworkers)):
         print 'nworkers: ', nworkers[i]
         start_time = time.time()
-        y, infodict = ex_p.ex_midpoint_explicit_parallel(func, None, y0, [t0, tf], atol=tol, 
-                                                         rtol=tol, mxstep=nsteps, nworkers=nworkers[i], 
-                                                         adaptive="order", full_output=True)
+        y, infodict = ex_p.ex_midpoint_explicit_parallel(func, [t0, tf], y0, atol=tol,
+                                                         rtol=tol, max_steps=nsteps, nworkers=nworkers[i],
+                                                         adaptive=True, diagnostics=True)
         runtime[i] = time.time() - start_time
         y[-1] = solout(y[-1])
         fe_seq[i], fe_tot[i], nstp[i], h_avg[i], p_avg[i] = infodict['fe_seq'], infodict['nfe'], infodict['nst'], infodict['h_avg'], infodict['p_avg']

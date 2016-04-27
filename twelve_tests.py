@@ -350,7 +350,7 @@ def storeTestsExactSolutions():
     for test in getAllTests():
         denseOutput = test.denseOutput
         startTime = time.time()
-        exactSolution, infodict = integrate.odeint(test.RHSFunction,test.initialValue, denseOutput, Dfun=None, atol=1e-27, rtol=1e-13, mxstep=100000000, full_output = True)
+        exactSolution, infodict = integrate.odeint(test.RHSFunction,test.initialValue, denseOutput, Dfun=None, atol=1e-27, rtol=1e-13, max_steps=100000000, diagnostics = True)
         print("Store solution for " + test.problemName + "; solution: " + str(exactSolution))
         print("Time : " + str(time.time()-startTime) + " numb steps: " + str(infodict["nst"]))
         np.savetxt(getReferenceFile(test.problemName), exactSolution[1:len(exactSolution)])
@@ -373,14 +373,14 @@ def inputTuple(k,denseOutput,test,rtol,atol,firstStep,robustness,smoothing,seq,u
     test problems)
     '''
     standardTuple = {'func': test.RHSFunction, 'grad': test.RHSGradient, 'y0': test.initialValue, 't': denseOutput
-                     ,'full_output': True, 'rtol': rtol, 'atol': atol, 'h0': firstStep, 'mxstep': 10e8, 'robustness': robustness,
+                     ,'diagnostics': True, 'rtol': rtol, 'atol': atol, 'h0': firstStep, 'max_steps': 10e8, 'robustness': robustness,
                      'smoothing': smoothing,'seq':seq}#, 'nworkers': 1}    
     
     if not useGrad:
         standardTuple['grad'] = None
     
     standardOldTuple = {'func': test.RHSFunction, 'y0': test.initialValue, 't': denseOutput
-                     ,'full_output': True, 'rtol': rtol, 'atol': atol, 'h0': firstStep, 'mxstep': 10e8}
+                     ,'diagnostics': True, 'rtol': rtol, 'atol': atol, 'h0': firstStep, 'max_steps': 10e8}
     
     if(useOptimal):
         midimplicitTuple = standardTuple.copy()
@@ -501,7 +501,7 @@ def comparisonTest():
                                     else:
                                         grad = None
                                     startTime = time.time()
-                                    ys, infodict = solverFunction(test.RHSFunction,test.initialValue, denseOutput, Dfun= grad, atol=atol, rtol=rtol, mxstep=100000000, full_output = True)
+                                    ys, infodict = solverFunction(test.RHSFunction,test.initialValue, denseOutput, Dfun= grad, atol=atol, rtol=rtol, max_steps=100000000, diagnostics = True)
                                     finalTime = time.time()
 
                                     mean_order = 0
