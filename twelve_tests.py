@@ -4,8 +4,7 @@ import scipy
 import numpy as np
 from collections import namedtuple
 import time
-import ex_parallel
-import ex_parallel_original
+import parex
 import matplotlib.pyplot as plt
 import math
 from compare_test import kdv_func, kdv_init, kdv_solout
@@ -351,7 +350,7 @@ def storeTestsExactSolutions():
     for test in getAllTests():
         denseOutput = test.denseOutput
         startTime = time.time()
-        exactSolution, infodict = integrate.odeint(test.RHSFunction,test.initialValue, denseOutput, Dfun=None, atol=1e-27, rtol=1e-13, mxstep=100000000, full_output = True)
+        exactSolution, infodict = integrate.odeint(test.RHSFunction,test.initialValue, denseOutput, Dfun=None, atol=1e-27, rtol=1e-13, max_steps=100000000, diagnostics = True)
         print("Store solution for " + test.problemName + "; solution: " + str(exactSolution))
         print("Time : " + str(time.time()-startTime) + " numb steps: " + str(infodict["nst"]))
         np.savetxt(getReferenceFile(test.problemName), exactSolution[1:len(exactSolution)])
@@ -374,14 +373,14 @@ def inputTuple(k,denseOutput,test,rtol,atol,firstStep,robustness,smoothing,seq,u
     test problems)
     '''
     standardTuple = {'func': test.RHSFunction, 'grad': test.RHSGradient, 'y0': test.initialValue, 't': denseOutput
-                     ,'full_output': True, 'rtol': rtol, 'atol': atol, 'h0': firstStep, 'mxstep': 10e8, 'robustness': robustness,
+                     ,'diagnostics': True, 'rtol': rtol, 'atol': atol, 'h0': firstStep, 'max_steps': 10e8, 'robustness': robustness,
                      'smoothing': smoothing,'seq':seq}#, 'nworkers': 1}    
     
     if not useGrad:
         standardTuple['grad'] = None
     
     standardOldTuple = {'func': test.RHSFunction, 'y0': test.initialValue, 't': denseOutput
-                     ,'full_output': True, 'rtol': rtol, 'atol': atol, 'h0': firstStep, 'mxstep': 10e8}
+                     ,'diagnostics': True, 'rtol': rtol, 'atol': atol, 'h0': firstStep, 'max_steps': 10e8}
     
     if(useOptimal):
         midimplicitTuple = standardTuple.copy()
@@ -424,15 +423,13 @@ def comparisonTest():
     resultDict={}
     useOptimal = True
     solverFunctions = [
-#         ex_parallel.ex_midpoint_explicit_parallel
+#         parex.ex_midpoint_explicit_parallel
 #         ,
-#         ex_parallel_original.ex_midpoint_parallel
+#         parex.ex_midpoint_implicit_parallel
 #         ,
-#         ex_parallel.ex_midpoint_implicit_parallel
+#         parex.ex_midpoint_semi_implicit_parallel
 #         ,
-#         ex_parallel.ex_midpoint_semi_implicit_parallel
-#         ,
-        ex_parallel.ex_euler_semi_implicit_parallel
+        parex.ex_euler_semi_implicit_parallel
         ,
         integrate.odeint
         ]
@@ -504,7 +501,7 @@ def comparisonTest():
                                     else:
                                         grad = None
                                     startTime = time.time()
-                                    ys, infodict = solverFunction(test.RHSFunction,test.initialValue, denseOutput, Dfun= grad, atol=atol, rtol=rtol, mxstep=100000000, full_output = True)
+                                    ys, infodict = solverFunction(test.RHSFunction,test.initialValue, denseOutput, Dfun= grad, atol=atol, rtol=rtol, max_steps=100000000, diagnostics = True)
                                     finalTime = time.time()
 
                                     mean_order = 0
@@ -517,16 +514,16 @@ def comparisonTest():
 #                                     print("freeze jac " + str(first))
 
                                     #To use this external setting the number of workers
-                                    #disable the ex_parallel call to set_NUM_WORKERS function 
+                                    #disable the parex call to set_NUM_WORKERS function 
                                     #and I recommend changing the use of NUM_WORKERS variable
                                     #in A(k) to a fix number (to have a more accurate comparison of how
                                     #parallelization works).
-#                                     ex_parallel.set_NUM_WORKERS(worker)
+#                                     parex.set_NUM_WORKERS(worker)
 
-#                                     ex_parallel.setfrezeejacobian(True)
-#                                     ex_parallel.setwork(False)
-#                                     ex_parallel.setaddinitialguess(False)
-#                                     ex_parallel.setiterative(True)
+#                                     parex.setfrezeejacobian(True)
+#                                     parex.setwork(False)
+#                                     parex.setaddinitialguess(False)
+#                                     parex.setiterative(True)
 
                                     functionTuple=inputTuple(k,denseOutput, test,rtol,atol,firstStep,robustness,smoothing,seq,useOptimal, useGrad)
                                     startTime = time.time()

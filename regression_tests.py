@@ -1,9 +1,9 @@
 from __future__ import division
+from collections import namedtuple
 import numpy as np
 import math 
-import ex_parallel
+import parex
 import matplotlib.pyplot as plt
-import twelve_tests as tst
 
 #Whether to do convergence plots to see if they are straight lines (to choose the steps)
 plot_convergence=False
@@ -316,6 +316,30 @@ dense_reference_solutions = {
 
     }
 
+TestProblemDefinition = namedtuple("TestProblemDefinition", 
+            ["problemName","RHSFunction", "RHSGradient","initialTime",
+                "initialValue", "denseOutput", "atolfact", "atol"])
+
+def Linearf(y,t):
+    lam = -1.
+    return lam*y
+
+def LinearProblem():
+    denseOutput = np.array([0,0.1,0.2,0.3,0.4,0.5,0.536498185, 0.6,0.7,0.8,0.9,1.])    
+    return TestProblemDefinition("Linear", Linearf, None, 0, np.array([1.]),denseOutput ,1.,None)
+
+def VDPOLEasyf(y,t):
+    epsilon=1
+    second_dim=1/epsilon*(((1-y[0]**2)*y[1])-y[0])
+    return np.array([y[1],second_dim])
+
+def VDPOLEasyProblem():
+    denseOutput = np.array([0.,1.,2.,3.,4.,5.,6.,6.4456913297,7.,8.,9.,10.,11.,12.])    
+    return TestProblemDefinition("VDPOLEasy", VDPOLEasyf, None, 0, np.array([2.,0]),denseOutput,1.,None)
+ 
+def getReferenceFile(problemName):
+    return "reference_" + problemName + ".txt"
+      
 ########### RUN TESTS ###########
 
 tolerances = [1.e-3,1.e-5,1.e-7,1.e-9,1.e-11,1.e-13]
@@ -331,8 +355,11 @@ def non_dense_output_tests():
             output_times = [t0, tf]
             for tol in tolerances:
                 print("       Tolerance: " + str(tol))
-                ys, infodict = ex_parallel.extrapolation_parallel(method,f, None, y0, output_times, atol=tol,
-                    rtol=tol, mxstep=1.e6, full_output=True, nworkers=2)
+                ys, infodict = parex.solve(f, output_times, y0,
+                                                 solver=method.lower(),
+                                                 atol=tol, rtol=tol,
+                                                 max_steps=1.e6, diagnostics=True,
+                                                 nworkers=2)
                 y = ys[-1][0]
                 assert np.allclose(y, reference_solutions[method][f][tol])
      
@@ -351,8 +378,11 @@ def dense_output_tests():
             y0 = exact(t0)
             for tol in tolerances:
                 print("       Tolerance: " + str(tol))
-                ys, infodict = ex_parallel.extrapolation_parallel(method,f, None, y0, output_times, atol=tol,
-                    rtol=tol, mxstep=1.e6, full_output=True, nworkers=2)
+                ys, infodict = parex.solve(f, output_times, y0, 
+                                                 solver=method.lower(),
+                                                 atol=tol, rtol=tol,
+                                                 max_steps=1.e6, diagnostics=True,
+                                                 nworkers=2)
                 y = ys[-2][0]
                 assert np.allclose(y, dense_reference_solutions[method][f][tol])
                 
@@ -364,7 +394,7 @@ def convergence_test(method_name, test, step_sizes, order, dense=False):
    Perform a convergence test by applying the specified method to the specified
    the test problem with the specified step sizes.
     """
-    y_ref = np.loadtxt(tst.getReferenceFile(test.problemName))
+    y_ref = np.loadtxt(getReferenceFile(test.problemName))
     dense_output = test.denseOutput
 
     if(not dense):
@@ -378,10 +408,13 @@ def convergence_test(method_name, test, step_sizes, order, dense=False):
     error_per_step=[]
     for step in step_sizes:
         #rtol and atol are not important as we are fixing the step size
-        ys, infodict = ex_parallel.extrapolation_parallel(method_name,test.RHSFunction, None,
-                                                          test.initialValue, dense_output, atol=1e-1,
-                                                          rtol=1e-1, mxstep=10000000, full_output=True,
-                                                          nworkers=4, adaptive='fixed', p=order, h0=step)
+        ys, infodict = parex.solve(test.RHSFunction, dense_output,
+                                         test.initialValue,
+                                         solver=method_name.lower(), 
+                                         atol=1e-1, rtol=1e-1, max_steps=1000000,
+                                         diagnostics=True,
+                                         adaptive=False, p=order, h0=step,
+                                         nworkers=4)
         
         ys=ys[1:len(ys)]
         if(dense):
@@ -455,22 +488,22 @@ def run_convergence_tests(methods):
             print("   Testing method of order " + str(p))
             print("     Linear test problem, no dense output")
             step_sizes = method['linear problem step sizes'][p]
-            coeff = convergence_test(method_name, tst.LinearProblem(),step_sizes,p,False)
+            coeff = convergence_test(method_name, LinearProblem(),step_sizes,p,False)
             check_convergence_rate(coeff, p-method['smoothing'], "Test Linear non dense")
             if not (p in method['skip vanderpol']):
                 print("     Vanderpol test problem, no dense output")
                 step_sizes = method['vanderpol step sizes'][p]
-                coeff = convergence_test(method_name, tst.VDPOLEasyProblem(),step_sizes,p,False)
+                coeff = convergence_test(method_name, VDPOLEasyProblem(),step_sizes,p,False)
                 check_convergence_rate(coeff, p-method['smoothing'], "Test VPOL non dense")
             if not (p in method['skip linear dense']):
                 print("     Linear test problem, dense output")
                 step_sizes = method['linear problem step sizes'][p]
-                coeff = convergence_test(method_name, tst.LinearProblem(),step_sizes,p,True)
+                coeff = convergence_test(method_name, LinearProblem(),step_sizes,p,True)
                 check_convergence_rate(coeff, p-method['smoothing'], "Test Linear non dense")
             if not (p in method['skip vanderpol dense']):
                 print("     Vanderpol test problem, dense output")
                 step_sizes = method['vanderpol step sizes'][p]
-                coeff = convergence_test(method_name, tst.VDPOLEasyProblem(),step_sizes,p,True)
+                coeff = convergence_test(method_name, VDPOLEasyProblem(),step_sizes,p,True)
                 check_convergence_rate(coeff, p-method['smoothing'], "Test VPOL dense")
 
     print("All convergence tests passed")
@@ -534,9 +567,9 @@ def test_interpolation_polynomial():
                 hs[i]=H/ni
             
             
-            poly = ex_parallel._interpolate_nonsym(y0, Tkk, yj, hs, H, order, atol=1e-5,rtol=1e-5, seq=seq)        
+            poly = parex.parex._interpolate_nonsym(y0, Tkk, yj, hs, H, order, atol=1e-5,rtol=1e-5, seq=seq)        
             
-            polysym = ex_parallel._interpolate_sym(y0, Tkk,f_Tkk, y_half, f_yj, hs, H, order, atol=1e-5,rtol=1e-5, seq=seq)
+            polysym = parex.parex._interpolate_sym(y0, Tkk,f_Tkk, y_half, f_yj, hs, H, order, atol=1e-5,rtol=1e-5, seq=seq)
             
             x=H/5;
              
@@ -555,7 +588,7 @@ def test_interpolation_polynomial():
         coefficients = np.polyfit(np.log10(steps), np.log10(error_per_step), 1)
         print("coefficients error " + str(coefficients) + "order is: " + str(order))
         # In this case order of interpolation for non symmetric should be order because lam=1
-        # see _compute_rs(..) in ex_parallel
+        # see _compute_rs(..) in parex.parex
         check_convergence_rate(coefficients[0], order+orderdisparity[idx][0], "Interpolation non symmetric")
         
         #TODO: this should be one order less of convergence (with lam=0 it works well)
@@ -642,9 +675,9 @@ def test_interpolated_derivatives():
         for i in range(dsnumder):
             ds[i]=expder(H/2, i)
         
-        dsapp = ex_parallel._compute_ds(y_half, f_yj, hs[0:orderds+1], orderds, seq=seq)
+        dsapp = parex.parex._compute_ds(y_half, f_yj, hs[0:orderds+1], orderds, seq=seq)
         
-        rsapp = ex_parallel._compute_rs(yj, hs, orderrs, seq=seq)
+        rsapp = parex.parex._compute_rs(yj, hs, orderrs, seq=seq)
     
         for der in range(1,rsnumder):
             errorrsPerDerandStep[der][k] = np.linalg.norm((rs[der]-rsapp[der]))

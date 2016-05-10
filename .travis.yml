@@ -20,15 +20,17 @@ before_install:
 install:
   - conda install --yes python=$TRAVIS_PYTHON_VERSION atlas numpy scipy matplotlib
   # Coverage packages are on my binstar channel
-  - conda install --yes -c dan_blanchard python-coveralls nose-cov
+  #- conda install --yes -c dan_blanchard python-coveralls nose-cov
+  - pip install coveralls coverage
   - "pip install -r requirements.txt"
   - "f2py -c fnbod.f -m fnbod"
   - "f2py -c fnbruss.f -m fnbruss"
 
 # Run test
 script:
-  - coverage run --source=ex_parallel regression_tests.py
+  - coverage run --concurrency=multiprocessing regression_tests.py
+  - coverage combine
 
 # Calculate coverage
 after_success:
-  - coveralls --config_file .coveragerc
+  - coveralls
