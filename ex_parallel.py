@@ -343,7 +343,7 @@ def _euler_explicit(f, grad, previousValues, previousTime,f_previousValue, step,
 END BLOCK 1: ODE numerical methods formulas (explicit, implicit and semi-implicit)
 '''''
 
-def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, j_nj_list, smoothing, addSolverParam)):
+def _compute_stages(job):
     '''
     Compute extrapolation tableau values with the order specified and number of steps specified in j_nj_list.
     It calculates the T_{k,1} values for the k's in j_nj_list.  
@@ -378,6 +378,7 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, j_nj
         @return fe_tot (int): number of total function evaluations done to calculate this T
         @return je_tot (int): number of total jacobian evaluations done to calculate this T
     '''
+    method, methodargs, func, grad, tn, yn, f_yn, args, h, j_nj_list, smoothing, addSolverParam = job
     res = []
     for (j,nj) in j_nj_list:
         fe_tot=0
@@ -397,7 +398,7 @@ def _compute_stages((method, methodargs, func, grad, tn, yn, f_yn, args, h, j_nj
             je_tot += je_tot_
         
         #TODO: this y_half value is already returned inside Y, remove and when needed (interpolation) extract from Y
-        y_half = Y[nj/2]
+        y_half = Y[nj//2]
         
         #Perform smoothing step
         Tj1 = Y[nj]

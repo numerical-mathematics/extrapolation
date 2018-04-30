@@ -18,7 +18,7 @@ def relative_error(y, y_ref):
     return np.linalg.norm(y-y_ref)/np.linalg.norm(y_ref)
 
 def compare_speedup(func, y0, t0, tf, y_ref, problem_name, tol = 1e-9, nsteps=10e5, solout=(lambda t: t)):
-    print 'RUNNING PARALLEL SPEEDUP TEST FOR ' + problem_name
+    print('RUNNING PARALLEL SPEEDUP TEST FOR '+ problem_name)
     nworkers = [1, 2, 4, 6, 8]
 
     runtime = np.zeros(len(nworkers))
@@ -31,7 +31,7 @@ def compare_speedup(func, y0, t0, tf, y_ref, problem_name, tol = 1e-9, nsteps=10
     speedup = np.zeros(len(nworkers))
 
     for i in range(len(nworkers)):
-        print 'nworkers: ', nworkers[i]
+        print('nworkers: ', nworkers[i])
         start_time = time.time()
         y, infodict = ex_p.ex_midpoint_explicit_parallel(func, None, y0, [t0, tf], atol=tol, 
                                                          rtol=tol, mxstep=nsteps, nworkers=nworkers[i], 
@@ -40,10 +40,10 @@ def compare_speedup(func, y0, t0, tf, y_ref, problem_name, tol = 1e-9, nsteps=10
         y[-1] = solout(y[-1])
         fe_seq[i], fe_tot[i], nstp[i], h_avg[i], k_avg[i] = infodict['fe_seq'], infodict['nfe'], infodict['nst'], infodict['h_avg'], infodict['k_avg']
         yerr[i] = relative_error(y[-1], y_ref)
-        print 'Runtime: ', runtime[i], ' s   Error: ', yerr[i], '   fe_seq: ', fe_seq[i], '   fe_tot: ', fe_tot[i], '   nstp: ', nstp[i], '   h_avg: ', h_avg[i], '   k_avg: ', k_avg[i], 
+        print('Runtime: ', runtime[i], ' s   Error: ', yerr[i], '   fe_seq: ', fe_seq[i], '   fe_tot: ', fe_tot[i], '   nstp: ', nstp[i], '   h_avg: ', h_avg[i], '   k_avg: ', k_avg[i],)
         speedup[i]= runtime[0]/runtime[i]
-        print '\nSpeedup: ', speedup[i]
-        print ''       
+        print('\nSpeedup: ', speedup[i])
+        print('')
  
     # plot performance graphs
     import matplotlib
@@ -82,7 +82,7 @@ def compare_speedup(func, y0, t0, tf, y_ref, problem_name, tol = 1e-9, nsteps=10
     plt.savefig('images/' + problem_name + '_nworkers_vs_k_avg_and_h_avg.png')
     plt.close()
 
-    print "FINISHED! Images were saved in ./images folder"
+    print("FINISHED! Images were saved in ./images folder")
 
 
 ###############################################################
