@@ -105,25 +105,25 @@ def tst_parallel_vs_serial(f, t0, tf, y0, title="tst_parallel_vs_serial"):
     err_s = np.zeros(len(tol))
     y_ref = np.loadtxt("reference.txt")
     for i in range(len(tol)):
-        print "tol = " + str(tol[i])
+        print("tol = " + str(tol[i]))
         time_ = time.time()
 
         y_, infodict = ex_p.ex_midpoint_parallel(f, y0, [t0, tf], atol=(tol[i]), rtol=(tol[i]), adaptive="order", full_output=True)
         parallel_time = time.time() - time_
         fe_seq[i], fe_tot[i], h_avg_, k_avg_ = infodict['fe_seq'], infodict['fe_tot'], infodict['h_avg'], infodict['k_avg']
         err_p[i] = relative_error(y_[-1], y_ref)
-        print "parallel = " + '%g' % (parallel_time) + "\terr  = " + '%e' % err_p[i] + "\th_avg = " + '%e' % h_avg_ + "\tk_avg = " + '%e' % k_avg_ + "\tfe_s1 = " + str(fe_seq[i]) + "\tfe_t1 = " + str(fe_tot[i]) + "\tfe_t1/fe_s1 = " + '%g' % (fe_tot[i]/fe_seq[i])
+        print("parallel = " + '%g' % (parallel_time) + "\terr  = " + '%e' % err_p[i] + "\th_avg = " + '%e' % h_avg_ + "\tk_avg = " + '%e' % k_avg_ + "\tfe_s1 = " + str(fe_seq[i]) + "\tfe_t1 = " + str(fe_tot[i]) + "\tfe_t1/fe_s1 = " + '%g' % (fe_tot[i]/fe_seq[i]))
         time_ = time.time()
         y, fe, h_avg, k_avg = ex_s.ex_midpoint_serial(f, t0, tf, y0, atol=(tol[i]), rtol=(tol[i]), adaptive="order")
         serial_time = time.time() - time_
         err_s[i] = relative_error(y, y_ref)
-        print "serial   = " + '%g' % (serial_time)   + "\terr  = " + '%e' % err_s[i] + "\th_avg = " + '%e' % h_avg + "\tk_avg = " + '%e' % k_avg + "\tfe_s2 = " + str(fe) + "\tfe_t2 = " + str(fe) + "\tfe_s2/fe_s1 = " + '%g' % (fe/fe_seq[i])
+        print("serial   = " + '%g' % (serial_time)   + "\terr  = " + '%e' % err_s[i] + "\th_avg = " + '%e' % h_avg + "\tk_avg = " + '%e' % k_avg + "\tfe_s2 = " + str(fe) + "\tfe_t2 = " + str(fe) + "\tfe_s2/fe_s1 = " + '%g' % (fe/fe_seq[i]))
         time_ratio[i] = serial_time / parallel_time
         fe_diff[i] = fe_seq[i] - fe
         h_avg_diff[i] = h_avg_ - h_avg
         k_avg_diff[i] = k_avg_ - k_avg
-        print "ratio    = " + '%g' % (time_ratio[i]) + "\tdiff = " + '%e' %(err_p[i] - err_s[i]) + "\tdiff  = " + '%e' %(h_avg_diff[i]) + "\tdiff  = " + '%e' %(k_avg_diff[i]) + "\tdiff  = " + str(fe_diff[i]) + "\tdiff  = " + str(fe_tot[i] - fe) + "\ttime_ratio/(fe_s2/fe_s1) = " + '%g' % (time_ratio[i]/(fe/fe_seq[i]))
-        print
+        print("ratio    = " + '%g' % (time_ratio[i]) + "\tdiff = " + '%e' %(err_p[i] - err_s[i]) + "\tdiff  = " + '%e' %(h_avg_diff[i]) + "\tdiff  = " + '%e' %(k_avg_diff[i]) + "\tdiff  = " + str(fe_diff[i]) + "\tdiff  = " + str(fe_tot[i] - fe) + "\ttime_ratio/(fe_s2/fe_s1) = " + '%g' % (time_ratio[i]/(fe/fe_seq[i])))
+        print('')
 
     return (err_p, err_s)
 
@@ -216,7 +216,7 @@ def f_5(y,t):
 def test5():
     bodys = 400
     n = 6*bodys
-    print "n = " + str(n)
+    print("n = " + str(n))
     t0 = 0
     tf = 0.08
     y0 = fnbod.init_fnbod(n)
@@ -226,17 +226,17 @@ def cprofile_tst():
     bodys = 200
     n = 6*bodys
     tol = 10**(-6)
-    print "n = " + str(n)
-    print "tol = " + str(tol)
+    print("n = " + str(n))
+    print("tol = " + str(tol))
     t0 = 0
     tf = 3
     y0 = fnbod.init_fnbod(n)
-    # print "serial"
+    # print("serial")
     # _, _, h_avg, k_avg = ex_s.ex_midpoint_serial(f_5, t0, tf, y0, atol=tol, rtol=tol, adaptive="order")
-    print "parallel"
+    print("parallel")
     _, infodict = ex_p.ex_midpoint_parallel(f_5, y0, [t0, tf], atol=tol, rtol=tol, adaptive="order", full_output=True)
     h_avg, k_avg = infodict['h_avg'], infodict['k_avg']
-    print "h_avg = " + str(h_avg) + "\tk_avg = " + str(k_avg)
+    print("h_avg = " + str(h_avg) + "\tk_avg = " + str(k_avg))
 
 
 import multiprocessing as mp
@@ -296,7 +296,7 @@ def test_dense():
     err = np.zeros(len(tol))
     
     for i in range(len(tol)):
-        print "tol = ", tol[i]
+        print("tol = ", tol[i])
         ys = ex_p.ex_midpoint_parallel(f, y0, t, atol=tol[i], rtol=tol[i], adaptive="order")
         plt.hold(True)
         line_exact, = plt.plot(t, ys_exact, "s-")

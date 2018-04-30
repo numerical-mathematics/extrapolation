@@ -1,1 +1,1 @@
-from parex import solve, Solvers
+from .parex import solve, Solvers

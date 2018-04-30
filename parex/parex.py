@@ -1,12 +1,41 @@
 """
 This is the main file for ParEx, a suite of parallel extrapolation solvers for
-initial value problems.  The code is based largely on material from the
+initial value problems.  It includes explicit, implicit, and semi-implicit (linearly
+implicit) solvers.  The code is based largely on material from the
 following two volumes:
 
     - *Solving Ordinary Differential Equations I: Nonstiff Problems*,
       by Hairer, Norsett and Wanner
     - *Solving Ordinary Differntial Equations II: Stiff and
       Differential-Algebraic Problems*, by Hairer and Wanner
+
+The calling interface follows this pattern:
+
+def solve_implicit/explicit/semi-implicit(ode_fun, jac_fun, y_olds, t_old,
+                                          f_old, dt, args)
+    @param ode_fun (callable ode_fun(y,t,args)): derivative of u(t) (ODE RHS, ode_fun(u,t))
+    @param jac_fun (callable jac_fun(y,t,args)): Jacobian of ode_fun.
+    @param y_olds (2-tuple) : previous solution values (two previous values, at t_n-2 and t_n-1)
+            used to obtain the next point (using two previous values because
+            midpoint explicit method needs the previous two points, otherwise
+            the t_n-2 value can remain unused)
+    @param t_old (float): time at which previous solution is found
+    @param f_old (array): function evaluation at the y_old (at t_n-1), so that
+           it can be reused if it was already calculated for other purposes
+           (Jacobian estimation or dense output interpolation)
+    @param dt (float): step length
+    @param args (tuple): extra arguments
+    @param extra arguments to be passed to some of the methods:
+        @param J00 (2D array): (only for semi-implicit) Jacobian estimation at
+                   the previous stage value (at each extrapolation stage
+                   different number of steps are taken, depending on the step
+                   sequence chosen).
+
+    @return (yj, f_yj, fe_tot, je_tot):
+        @return yj (array): solution calculated at t_old+dt
+        @return f_yj (array): function evaluation value at y_old, t_old
+        @return fe_tot (int): number of function evaluations done
+        @return je_tot (int): number of Jacobian evaluations done
 """
 
 from __future__ import division
@@ -18,8 +47,9 @@ import scipy
 import forward_diff
 gmres = scipy.sparse.linalg.gmres
 
-#This global variable does not affect multiprocessing performance
-#as it is used only in the sequential parts of the code.
+# NUM_WORKERS is a global variable, but not affect multiprocessing performance
+# as it is used only in the sequential parts of the code.
+# The same goes for jacobian_old.
 NUM_WORKERS = None
 jacobian_old = 0
 
@@ -67,41 +97,6 @@ def _error_norm(y1, y2, atol, rtol):
     """
     tol = atol + np.maximum(np.abs(y1), np.abs(y2))*rtol
     return np.linalg.norm((y1-y2)/tol)/(len(y1)**0.5)
-
-"""
-BEGINNING BLOCK 1: ODE numerical methods formulas and one step
-solvers(explicit, implicit and semi-implicit).
-
-Note that the semi-implicit methods are also referred to by the term
-"linearly implicit".
-
-Methods' common structure:
-def solve_implicit/explicit/semi-implicit(ode_fun, jac_fun, y_olds, t_old,
-                                          f_old, dt, args)
-    @param ode_fun (callable ode_fun(y,t,args)): derivative of u(t) (ODE RHS, ode_fun(u,t))
-    @param jac_fun (callable jac_fun(y,t,args)): Jacobian of ode_fun.
-    @param y_olds (2-tuple) : previous solution values (two previous values, at t_n-2 and t_n-1)
-            used to obtain the next point (using two previous values because
-            midpoint explicit method needs the previous two points, otherwise
-            the t_n-2 value can remain unused)
-    @param t_old (float): time at which previous solution is found
-    @param f_old (array): function evaluation at the y_old (at t_n-1), so that
-           it can be reused if it was already calculated for other purposes
-           (Jacobian estimation or dense output interpolation)
-    @param dt (float): step length
-    @param args (tuple): extra arguments
-    @param extra arguments to be passed to some of the methods:
-        @param J00 (2D array): (only for semi-implicit) Jacobian estimation at
-                   the previous stage value (at each extrapolation stage
-                   different number of steps are taken, depending on the step
-                   sequence chosen).
-
-    @return (yj, f_yj, fe_tot, je_tot):
-        @return yj (array): solution calculated at t_old+dt
-        @return f_yj (array): function evaluation value at y_old, t_old
-        @return fe_tot (int): number of function evaluations done
-        @return je_tot (int): number of Jacobian evaluations done
-"""
 
 def linear_solve(A, b, iterative=False, tol=1.e-8, x0=None):
     """Solve Ax=b for x.  Used in semi-implicit method.
@@ -171,9 +166,8 @@ def _solve_implicit_step(f, jacobian, initial_guess, tol):
     # https://github.com/scipy/scipy/issues/5369
     # TODO: add extra 2 function evaluations
 
-    x, infodict, _, _ = optimize.fsolve(f, initial_guess,
-                                        fprime = jacobian, full_output = True,
-                                        xtol=tol)
+    x, infodict, _, _ = optimize.fsolve(f, initial_guess, fprime=jacobian,
+                                        full_output=True, xtol=tol)
 
     if("njev" in infodict):
         return (x, infodict["nfev"], infodict["njev"])
@@ -192,8 +186,8 @@ def _semi_implicit_midpoint(ode_fun, jac_fun, y_olds, t_old, f_old, dt, args,
 
     if(y_older is None):  # Use Euler to get starting value
         return _semi_implicit_euler(ode_fun, jac_fun, y_olds, t_old,
-                                   f_old, dt, args, solver_parameters,
-                                   J00, I)
+                                    f_old, dt, args, solver_parameters,
+                                    J00, I)
 
     if(f_old is None):
         f_yj = ode_fun(*(y_old,t_old)+args)
@@ -205,7 +199,7 @@ def _semi_implicit_midpoint(ode_fun, jac_fun, y_olds, t_old, f_old, dt, args,
     b = np.dot(-(I+dt*J00),(y_old-y_older)) + 2*dt*f_yj
     A = I-dt*J00
 
-    if(solver_parameters['initialGuess']): # Use Euler for initial guess
+    if(solver_parameters['initialGuess']):  # Use Euler for initial guess
         x0, f_yj, fe_tot_,je_tot=_explicit_euler(ode_fun, jac_fun, y_olds,
                                                  t_old, f_yj, dt,
                                                  args, solver_parameters)
@@ -213,8 +207,8 @@ def _semi_implicit_midpoint(ode_fun, jac_fun, y_olds, t_old, f_old, dt, args,
     else:
         x0=None
 
-    dy = linear_solve(A, b, iterative = solver_parameters['iterative'],
-                 tol = solver_parameters['min_tol'], x0=x0)
+    dy = linear_solve(A, b, iterative=solver_parameters['iterative'],
+                      tol=solver_parameters['min_tol'], x0=x0)
 
     y_new = y_old + dy
 
@@ -222,7 +216,7 @@ def _semi_implicit_midpoint(ode_fun, jac_fun, y_olds, t_old, f_old, dt, args,
 
 
 def _semi_implicit_euler(ode_fun, jac_fun, y_olds, t_old,
-                        f_old,dt, args, solver_parameters, J00, I):
+                         f_old,dt, args, solver_parameters, J00, I):
     """
     Calculate solution at t_old+dt using the semi-implicit Euler method.
     Based on Section IV.9.25 of Ref II.
@@ -250,8 +244,8 @@ def _semi_implicit_euler(ode_fun, jac_fun, y_olds, t_old,
     else:
         x0 = None
 
-    dy = linear_solve(A, b, iterative = solver_parameters['iterative'],
-                 tol = solver_parameters['min_tol'], x0=x0)
+    dy = linear_solve(A, b, iterative=solver_parameters['iterative'],
+                      tol=solver_parameters['min_tol'], x0=x0)
 
     y_new = y_old + dy
 
@@ -272,8 +266,7 @@ def _implicit_midpoint(ode_fun, jac_fun, y_olds, t_old, f_old,
 
     def jacobian(x):
         II = np.identity(len(x), dtype=float)
-        return  np.matrix(II - dt*jac_fun(x,t_old+dt/2))
-
+        return np.matrix(II - dt*jac_fun(x,t_old+dt/2))
 
     if(jac_fun is None):
         jacobian = None
@@ -283,10 +276,10 @@ def _implicit_midpoint(ode_fun, jac_fun, y_olds, t_old, f_old,
         fe_tot = 0
         je_tot = 0
     else:
-        #Estimation of the value as the starting point for the zero solver
-        initial_guess, f_yj, fe_tot, je_tot = _explicit_euler(ode_fun, jac_fun,
-                y_olds, t_old, f_old, dt, args,
-                solver_parameters)
+        # Estimation of the value as the starting point for the zero solver
+        initial_guess, f_yj, fe_tot, je_tot = \
+            _explicit_euler(ode_fun, jac_fun, y_olds, t_old, f_old, dt, args,
+                            solver_parameters)
 
     y_new, fe_tot_, je_tot_ = _solve_implicit_step(zero_func, jacobian,
                                                    initial_guess,
@@ -306,7 +299,7 @@ def _explicit_midpoint(ode_fun, jac_fun, y_olds, t_old, f_old,
     Based on II.9.13b of Ref I.
     """
     y_older, y_old = y_olds
-    if(y_older is None): # Use Euler to get additional starting value
+    if(y_older is None):  # Use Euler to get additional starting value
         return _explicit_euler(ode_fun, jac_fun, y_olds, t_old,
                                f_old, dt, args, solver_parameters)
 
@@ -332,11 +325,9 @@ def _explicit_euler(ode_fun, jac_fun, y_olds, t_old, f_old,
 
     return (y_old + dt*f_yj, f_yj, fe_tot,0)
 
-#END BLOCK 1: ODE numerical methods formulas (explicit, implicit and semi-implicit)
+# End of solver definitions
 
-
-def _compute_stages((solver, solver_args, ode_fun, jac_fun, tn, yn, f_yn, args,
-                     h, j_nj_list, smoothing, solver_parameters)):
+def _compute_stages(job):
     """
     Compute extrapolation tableau values with the order specified and number of
     steps specified in j_nj_list.
@@ -384,6 +375,7 @@ def _compute_stages((solver, solver_args, ode_fun, jac_fun, tn, yn, f_yn, args,
         fe_tot (int): number of total function evaluations
         je_tot (int): number of total jacobian evaluations
     """
+    solver, solver_args, ode_fun, jac_fun, tn, yn, f_yn, args, h, j_nj_list, smoothing, solver_parameters = job
     results = []
     for (j,nj) in j_nj_list:
         fe_tot = 0
@@ -415,7 +407,7 @@ def _compute_stages((solver, solver_args, ode_fun, jac_fun, tn, yn, f_yn, args,
         # needed (for interpolation) extract from Y.
         y_half = Y[nj//2]
 
-        #Perform smoothing step
+        # Perform smoothing step
         Tj1 = Y[nj]
         if(not smoothing == 'no'):
             # TODO: this f_yj_unused can be used in the case of interpolation,
@@ -489,7 +481,7 @@ def _extrapolation_parallel(ode_fun, tspan, y0, solver_args, solver=None,
     """
     solver = method_fcns[solver]
 
-    #Initialize pool of workers to parallelize extrapolation table calculations
+    # Initialize pool of workers to parallelize extrapolation table calculations
     _set_NUM_WORKERS(nworkers)
     pool = mp.Pool(NUM_WORKERS)
 
@@ -503,7 +495,7 @@ def _extrapolation_parallel(ode_fun, tspan, y0, solver_args, solver=None,
     t0 = tspan[0]
     steps_taken = 0
 
-    #Initialize diagnostic values
+    # Initialize diagnostic values
     fe_seq = 0
     fe_tot = 0
     je_tot = 0
@@ -511,7 +503,7 @@ def _extrapolation_parallel(ode_fun, tspan, y0, solver_args, solver=None,
     t_max = tspan[-1]
     t_index = 1
 
-    #yn is the previous calculated step (at t_curr)
+    # yn is the previous calculated step (at t_curr)
     yn, t_curr = 1*y0, t0
     h = min(h0, t_max-t0)
 
@@ -523,9 +515,11 @@ def _extrapolation_parallel(ode_fun, tspan, y0, solver_args, solver=None,
 
     # Iterate until final time
     while t_curr < t_max:
-        reject_step, y_temp, ysolution, f_yn, h, k, h_new, k_new, (fe_seq_, fe_tot_, je_tot_) = _solve_one_step(
-                solver, solver_args, ode_fun, jac_fun, t_curr, tspan, t_index, yn, args, h, k,
-                atol, rtol, pool, smoothing, seq, adaptive, reject_step, y_old, f_old, solver_parameters)
+        reject_step, y_temp, ysolution, f_yn, h, k, h_new, k_new, (fe_seq_, fe_tot_, je_tot_) = \
+            _solve_one_step(solver, solver_args, ode_fun, jac_fun, t_curr,
+                            tspan, t_index, yn, args, h, k, atol, rtol, pool,
+                            smoothing, seq, adaptive, reject_step, y_old,
+                            f_old, solver_parameters)
         # y_old, f_old is used for Jacobian updating
         y_old, f_old = (yn, f_yn)
 
@@ -568,7 +562,7 @@ def _extrapolation_parallel(ode_fun, tspan, y0, solver_args, solver=None,
 
         k = k_new
 
-    #Close pool of workers and return results
+    # Close pool of workers and return results
     pool.close()
 
     if diagnostics:
@@ -610,7 +604,7 @@ def _balance_load(k, nworkers, seq=(lambda t: 2*t)):
         values each processor has to calculate (each T_{j,1} is specified by
         the tuple (j,nj)).
     """
-    if k <= nworkers: # Just let each process compute one of the T_{j,1}
+    if k <= nworkers:  # Just let each process compute one of the T_{j,1}
         j_nj_list = [[(j,seq(j))] for j in range(k, 0, -1)]
     else:
         j_nj_list = [[] for i in range(nworkers)]
@@ -682,8 +676,8 @@ def _update_jacobian(jacobian_old, ode_fun, yn, tn, yn_1, f_yn_1, args):
     f_yn = ode_fun(*(yn,tn)+args)
     incf_yn = f_yn-f_yn_1
     incyn = yn-yn_1
-    jacobian = jacobian_old + np.outer((incf_yn-np.dot(jacobian_old,incyn)) \
-                                        /np.linalg.norm(incyn, 2),incyn)
+    jacobian = jacobian_old + np.outer((incf_yn-np.dot(jacobian_old,incyn))/
+                                        np.linalg.norm(incyn, 2),incyn)
     return (jacobian, f_yn)
 
 
@@ -728,10 +722,10 @@ def _get_jacobian(ode_fun, args, yn, tn, jac_fun,
         number of Jacobian evaluations (1 if analytical Jacobian)
         or Jacobian estimations (1 if estimated Jacobian)
     """
-    update_jacobian = False # TODO: try turning this on and see if it helps
+    update_jacobian = False  # TODO: try turning this on and see if it helps
     f_yn = None
     global jacobian_old
-    if last_step_rejected: # Unfreeze Jacobian if we run into trouble
+    if last_step_rejected:  # Unfreeze Jacobian if we run into trouble
         freeze = False
 
     def func_at_tn(y, args):
@@ -746,11 +740,11 @@ def _get_jacobian(ode_fun, args, yn, tn, jac_fun,
         fun_evals = fe_tot_ + 1
         jac_evals = 1
         jacobian_old = J00
-    elif update_jacobian: # Frozen, but do approximate update
+    elif update_jacobian:  # Frozen, but do approximate update
         J00, f_yn = _update_jacobian(jacobian_old, ode_fun, yn, tn,
                                      y_old, f_old, args)
         fun_evals, jac_evals = 1, 0
-    else: # Reuse old Jacobian
+    else:  # Reuse old Jacobian
         J00, f_yn = jacobian_old, None
         fun_evals, jac_evals = 0, 0
 
@@ -790,7 +784,7 @@ def _extrap_table(solver, solver_args, ode_fun, jac_fun, tn, yn, args,
     k : int
         number of extrapolation steps to take in this step (determines the
         number of extrapolations performed to achieve a better integration
-        output, equivalent to the size of the extrapolation tableau).  
+        output, equivalent to the size of the extrapolation tableau).
     pool :
         multiprocessing pool of workers (with as many workers as processors)
         that will parallelize the calculation of each of the initial values of
@@ -838,12 +832,12 @@ def _extrap_table(solver, solver_args, ode_fun, jac_fun, tn, yn, args,
     """
     j_nj_list = _balance_load(k, NUM_WORKERS, seq=seq)
 
-    if solver in ( method_fcns[Solvers.SEMI_IMPLICIT_EULER], 
+    if solver in ( method_fcns[Solvers.SEMI_IMPLICIT_EULER],
                    method_fcns[Solvers.SEMI_IMPLICIT_MIDPOINT]):
-        jac, f_yn, fe_tot, je_tot = _get_jacobian(ode_fun, args, yn, tn, jac_fun,
-                                             last_step_rejected,
-                                             y_old, f_old,
-                                             solver_parameters['freezeJac'])
+        jac, f_yn, fe_tot, je_tot = _get_jacobian(ode_fun, args, yn, tn,
+                                                  jac_fun, last_step_rejected,
+                                                  y_old, f_old,
+                                                  solver_parameters['freezeJac'])
         solver_args['J00'] = jac
     else:
         je_tot = 0
@@ -948,12 +942,12 @@ def _centered_diff(j, f_yj, hj):
     nj = len(f_yj) - 1
     coeff = [1,1]
     dj = (max_order+1)*[None]
-    dj[1] = 1*f_yj[nj/2]  # First derivative
-    dj[2] = (f_yj[nj/2+1] - f_yj[nj/2-1])/(2*hj) # Second derivative
+    dj[1] = 1*f_yj[nj//2]  # First derivative
+    dj[2] = (f_yj[nj//2+1] - f_yj[nj//2-1])/(2*hj)  # Second derivative
 
     for order in range(2,max_order):  # Higher-order derivatives
         # Binomial coefficients
-        coeff = [1] + [coeff[j] + coeff[j+1] for j in range(len(coeff)-1)] + [1]
+        coeff = [1] + [coeff[jj] + coeff[jj+1] for jj in range(len(coeff)-1)] + [1]
         index = range(nj//2+order, nj//2-order-2, -2)
         sum_ = sum([((-1)**i)*coeff[i]*f_yj[index[i]] for i in range(order+1)])
         dj[order+1] = sum_ / (2*hj)**order
@@ -994,7 +988,7 @@ def _backward_diff(j, yj, hj, lam):
 
     for order in range(2,max_order+1):
         # Binomial coefficients
-        coeff = [1] + [coeff[j] + coeff[j+1] for j in range(len(coeff)-1)] + [1]
+        coeff = [1] + [coeff[jj] + coeff[jj+1] for jj in range(len(coeff)-1)] + [1]
         index = range(nj, nj-order-1, -1)
         sum_ = sum([((-1)**i)*coeff[i]*yj[index[i]] for i in range(order+1)])
         rj[order] = sum_ /hj**order
@@ -1235,7 +1229,7 @@ def _interpolate_nonsym(y0, Tkk, yj, hs, H, k, atol, rtol,
 
     rs = _compute_rs(yj, hs, k, seq=seq)
 
-    #a_u are the coefficients for the interpolation polynomial
+    # a_u are the coefficients for the interpolation polynomial
     a_u = (u+1)*[None]
     a_u_1 = (u_1+1)*[None]
 
@@ -1418,14 +1412,14 @@ def _estimate_next_step_and_order(T, h, atol, rtol, seq, addWork):
     if(addWork):
         N = len(T[k,k])
 
-    #Define work function (to minimize)
+    # Define work function (to minimize)
     def A_k(k):
         """
         Number of sequential RHS evaluations needed to compute k lines of the
         extrapolation table.
         """
         sum_ = sum([seq(i+1) for i in range(k)])
-        return max(seq(k), sum_/NUM_WORKERS) + N # The second value is only an estimate
+        return max(seq(k), sum_/NUM_WORKERS) + N  # The second value is only an estimate
 
     # compute the error and work function for the stages k-2, k-1 and k
     err_k = []
@@ -1437,7 +1431,7 @@ def _estimate_next_step_and_order(T, h, atol, rtol, seq, addWork):
         h_k.append(h*0.94*(0.65/err_k[i])**(1./(2*(k-i)-1)))
         w_k.append(A_k(k-i)/h_k[i])
 
-    if err_k[1] <= 1: # convergence in line k-1
+    if err_k[1] <= 1:  # convergence in line k-1
         if err_k[0] <= 1:
             y = T[k,k]
         else:
@@ -1445,7 +1439,7 @@ def _estimate_next_step_and_order(T, h, atol, rtol, seq, addWork):
         k_new = k if w_k[1] < 0.9*w_k[2] else k-1
         h_new = h_k[1] if k_new <= k-1 else h_k[1]*A_k(k)/A_k(k-1)
         reject_step=False
-    elif err_k[0] <= 1: # convergence in line k
+    elif err_k[0] <= 1:  # convergence in line k
         y = T[k,k]
         k_new = k-1 if w_k[1] < 0.9*w_k[0] else (
                 k+1 if w_k[0] < 0.9*w_k[1] else k)
@@ -1537,8 +1531,8 @@ def _solve_one_step(solver, solver_args, ode_fun, jac_fun, t_curr, t, t_index, y
     if dense_output_needed and symmetric:
         seq = lambda t: 2*(2*t-1)     # {2,6,10,14,...} sequence for dense output
 
-    #Limit k, order of extrapolation
-    #If order and step are fixed, do not limit order
+    # Limit k, order of extrapolation
+    # If order and step are fixed, do not limit order
     if adaptive:
         k_max = 10
         k_min = 3
@@ -1555,10 +1549,9 @@ def _solve_one_step(solver, solver_args, ode_fun, jac_fun, t_curr, t, t_index, y
     fe_seq, fe_tot, je_tot = diag  # diagnostics
 
     if adaptive:
-        reject_step, y, h_new, k_new = _estimate_next_step_and_order(T, h,
-                                                                    atol, rtol,
-                                                                    seq,
-                                                                    solver_parameters['addWork'])
+        reject_step, y, h_new, k_new = \
+            _estimate_next_step_and_order(T, h, atol, rtol, seq,
+                                          solver_parameters['addWork'])
     else:
         reject_step, y, h_new, k_new = False, T[k,k], h, k
 
@@ -1574,9 +1567,8 @@ def _solve_one_step(solver, solver_args, ode_fun, jac_fun, t_curr, t, t_index, y
 
         if adaptive:
             h_new = min(h_new, h_int)
-            if reject_step: # Step rejected because of interpolation error
-                k_new = k   # Don't update the order
-
+            if reject_step:  # Step rejected because of interpolation error
+                k_new = k    # Don't update the order
 
     return (reject_step, y, y_out, f_yn, h, k, h_new, k_new, (fe_seq, fe_tot, je_tot))
 
@@ -1659,10 +1651,10 @@ def _interp(ode_fun, args, T, k, t_curr, t, t_index, h, hs, y_half, f_yj,yj,
 
         y_poly, errint, h_int = poly((t[t_index] - t_curr)/h)
 
-        if (errint <= 10) or (not adaptive): # Accept, so far
+        if (errint <= 10) or (not adaptive):  # Accept, so far
             y_out.append(y_poly)
             t_index += 1
-        else: # Reject
+        else:  # Reject
             h = h_int
             t_index = old_index
             reject_step = True
@@ -1725,33 +1717,35 @@ class Solvers(object):
     EXPLICIT_EULER = 'explicit euler'
     SEMI_IMPLICIT_EULER = 'semi-implicit euler'
 
+
 method_fcns = {
-        Solvers.EXPLICIT_MIDPOINT : _explicit_midpoint,
-        Solvers.IMPLICIT_MIDPOINT : _implicit_midpoint,
-        Solvers.SEMI_IMPLICIT_MIDPOINT : _semi_implicit_midpoint,
-        Solvers.EXPLICIT_EULER : _explicit_euler,
-        Solvers.SEMI_IMPLICIT_EULER : _semi_implicit_euler,
-        }
+    Solvers.EXPLICIT_MIDPOINT: _explicit_midpoint,
+    Solvers.IMPLICIT_MIDPOINT: _implicit_midpoint,
+    Solvers.SEMI_IMPLICIT_MIDPOINT: _semi_implicit_midpoint,
+    Solvers.EXPLICIT_EULER: _explicit_euler,
+    Solvers.SEMI_IMPLICIT_EULER: _semi_implicit_euler,
+}
 
 defaults = {
-            'solver' : Solvers.EXPLICIT_MIDPOINT,
-            'atol'   : 1.e-8,
-            'rtol'   : 1.e-8,
-            'h0'     : 0.5,
-            'max_steps' : 10e4,
-            'step_ratio_limit' : 2,
-            'adaptive' : 'order',
-            'diagnostics' : False,
-            'nworkers' : None,
-            'jac_fun' : None,
-            'p' : 4,
-            'smoothing' : 'no',
-        }
+    'solver': Solvers.EXPLICIT_MIDPOINT,
+    'atol': 1.e-8,
+    'rtol': 1.e-8,
+    'h0': 0.5,
+    'max_steps': 10e4,
+    'step_ratio_limit': 2,
+    'adaptive': 'order',
+    'diagnostics': False,
+    'nworkers': None,
+    'jac_fun': None,
+    'p': 4,
+    'smoothing': 'no',
+}
 
-symmetric_methods = (_explicit_midpoint,
-                     _implicit_midpoint,
-                     _semi_implicit_midpoint,
-                    )
+symmetric_methods = (
+    _explicit_midpoint,
+    _implicit_midpoint,
+    _semi_implicit_midpoint,
+)
 
 def solve(ode_fun, tspan, y0, **kwargs):
     """
@@ -1840,18 +1834,18 @@ def solve(ode_fun, tspan, y0, **kwargs):
         kwargs.setdefault('seq', lambda t: 2*t)
     elif kwargs['solver'] == Solvers.IMPLICIT_MIDPOINT:
         kwargs.setdefault('smoothing', 'gbs')
-        kwargs.setdefault('seq', lambda t : 2*(2*t-1))
+        kwargs.setdefault('seq', lambda t: 2*(2*t-1))
     elif kwargs['solver'] == Solvers.SEMI_IMPLICIT_MIDPOINT:
         kwargs.setdefault('smoothing', 'semiimp')
-        kwargs.setdefault('seq', lambda t : 2*(2*t-1))
+        kwargs.setdefault('seq', lambda t: 2*(2*t-1))
     elif kwargs['solver'] == Solvers.EXPLICIT_EULER:
-        kwargs.setdefault('seq', lambda t : t)
+        kwargs.setdefault('seq', lambda t: t)
     elif kwargs['solver'] == Solvers.SEMI_IMPLICIT_EULER:
-        kwargs.setdefault('seq', lambda t : 2*(2*t-1))
+        kwargs.setdefault('seq', lambda t: 2*(2*t-1))
 
     # Set universal defaults
-    for key, value in defaults.iteritems():
-        if not key in kwargs.iterkeys():
+    for key, value in defaults.items():
+        if key not in kwargs.keys():
             kwargs[key] = value
 
     if kwargs['solver'] in (Solvers.SEMI_IMPLICIT_EULER, Solvers.SEMI_IMPLICIT_MIDPOINT):
@@ -1859,14 +1853,13 @@ def solve(ode_fun, tspan, y0, **kwargs):
         solver_args["I"] = np.identity(len(y0), dtype=float)
         if kwargs['jac_fun']:
             J = kwargs['jac_fun'](y0,tspan[0])
-            if scipy.sparse.issparse(J): # If J is sparse, use sparse identity
+            if scipy.sparse.issparse(J):  # If J is sparse, use sparse identity
                 solver_args["I"] = scipy.sparse.identity(len(y0), dtype=float,
                                                          format='csr')
         else:
             solver_args["J00"] = None
     else:
         solver_args = {}
-
 
     # Fix this:
     solver_parameters = _set_default_solver_parameters(len(y0), kwargs['atol'], kwargs['rtol'], addWork=False)
@@ -1877,5 +1870,4 @@ def solve(ode_fun, tspan, y0, **kwargs):
     else:
         kwargs['k'] = kwargs.pop('p')//2
 
-    #return _extrapolation_parallel(ode_fun, tspan, y0, kwargs)
     return _extrapolation_parallel(ode_fun, tspan, y0, solver_args, **kwargs)
